@@ -16,8 +16,21 @@ test("rollback wins over evolve", () => {
     rollback: true,
     metrics,
     openEvolveCount: 0,
+    openRollbackCount: 0,
   });
   expect(d?.action).toBe("rollback");
+});
+
+test("none when rollback already open", () => {
+  expect(
+    decideIssue({
+      stagnant: true,
+      rollback: true,
+      metrics,
+      openEvolveCount: 0,
+      openRollbackCount: 1,
+    }),
+  ).toBeNull();
 });
 
 test("evolve when stagnant and no open evolve issues", () => {

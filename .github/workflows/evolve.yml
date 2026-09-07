@@ -26,11 +26,14 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      # Unique key each run so post-job save persists updated stamps; restore-keys load prior file.
       - uses: actions/cache@v4
         with:
           path: .ags-agent-timestamps.json
-          key: ags-agent-timestamps-${{ github.repository }}
-          restore-keys: ags-agent-timestamps-
+          key: ags-agent-timestamps-${{ github.repository }}-${{ github.run_id }}
+          restore-keys: |
+            ags-agent-timestamps-${{ github.repository }}-
+            ags-agent-timestamps-
       # Multiline issue bodies break plain env assignment; toJSON + decode is safe.
       - name: Prepare issue context
         env:

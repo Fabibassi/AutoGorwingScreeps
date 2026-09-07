@@ -50,11 +50,18 @@ export function loop(): void {
         },
         incomeSamples: [],
         incomeWindows: [],
+        errorSamples: [1],
         lastErrors: 1,
       };
     } else {
-      Memory.ags.lastErrors += 1;
-      Memory.ags.metrics.errorCount = Memory.ags.lastErrors;
+      Memory.ags = tickTelemetry({
+        tick: Game.time,
+        rcl: Memory.ags.metrics.rcl,
+        energyHarvestedThisTick: 0,
+        errorsThisTick: 1,
+        cpuUsed: Game.cpu.getUsed(),
+        memory: Memory.ags,
+      });
     }
   }
 }

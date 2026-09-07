@@ -12,6 +12,9 @@ export interface AgsMemory {
   baseline?: { energyIncomePerTick: number; updatedAt: number };
   incomeSamples: number[];
   incomeWindows: number[];
+  /** Per-tick error counts over the last ~100 ticks (window for rollback). */
+  errorSamples: number[];
+  /** Lifetime error total (debug); rollback uses metrics.errorCount (window). */
   lastErrors: number;
 }
 

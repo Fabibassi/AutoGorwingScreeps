@@ -57,6 +57,7 @@ export function tickTelemetry(opts: {
     },
     incomeSamples: [],
     incomeWindows: [],
+    errorSamples: [],
     lastErrors: 0,
   };
 
@@ -65,7 +66,14 @@ export function tickTelemetry(opts: {
     opts.energyHarvestedThisTick,
   );
   const energyIncomePerTick = average(incomeSamples);
-  const errorCount = prev.lastErrors + opts.errorsThisTick;
+  const errorSamples = recordEnergySample(
+    prev.errorSamples ?? [],
+    opts.errorsThisTick,
+    100,
+  );
+  // Window = sum of errors in last ~100 ticks (not lifetime)
+  const errorCount = errorSamples.reduce((a, b) => a + b, 0);
+  const lastErrors = prev.lastErrors + opts.errorsThisTick;
   const cpuUsedAvg = average([prev.metrics.cpuUsedAvg || opts.cpuUsed, opts.cpuUsed]);
 
   let incomeWindows = prev.incomeWindows;
@@ -93,6 +101,7 @@ export function tickTelemetry(opts: {
     baseline,
     incomeSamples,
     incomeWindows,
-    lastErrors: errorCount,
+    errorSamples,
+    lastErrors,
   };
 }

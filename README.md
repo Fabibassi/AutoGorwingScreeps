@@ -7,8 +7,11 @@ Autonomer Screeps-Bot mit Cloud-Loop: GitHub Actions baut und deployt den Bot zu
 - Screeps-Account (MMO) und Auth-Token
 - GitHub-Repo mit Actions aktiviert
 - Cursor API Key für Cloud Agents
+- Issue-Labels einmalig anlegen: `evolve`, `rollback`, `automerge` (sonst schlägt Issue-Create mit 422 fehl)
 
 Secrets und Tokens **nie** committen.
+
+**Empfohlen:** Branch Protection auf `main` mit Required Check **CI** — Automerge wartet auf grüne Checks.
 
 ## Secrets & Variablen
 

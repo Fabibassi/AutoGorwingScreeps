@@ -15,6 +15,7 @@ export type DecideIssueInput = {
   rollback: boolean;
   metrics: AgsMetrics;
   openEvolveCount: number;
+  openRollbackCount?: number;
 };
 
 export type DecideIssueResult = {
@@ -34,6 +35,7 @@ export function decideIssue(
   input: DecideIssueInput,
 ): DecideIssueResult | null {
   if (input.rollback) {
+    if ((input.openRollbackCount ?? 0) > 0) return null;
     return {
       action: "rollback",
       title: `AGS rollback: income/errors at tick ${input.metrics.tick}`,
@@ -136,16 +138,27 @@ export async function main(): Promise<void> {
     repo: githubRepo,
     label: "evolve",
   });
+  const openRollbackCount = await countOpenIssuesWithLabel({
+    token: githubToken,
+    repo: githubRepo,
+    label: "rollback",
+  });
 
   const decision = decideIssue({
     stagnant,
     rollback,
     metrics: ags.metrics,
     openEvolveCount,
+    openRollbackCount,
   });
 
   if (!decision) {
-    console.log("no issue needed", { stagnant, rollback, openEvolveCount });
+    console.log("no issue needed", {
+      stagnant,
+      rollback,
+      openEvolveCount,
+      openRollbackCount,
+    });
     return;
   }
 

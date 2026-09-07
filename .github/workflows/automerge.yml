@@ -14,6 +14,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # GITHUB_TOKEN may be insufficient under branch protection; set secret AGS_GH_TOKEN (PAT) as fallback.
+      - name: Wait for CI checks
+        env:
+          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          # Fails the job if required/observed checks fail; --watch blocks until settled.
+          gh pr checks ${{ github.event.pull_request.number }} --watch --fail-fast || {
+            echo "CI checks failed or timed out — refusing automerge"
+            exit 1
+          }
       - name: Enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}

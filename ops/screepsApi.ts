@@ -25,8 +25,18 @@ export async function uploadCode(opts: {
     headers: screepsHeaders(opts.token, opts.shard),
     body: JSON.stringify({ branch: opts.branch, modules: opts.modules }),
   });
+  const text = await res.text();
   if (!res.ok) {
-    throw new Error(`uploadCode failed: ${res.status} ${await res.text()}`);
+    throw new Error(`uploadCode failed: ${res.status} ${text}`);
+  }
+  try {
+    const body = JSON.parse(text) as { ok?: number; error?: string };
+    if (body.ok === 0) {
+      throw new Error(`uploadCode API error: ${body.error ?? text}`);
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("uploadCode")) throw e;
+    // non-JSON success body — ignore
   }
 }
 
@@ -59,8 +69,13 @@ export async function fetchMemoryPath(opts: {
   const res = await fetch(url, {
     headers: screepsHeaders(opts.token, opts.shard),
   });
+  const text = await res.text();
   if (!res.ok) {
-    throw new Error(`fetchMemoryPath failed: ${res.status} ${await res.text()}`);
+    throw new Error(`fetchMemoryPath failed: ${res.status} ${text}`);
   }
-  return res.json();
+  const body = JSON.parse(text) as { ok?: number; error?: string; data?: unknown };
+  if (body.ok === 0) {
+    throw new Error(`fetchMemoryPath API error: ${body.error ?? text}`);
+  }
+  return body;
 }
