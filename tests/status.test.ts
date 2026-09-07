@@ -54,6 +54,11 @@ describe("formatPlanStatus", () => {
     expect(line).toContain("priority=spawn:miner");
     expect(line).toContain("income=8.5/t");
   });
+
+  test("appends health summary when not ok", () => {
+    const line = formatPlanStatus(baseSnapshot, "deficit=2(miner,hauler)");
+    expect(line).toContain("check=deficit=2(miner,hauler)");
+  });
 });
 
 describe("STATUS_LOG_INTERVAL", () => {

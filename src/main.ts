@@ -1,6 +1,7 @@
 import { runConstruction } from "./construction";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
 import { runCreep } from "./roles";
+import { maybeUpdateHealthCheck } from "./selfCheck";
 import { runSpawn } from "./spawn";
 import { logPlanStatusIfDue } from "./status";
 import { tickTelemetry } from "./telemetry";
@@ -43,6 +44,7 @@ export function loop(): void {
       cpuUsed: Game.cpu.getUsed(),
       memory: Memory.ags,
     });
+    Memory.ags = maybeUpdateHealthCheck(room, Memory.ags) ?? Memory.ags;
 
     logPlanStatusIfDue(room, Memory.ags);
   } catch (e) {

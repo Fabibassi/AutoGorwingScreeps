@@ -1,5 +1,6 @@
 import { desiredCreeps, type CreepQuotas } from "./earlyGame";
 import { countCreepsByRole, countSourceContainers } from "./room/queries";
+import { formatHealthCheck } from "./selfCheck";
 import type { AgsMemory } from "./types";
 
 export const STATUS_LOG_INTERVAL = 20;
@@ -88,15 +89,20 @@ export function buildPlanSnapshot(
   };
 }
 
-export function formatPlanStatus(snapshot: PlanSnapshot): string {
+export function formatPlanStatus(
+  snapshot: PlanSnapshot,
+  healthSummary?: string,
+): string {
   const { counts: c, want: w } = snapshot;
+  const check =
+    healthSummary && healthSummary !== "ok" ? ` | check=${healthSummary}` : "";
   return (
     `[T${snapshot.tick}] RCL${snapshot.rcl} | ` +
     `energy spawn=${snapshot.spawnEnergy}/${snapshot.spawnCapacity} creeps=${snapshot.creepEnergy} | ` +
     `H:${c.harvester}/${w.harvester} M:${c.miner}/${w.miner} Ha:${c.hauler}/${w.hauler} ` +
     `U:${c.upgrader}/${w.upgrader} B:${c.builder}/${w.builder} | ` +
     `priority=${formatPriority(snapshot.priority)} | ` +
-    `income=${snapshot.energyIncomePerTick.toFixed(1)}/t`
+    `income=${snapshot.energyIncomePerTick.toFixed(1)}/t${check}`
   );
 }
 
@@ -107,5 +113,6 @@ export function logPlanStatusIfDue(
 ): void {
   if (!room || Game.time % interval !== 0) return;
   const spawn = room.find(FIND_MY_SPAWNS)[0];
-  console.log(formatPlanStatus(buildPlanSnapshot(room, spawn, ags)));
+  const healthSummary = ags?.health ? formatHealthCheck(ags.health) : undefined;
+  console.log(formatPlanStatus(buildPlanSnapshot(room, spawn, ags), healthSummary));
 }
