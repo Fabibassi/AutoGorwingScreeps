@@ -12,6 +12,18 @@ export function screepsHeaders(
   return headers;
 }
 
+/** Build /api/user/memory URL; official World requires shard as query param. */
+export function memoryApiUrl(
+  host: string,
+  path: string,
+  shard?: string,
+): string {
+  const u = new URL(`${host.replace(/\/+$/, "")}/api/user/memory`);
+  u.searchParams.set("path", path);
+  if (shard) u.searchParams.set("shard", shard);
+  return u.toString();
+}
+
 /** Private-server friendly auth; returns token for X-Token header. */
 export async function signin(opts: {
   email: string;
@@ -69,16 +81,19 @@ export async function fetchMemory(opts: {
   hostname?: string;
 }): Promise<unknown> {
   const host = opts.hostname ?? DEFAULT_HOST;
-  const res = await fetch(`${host}/api/user/memory?path=`, {
+  const url = memoryApiUrl(host, "", opts.shard);
+  const res = await fetch(url, {
     headers: screepsHeaders(opts.token, opts.shard),
   });
+  const text = await res.text();
   if (!res.ok) {
-    throw new Error(`fetchMemory failed: ${res.status} ${await res.text()}`);
+    throw new Error(`fetchMemory failed: ${res.status} ${text}`);
   }
-  const data = (await res.json()) as { data?: string; ok?: number };
-  // Screeps returns gzip+base64 in data for full memory; for path queries may differ.
-  // Prefer memory path API: /api/user/memory?path=ags
-  return data;
+  const body = JSON.parse(text) as { ok?: number; error?: string; data?: unknown };
+  if (body.ok === 0) {
+    throw new Error(`fetchMemory API error: ${body.error ?? text}`);
+  }
+  return body;
 }
 
 export async function fetchMemoryPath(opts: {
@@ -88,7 +103,7 @@ export async function fetchMemoryPath(opts: {
   hostname?: string;
 }): Promise<unknown> {
   const host = opts.hostname ?? DEFAULT_HOST;
-  const url = `${host}/api/user/memory?path=${encodeURIComponent(opts.path)}`;
+  const url = memoryApiUrl(host, opts.path, opts.shard);
   const res = await fetch(url, {
     headers: screepsHeaders(opts.token, opts.shard),
   });

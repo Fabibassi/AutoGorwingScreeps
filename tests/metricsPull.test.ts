@@ -1,7 +1,10 @@
 import { gzipSync } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import {
+  describeMemoryResponseShape,
   parseMemoryPathData,
+  planMetricsAction,
+  PLACEHOLDER_METRICS,
   previewPayload,
 } from "../ops/metricsPull";
 import type { AgsMemory } from "../src/types";
@@ -70,15 +73,19 @@ describe("parseMemoryPathData", () => {
     expect(parseMemoryPathData(raw)).toBeNull();
   });
 
-  test("nested ags missing → null", () => {
+  test("full memory without ags key → null", () => {
     const raw = { ok: 1, data: JSON.stringify({ creeps: {} }) };
-    // full memory without ags key — not AgsMemory shape
-    expect(() => parseMemoryPathData(raw)).toThrow(/missing AgsMemory shape/);
+    expect(parseMemoryPathData(raw)).toBeNull();
   });
 
   test("nested ags: null → null", () => {
     const raw = { ok: 1, data: JSON.stringify({ ags: null }) };
     expect(parseMemoryPathData(raw)).toBeNull();
+  });
+
+  test("empty string data → null", () => {
+    expect(parseMemoryPathData({ ok: 1, data: "" })).toBeNull();
+    expect(parseMemoryPathData({ ok: 1, data: "undefined" })).toBeNull();
   });
 
   test("primitive data throws clearer error with typeof + preview", () => {
@@ -93,5 +100,73 @@ describe("parseMemoryPathData", () => {
     const p = previewPayload(long, 50);
     expect(p.length).toBeLessThanOrEqual(51);
     expect(p.endsWith("…")).toBe(true);
+  });
+
+  test("describeMemoryResponseShape omits payload body", () => {
+    const raw = { ok: 1, data: gzipBase64(sampleAgs, true) };
+    const shape = describeMemoryResponseShape(raw);
+    expect(shape).toMatch(/keys=\[data,ok\]/);
+    expect(shape).toMatch(/dataType=string/);
+    expect(shape).toMatch(/dataLen=\d+/);
+    expect(shape).not.toContain("gz:");
+    expect(shape).not.toContain("energyIncomePerTick");
+  });
+});
+
+describe("planMetricsAction force with missing ags", () => {
+  test("force evolve creates issue even when ags is null", () => {
+    const plan = planMetricsAction({
+      forceAction: "evolve",
+      ags: null,
+      openEvolveCount: 0,
+      openRollbackCount: 0,
+    });
+    expect(plan.softExitReason).toBeUndefined();
+    expect(plan.decision?.action).toBe("evolve");
+    expect(plan.logDecision).toBe("force_evolve");
+    expect(plan.reason).toBe("force_evolve");
+    expect(plan.decision?.title).toContain("forced");
+    expect(plan.decision?.body).toContain("missing/unreadable");
+  });
+
+  test("force rollback creates issue even when ags is null", () => {
+    const plan = planMetricsAction({
+      forceAction: "rollback",
+      ags: null,
+      openEvolveCount: 0,
+      openRollbackCount: 0,
+    });
+    expect(plan.decision?.action).toBe("rollback");
+    expect(plan.logDecision).toBe("force_rollback");
+    expect(plan.reason).toBe("force_rollback");
+  });
+
+  test("force evolve skipped when open evolve exists (still no soft-exit)", () => {
+    const plan = planMetricsAction({
+      forceAction: "evolve",
+      ags: null,
+      openEvolveCount: 1,
+      openRollbackCount: 0,
+    });
+    expect(plan.softExitReason).toBeUndefined();
+    expect(plan.decision).toBeNull();
+    expect(plan.logDecision).toBe("none");
+    expect(plan.reason).toBe("open_evolve_exists");
+  });
+
+  test("without force, missing ags soft-exits", () => {
+    const plan = planMetricsAction({
+      forceAction: "none",
+      ags: null,
+      openEvolveCount: 0,
+      openRollbackCount: 0,
+    });
+    expect(plan.softExitReason).toBe("missing_ags");
+    expect(plan.decision).toBeNull();
+    expect(plan.reason).toBe("missing_ags");
+  });
+
+  test("PLACEHOLDER_METRICS is stable for force body", () => {
+    expect(PLACEHOLDER_METRICS.tick).toBe(0);
   });
 });

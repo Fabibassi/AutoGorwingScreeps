@@ -7,11 +7,18 @@ import {
   shouldRollback,
   STAGNATION_THRESHOLD_PCT,
 } from "../src/telemetry";
-import { fetchMemoryPath } from "./screepsApi";
+import { fetchMemory, fetchMemoryPath } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 import { countOpenIssuesWithLabel, createIssue } from "./githubIssues";
 
 export type ForceAction = "none" | "evolve" | "rollback";
+
+export type DecisionLogAction =
+  | "none"
+  | "evolve"
+  | "rollback"
+  | "force_evolve"
+  | "force_rollback";
 
 export type DecideIssueInput = {
   stagnant: boolean;
@@ -29,10 +36,21 @@ export type DecideIssueResult = {
   body: string;
 };
 
-function metricsBody(metrics: AgsMetrics): string {
-  return ["## Metrics snapshot", "```json", JSON.stringify(metrics, null, 2), "```"].join(
-    "\n",
-  );
+/** Placeholder metrics when FORCE_ACTION runs without readable Memory.ags. */
+export const PLACEHOLDER_METRICS: AgsMetrics = {
+  tick: 0,
+  rcl: 0,
+  energyIncomePerTick: 0,
+  errorCount: 0,
+  cpuUsedAvg: 0,
+  updatedAt: 0,
+};
+
+function metricsBody(metrics: AgsMetrics, note?: string): string {
+  const parts = ["## Metrics snapshot"];
+  if (note) parts.push(note);
+  parts.push("```json", JSON.stringify(metrics, null, 2), "```");
+  return parts.join("\n");
 }
 
 /** Parse FORCE_ACTION env; invalid values → none. */
@@ -44,7 +62,7 @@ export function parseForceAction(raw: string | undefined): ForceAction {
 
 /** Single-line decision summary for Actions logs. */
 export function formatDecisionLog(opts: {
-  decision: "none" | "evolve" | "rollback";
+  decision: DecisionLogAction;
   stagnant: boolean;
   windows: number;
   rollback: boolean;
@@ -91,7 +109,12 @@ export function decideIssue(
     return {
       action: "evolve",
       title: `AGS evolve: forced self-check at tick ${input.metrics.tick}`,
-      body: metricsBody(input.metrics),
+      body: metricsBody(
+        input.metrics,
+        input.metrics === PLACEHOLDER_METRICS
+          ? "_Note: Memory.ags was missing/unreadable; force still opened this issue._"
+          : undefined,
+      ),
     };
   }
 
@@ -103,6 +126,109 @@ export function decideIssue(
     };
   }
   return null;
+}
+
+/**
+ * Orchestrates force-before-missing_ags soft-exit (pure; no I/O).
+ * Force evolve/rollback always runs even when ags is null.
+ */
+export function planMetricsAction(input: {
+  forceAction: ForceAction;
+  ags: AgsMemory | null;
+  openEvolveCount: number;
+  openRollbackCount: number;
+}): {
+  softExitReason?: "missing_ags";
+  decision: DecideIssueResult | null;
+  logDecision: DecisionLogAction;
+  stagnant: boolean;
+  windows: number;
+  rollback: boolean;
+  income: number | string;
+  reason?: string;
+} {
+  const { forceAction, ags, openEvolveCount, openRollbackCount } = input;
+
+  if (forceAction === "evolve" || forceAction === "rollback") {
+    const decision = decideIssue({
+      stagnant: false,
+      rollback: false,
+      metrics: ags?.metrics ?? PLACEHOLDER_METRICS,
+      openEvolveCount,
+      openRollbackCount,
+      forceAction,
+    });
+    let reason: string | undefined;
+    if (decision) {
+      reason = `force_${forceAction}`;
+    } else if (forceAction === "evolve" && openEvolveCount > 0) {
+      reason = "open_evolve_exists";
+    } else if (forceAction === "rollback" && openRollbackCount > 0) {
+      reason = "open_rollback_exists";
+    }
+    return {
+      decision,
+      logDecision: decision ? `force_${forceAction}` : "none",
+      stagnant: false,
+      windows: ags?.incomeWindows.length ?? 0,
+      rollback: false,
+      income: ags?.metrics.energyIncomePerTick ?? "n/a",
+      reason,
+    };
+  }
+
+  if (!ags) {
+    return {
+      softExitReason: "missing_ags",
+      decision: null,
+      logDecision: "none",
+      stagnant: false,
+      windows: 0,
+      rollback: false,
+      income: "n/a",
+      reason: "missing_ags",
+    };
+  }
+
+  const windows = ags.incomeWindows.length;
+  const stagnant = isStagnant(ags.incomeWindows, STAGNATION_THRESHOLD_PCT);
+  const baselineIncome = ags.baseline?.energyIncomePerTick ?? 0;
+  const rollback = shouldRollback(
+    ags.metrics.energyIncomePerTick,
+    baselineIncome,
+    ags.metrics.errorCount,
+  );
+  const income = ags.metrics.energyIncomePerTick;
+
+  const decision = decideIssue({
+    stagnant,
+    rollback,
+    metrics: ags.metrics,
+    openEvolveCount,
+    openRollbackCount,
+    forceAction: "none",
+  });
+
+  let reason: string | undefined;
+  if (!decision) {
+    if (rollback && openRollbackCount > 0) {
+      reason = "open_rollback_exists";
+    } else if (!stagnant) {
+      reason = windows < 4 ? "need_4_windows" : "not_stagnant";
+    } else if (openEvolveCount > 0) {
+      reason = "open_evolve_exists";
+    }
+  }
+
+  return {
+    decision,
+    logDecision: decision?.action ?? "none",
+    stagnant,
+    windows,
+    rollback,
+    income,
+    reason,
+  };
 }
 
 const PREVIEW_MAX = 120;
@@ -118,6 +244,28 @@ export function previewPayload(value: unknown, max = PREVIEW_MAX): string {
   if (s == null) s = String(value);
   if (s.length > max) return `${s.slice(0, max)}…`;
   return s;
+}
+
+/**
+ * Safe shape summary for Actions logs — keys/types/lengths only, no payload dump.
+ */
+export function describeMemoryResponseShape(raw: unknown): string {
+  if (raw == null) return `raw=${String(raw)} typeof=${typeof raw}`;
+  if (typeof raw !== "object") {
+    return `typeof=${typeof raw} preview=${previewPayload(raw, 40)}`;
+  }
+  const obj = raw as Record<string, unknown>;
+  const keys = Object.keys(obj).sort().join(",");
+  const data = obj.data;
+  let dataLen: string | number = "n/a";
+  if (typeof data === "string") dataLen = data.length;
+  else if (data != null && typeof data === "object") {
+    dataLen = Array.isArray(data)
+      ? data.length
+      : Object.keys(data as object).length;
+  } else if (data === null) dataLen = "null";
+  else if (data === undefined) dataLen = "undefined";
+  return `keys=[${keys}] ok=${String(obj.ok)} dataType=${data === null ? "null" : typeof data} dataLen=${dataLen}`;
 }
 
 function looksLikeAgsMemory(value: unknown): value is AgsMemory {
@@ -170,7 +318,7 @@ export function decodeMemoryDataField(data: unknown): unknown {
 }
 
 /**
- * Parse Screeps `/api/user/memory?path=ags` response.
+ * Parse Screeps `/api/user/memory?path=ags` (or full memory) response.
  * Returns `null` when Memory.ags is empty/missing (ok response, no telemetry yet).
  */
 export function parseMemoryPathData(raw: unknown): AgsMemory | null {
@@ -213,11 +361,55 @@ export function parseMemoryPathData(raw: unknown): AgsMemory | null {
         `ags memory path did not decode to an object: typeof=${typeof nested.ags} preview=${previewPayload(nested.ags)} raw=${previewPayload(raw)}`,
       );
     }
+    throw new Error(
+      `decoded memory.ags missing AgsMemory shape: preview=${previewPayload(nested.ags)}`,
+    );
   }
 
-  throw new Error(
-    `decoded memory missing AgsMemory shape: preview=${previewPayload(decoded)}`,
+  // Full memory object without ags key → treat as missing telemetry
+  return null;
+}
+
+function tryParseAgs(raw: unknown, label: string): AgsMemory | null {
+  try {
+    return parseMemoryPathData(raw);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.log(`${label} parse failed: ${msg}`);
+    return null;
+  }
+}
+
+/**
+ * Fetch path=ags; if empty/unreadable, fall back to full memory and extract .ags.
+ */
+export async function fetchAndParseAgs(opts: {
+  token: string;
+  shard?: string;
+  hostname: string;
+}): Promise<{ ags: AgsMemory | null; source: "path" | "full" | "none" }> {
+  const pathRaw = await fetchMemoryPath({
+    token: opts.token,
+    path: "ags",
+    shard: opts.shard,
+    hostname: opts.hostname,
+  });
+  console.log(`memory path=ags shape: ${describeMemoryResponseShape(pathRaw)}`);
+  const fromPath = tryParseAgs(pathRaw, "path=ags");
+  if (fromPath) return { ags: fromPath, source: "path" };
+
+  const fullRaw = await fetchMemory({
+    token: opts.token,
+    shard: opts.shard,
+    hostname: opts.hostname,
+  });
+  console.log(
+    `memory path=(full) shape: ${describeMemoryResponseShape(fullRaw)}`,
   );
+  const fromFull = tryParseAgs(fullRaw, "full memory");
+  if (fromFull) return { ags: fromFull, source: "full" };
+
+  return { ags: null, source: "none" };
 }
 
 export async function main(): Promise<void> {
@@ -244,101 +436,72 @@ export async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const raw = await fetchMemoryPath({
+  console.log(
+    `fetching Memory (hostname=${hostname} shard=${shard ?? "(none)"} force=${forceAction})`,
+  );
+
+  const { ags, source } = await fetchAndParseAgs({
     token: screepsToken,
-    path: "ags",
     shard,
     hostname,
   });
-  const ags = parseMemoryPathData(raw);
-  if (!ags) {
-    console.log(
-      formatDecisionLog({
-        decision: "none",
-        stagnant: false,
-        windows: 0,
-        rollback: false,
-        openEvolve: 0,
-        income: "n/a",
-        forceAction,
-        reason: "missing_ags",
-      }),
-    );
+  console.log(`ags source=${source}`);
+
+  const needIssueCounts =
+    forceAction !== "none" || ags != null;
+  const openEvolveCount = needIssueCounts
+    ? await countOpenIssuesWithLabel({
+        token: githubToken,
+        repo: githubRepo,
+        label: "evolve",
+      })
+    : 0;
+  const openRollbackCount = needIssueCounts
+    ? await countOpenIssuesWithLabel({
+        token: githubToken,
+        repo: githubRepo,
+        label: "rollback",
+      })
+    : 0;
+
+  const plan = planMetricsAction({
+    forceAction,
+    ags,
+    openEvolveCount,
+    openRollbackCount,
+  });
+
+  console.log(
+    formatDecisionLog({
+      decision: plan.logDecision,
+      stagnant: plan.stagnant,
+      windows: plan.windows,
+      rollback: plan.rollback,
+      openEvolve: openEvolveCount,
+      openRollback: openRollbackCount,
+      income: plan.income,
+      forceAction,
+      reason: plan.reason,
+    }),
+  );
+
+  if (plan.softExitReason === "missing_ags") {
     console.log("Memory.ags missing — bot not writing telemetry yet");
     return;
   }
 
-  const windows = ags.incomeWindows.length;
-  const stagnant = isStagnant(ags.incomeWindows, STAGNATION_THRESHOLD_PCT);
-  const baselineIncome = ags.baseline?.energyIncomePerTick ?? 0;
-  const rollback = shouldRollback(
-    ags.metrics.energyIncomePerTick,
-    baselineIncome,
-    ags.metrics.errorCount,
-  );
-  const income = ags.metrics.energyIncomePerTick;
-
-  const openEvolveCount = await countOpenIssuesWithLabel({
-    token: githubToken,
-    repo: githubRepo,
-    label: "evolve",
-  });
-  const openRollbackCount = await countOpenIssuesWithLabel({
-    token: githubToken,
-    repo: githubRepo,
-    label: "rollback",
-  });
-
-  const decision = decideIssue({
-    stagnant,
-    rollback,
-    metrics: ags.metrics,
-    openEvolveCount,
-    openRollbackCount,
-    forceAction,
-  });
-
-  const action = decision?.action ?? "none";
-  let reason: string | undefined;
-  if (!decision) {
-    if (forceAction === "evolve" && openEvolveCount > 0) {
-      reason = "open_evolve_exists";
-    } else if (
-      (forceAction === "rollback" || rollback) &&
-      openRollbackCount > 0
-    ) {
-      reason = "open_rollback_exists";
-    } else if (!stagnant && forceAction === "none" && !rollback) {
-      reason = windows < 4 ? "need_4_windows" : "not_stagnant";
-    }
-  }
-
-  console.log(
-    formatDecisionLog({
-      decision: action,
-      stagnant,
-      windows,
-      rollback,
-      openEvolve: openEvolveCount,
-      openRollback: openRollbackCount,
-      income,
-      forceAction,
-      reason,
-    }),
-  );
-
-  if (!decision) {
+  if (!plan.decision) {
     return;
   }
 
   await createIssue({
     token: githubToken,
     repo: githubRepo,
-    title: decision.title,
-    body: decision.body,
-    labels: [decision.action],
+    title: plan.decision.title,
+    body: plan.decision.body,
+    labels: [plan.decision.action],
   });
-  console.log(`created ${decision.action} issue: ${decision.title}`);
+  console.log(`created ${plan.decision.action} issue: ${plan.decision.title}`);
 }
 
 function isExecutedAsCli(): boolean {
