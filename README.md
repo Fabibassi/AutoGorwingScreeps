@@ -73,6 +73,7 @@ Manuell: Actions → **Resolve Conflicts** → PR-Nummer. Optional `AGS_GH_TOKEN
 - Cron: alle **15 Minuten** (`Metrics`-Workflow).
 - Manuell: Actions → **Metrics** → **Run workflow** (`workflow_dispatch`).
 - Bei Stagnation/Fehlern werden Issues mit Label `evolve` bzw. `rollback` angelegt.
+- Test-Force: Actions → **Metrics** → **Run workflow** → Input `force_action` = `evolve` (legt ein Evolve-Issue an, auch ohne Stagnation; überspringt, wenn schon ein offenes `evolve`-Issue existiert).
 
 ## Rollback
 

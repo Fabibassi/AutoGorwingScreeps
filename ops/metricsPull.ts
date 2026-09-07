@@ -11,12 +11,16 @@ import { fetchMemoryPath } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 import { countOpenIssuesWithLabel, createIssue } from "./githubIssues";
 
+export type ForceAction = "none" | "evolve" | "rollback";
+
 export type DecideIssueInput = {
   stagnant: boolean;
   rollback: boolean;
   metrics: AgsMetrics;
   openEvolveCount: number;
   openRollbackCount?: number;
+  /** Manual override from workflow_dispatch / FORCE_ACTION (default none). */
+  forceAction?: ForceAction;
 };
 
 export type DecideIssueResult = {
@@ -31,18 +35,66 @@ function metricsBody(metrics: AgsMetrics): string {
   );
 }
 
+/** Parse FORCE_ACTION env; invalid values → none. */
+export function parseForceAction(raw: string | undefined): ForceAction {
+  const v = (raw ?? "none").trim().toLowerCase();
+  if (v === "evolve" || v === "rollback" || v === "none") return v;
+  return "none";
+}
+
+/** Single-line decision summary for Actions logs. */
+export function formatDecisionLog(opts: {
+  decision: "none" | "evolve" | "rollback";
+  stagnant: boolean;
+  windows: number;
+  rollback: boolean;
+  openEvolve: number;
+  openRollback?: number;
+  income: number | string;
+  forceAction?: ForceAction;
+  reason?: string;
+}): string {
+  const parts = [
+    `decision=${opts.decision}`,
+    `stagnant=${opts.stagnant}`,
+    `windows=${opts.windows}`,
+    `rollback=${opts.rollback}`,
+    `openEvolve=${opts.openEvolve}`,
+    `openRollback=${opts.openRollback ?? 0}`,
+    `income=${opts.income}`,
+    `force=${opts.forceAction ?? "none"}`,
+  ];
+  if (opts.reason) parts.push(`reason=${opts.reason}`);
+  return parts.join(" ");
+}
+
 /** Pure decision helper — safe to import/test without env or network. */
 export function decideIssue(
   input: DecideIssueInput,
 ): DecideIssueResult | null {
-  if (input.rollback) {
+  const force = input.forceAction ?? "none";
+
+  if (force === "rollback" || (force === "none" && input.rollback)) {
     if ((input.openRollbackCount ?? 0) > 0) return null;
     return {
       action: "rollback",
-      title: `AGS rollback: income/errors at tick ${input.metrics.tick}`,
+      title:
+        force === "rollback"
+          ? `AGS rollback: forced at tick ${input.metrics.tick}`
+          : `AGS rollback: income/errors at tick ${input.metrics.tick}`,
       body: metricsBody(input.metrics),
     };
   }
+
+  if (force === "evolve") {
+    if (input.openEvolveCount > 0) return null;
+    return {
+      action: "evolve",
+      title: `AGS evolve: forced self-check at tick ${input.metrics.tick}`,
+      body: metricsBody(input.metrics),
+    };
+  }
+
   if (input.stagnant && input.openEvolveCount === 0) {
     return {
       action: "evolve",
@@ -171,6 +223,7 @@ export function parseMemoryPathData(raw: unknown): AgsMemory | null {
 export async function main(): Promise<void> {
   const githubToken = process.env.GITHUB_TOKEN;
   const githubRepo = process.env.GITHUB_REPO;
+  const forceAction = parseForceAction(process.env.FORCE_ACTION);
   const hostname = resolveHostname();
   const shard = resolveShard();
 
@@ -199,10 +252,23 @@ export async function main(): Promise<void> {
   });
   const ags = parseMemoryPathData(raw);
   if (!ags) {
+    console.log(
+      formatDecisionLog({
+        decision: "none",
+        stagnant: false,
+        windows: 0,
+        rollback: false,
+        openEvolve: 0,
+        income: "n/a",
+        forceAction,
+        reason: "missing_ags",
+      }),
+    );
     console.log("Memory.ags missing — bot not writing telemetry yet");
     return;
   }
 
+  const windows = ags.incomeWindows.length;
   const stagnant = isStagnant(ags.incomeWindows, STAGNATION_THRESHOLD_PCT);
   const baselineIncome = ags.baseline?.energyIncomePerTick ?? 0;
   const rollback = shouldRollback(
@@ -210,6 +276,7 @@ export async function main(): Promise<void> {
     baselineIncome,
     ags.metrics.errorCount,
   );
+  const income = ags.metrics.energyIncomePerTick;
 
   const openEvolveCount = await countOpenIssuesWithLabel({
     token: githubToken,
@@ -228,15 +295,39 @@ export async function main(): Promise<void> {
     metrics: ags.metrics,
     openEvolveCount,
     openRollbackCount,
+    forceAction,
   });
 
+  const action = decision?.action ?? "none";
+  let reason: string | undefined;
   if (!decision) {
-    console.log("no issue needed", {
+    if (forceAction === "evolve" && openEvolveCount > 0) {
+      reason = "open_evolve_exists";
+    } else if (
+      (forceAction === "rollback" || rollback) &&
+      openRollbackCount > 0
+    ) {
+      reason = "open_rollback_exists";
+    } else if (!stagnant && forceAction === "none" && !rollback) {
+      reason = windows < 4 ? "need_4_windows" : "not_stagnant";
+    }
+  }
+
+  console.log(
+    formatDecisionLog({
+      decision: action,
       stagnant,
+      windows,
       rollback,
-      openEvolveCount,
-      openRollbackCount,
-    });
+      openEvolve: openEvolveCount,
+      openRollback: openRollbackCount,
+      income,
+      forceAction,
+      reason,
+    }),
+  );
+
+  if (!decision) {
     return;
   }
 
