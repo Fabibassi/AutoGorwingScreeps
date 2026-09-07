@@ -1,5 +1,6 @@
 import { runHarvester } from "./roles/harvester";
 import { runUpgrader } from "./roles/upgrader";
+import { logStatusIfDue } from "./status";
 import { runSpawn } from "./spawn";
 import { tickTelemetry } from "./telemetry";
 
@@ -36,6 +37,8 @@ export function loop(): void {
       cpuUsed: Game.cpu.getUsed(),
       memory: Memory.ags,
     });
+
+    logStatusIfDue(Game.time);
   } catch (e) {
     console.log("main loop error", e);
     if (!Memory.ags) {
