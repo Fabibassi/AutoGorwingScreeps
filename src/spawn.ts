@@ -3,34 +3,9 @@ import {
   desiredCreeps,
   type CreepQuotas,
 } from "./earlyGame";
+import { countCreepsByRole, countSourceContainers } from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
-function countRoles(): CreepQuotas {
-  const counts: CreepQuotas = {
-    harvester: 0,
-    miner: 0,
-    hauler: 0,
-    upgrader: 0,
-    builder: 0,
-  };
-  for (const name in Game.creeps) {
-    const role = Game.creeps[name].memory.role as keyof CreepQuotas | undefined;
-    if (role && role in counts) counts[role]++;
-  }
-  return counts;
-}
-
-function countSourceContainers(room: Room): number {
-  const sources = room.find(FIND_SOURCES);
-  let count = 0;
-  for (const source of sources) {
-    const near = source.pos.findInRange(FIND_STRUCTURES, 1, {
-      filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-    });
-    if (near.length > 0) count++;
-  }
-  return count;
-}
 
 const SPAWN_ORDER: Array<keyof CreepQuotas> = [
   "miner",
@@ -54,7 +29,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     containersAtSources,
     hasConstructionSites,
   );
-  const counts = countRoles();
+  const counts = countCreepsByRole();
   const energyAvailable = room.energyAvailable;
 
   for (const role of SPAWN_ORDER) {
