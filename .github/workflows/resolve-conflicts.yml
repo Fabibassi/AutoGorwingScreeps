@@ -1,0 +1,193 @@
+# Merges origin/main into open agent PRs when conflicts are auto-safe.
+# Uses pull_request_target so GITHUB_TOKEN can push — NEVER run PR build/test here.
+name: Resolve Conflicts
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to attempt conflict resolution on"
+        required: true
+        type: string
+
+concurrency:
+  group: resolve-conflicts-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  resolve:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'automerge') ||
+      contains(github.event.pull_request.labels.*.name, 'evolve') ||
+      startsWith(github.event.pull_request.head.ref, 'cursor/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Resolve merge conflicts when safe
+        env:
+          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          REPO: ${{ github.repository }}
+          GIT_AUTHOR_NAME: Fabibassi
+          GIT_AUTHOR_EMAIL: 38927722+Fabibassi@users.noreply.github.com
+          GIT_COMMITTER_NAME: Fabibassi
+          GIT_COMMITTER_EMAIL: 38927722+Fabibassi@users.noreply.github.com
+        run: |
+          set -euo pipefail
+
+          N="$PR_NUMBER"
+          echo "Resolving conflicts for PR #$N in $REPO"
+
+          # Wait until GitHub computes mergeability (often UNKNOWN right after push).
+          MERGEABLE=""
+          STATE=""
+          for i in $(seq 1 30); do
+            JSON="$(gh pr view "$N" --repo "$REPO" --json mergeable,mergeStateStatus,headRefName,headRepository,headRepositoryOwner,isCrossRepository,url)"
+            MERGEABLE="$(echo "$JSON" | jq -r .mergeable)"
+            STATE="$(echo "$JSON" | jq -r .mergeStateStatus)"
+            HEAD_REF="$(echo "$JSON" | jq -r .headRefName)"
+            IS_FORK="$(echo "$JSON" | jq -r .isCrossRepository)"
+            echo "[$i] mergeable=$MERGEABLE mergeStateStatus=$STATE head=$HEAD_REF fork=$IS_FORK"
+            case "$MERGEABLE" in
+              MERGEABLE|CONFLICTING) break ;;
+              *) sleep 2 ;;
+            esac
+            if [ "$i" -eq 30 ]; then
+              echo "Timed out waiting for mergeability — leaving PR alone."
+              exit 0
+            fi
+          done
+
+          if [ "$MERGEABLE" = "MERGEABLE" ] && [ "$STATE" != "DIRTY" ]; then
+            echo "PR is clean — nothing to do."
+            exit 0
+          fi
+
+          if [ "$MERGEABLE" != "CONFLICTING" ] && [ "$STATE" != "DIRTY" ]; then
+            echo "PR not in a conflicted state (mergeable=$MERGEABLE status=$STATE) — skip."
+            exit 0
+          fi
+
+          if [ "$IS_FORK" = "true" ]; then
+            COMMENT="$(cat <<'EOF'
+          ## Auto conflict resolver — skipped (fork)
+
+          / Automatischer Konflikt-Resolver — übersprungen (Fork)
+
+          This PR comes from a fork. Pushing a merge commit would require write access to the fork, which this workflow does not assume.
+
+          Please rebase onto `main` in the fork, or open the PR from a `cursor/…` branch in this repository.
+
+          Bitte lokal auf `main` rebasen oder den PR von einem `cursor/…`-Branch in diesem Repo öffnen.
+          EOF
+          )"
+            # Strip leading indentation from heredoc for readable PR comments.
+            COMMENT="$(printf '%s\n' "$COMMENT" | sed 's/^          //')"
+            gh pr comment "$N" --repo "$REPO" --body "$COMMENT"
+            echo "Fork PR — commented and exiting."
+            exit 1
+          fi
+
+          WORKDIR="$(mktemp -d)"
+          cleanup() { rm -rf "$WORKDIR"; }
+          trap cleanup EXIT
+
+          git clone --no-checkout "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "$WORKDIR/repo"
+          cd "$WORKDIR/repo"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+
+          git fetch origin "main" "refs/heads/${HEAD_REF}:refs/heads/${HEAD_REF}"
+          git checkout "$HEAD_REF"
+          git fetch origin main
+
+          # Prefer merging main into the PR branch (no force-push / no history rewrite).
+          set +e
+          git merge origin/main -m "chore: merge main into ${HEAD_REF} (auto conflict resolver)"
+          MERGE_RC=$?
+          set -e
+
+          if [ "$MERGE_RC" -eq 0 ]; then
+            git push origin "HEAD:${HEAD_REF}"
+            COMMENT="$(cat <<EOF
+          ## Auto conflict resolver — merged \`main\`
+
+          / Automatischer Konflikt-Resolver — \`main\` gemerged
+
+          Successfully merged \`origin/main\` into \`${HEAD_REF}\` without remaining conflicts. CI should re-run; automerge can proceed if checks are green.
+
+          \`origin/main\` wurde erfolgreich in \`${HEAD_REF}\` gemerged. CI sollte erneut laufen; Automerge greift bei grünen Checks.
+          EOF
+          )"
+            COMMENT="$(printf '%s\n' "$COMMENT" | sed 's/^          //')"
+            gh pr comment "$N" --repo "$REPO" --body "$COMMENT"
+            echo "Merge succeeded and was pushed."
+            exit 0
+          fi
+
+          # Collect conflicted paths.
+          mapfile -t CONFLICTS < <(git diff --name-only --diff-filter=U)
+          echo "Conflicts in: ${CONFLICTS[*]:-none}"
+
+          # Trivial auto-resolve: only allowlisted paths may take main's version ("theirs"
+          # while merging main into the PR branch). Everything else aborts.
+          SAFE_REGEX='^(\.github/workflows/|package-lock\.json$|npm-shrinkwrap\.json$)'
+          UNSAFE=()
+          for f in "${CONFLICTS[@]}"; do
+            if echo "$f" | grep -qE "$SAFE_REGEX"; then
+              echo "Safe conflict → take main: $f"
+              git checkout --theirs -- "$f"
+              git add -- "$f"
+            else
+              UNSAFE+=("$f")
+            fi
+          done
+
+          if [ "${#UNSAFE[@]}" -eq 0 ] && [ "${#CONFLICTS[@]}" -gt 0 ]; then
+            git commit --no-edit -m "chore: merge main into ${HEAD_REF} (trivial conflict resolve)"
+            git push origin "HEAD:${HEAD_REF}"
+            LIST="$(printf -- '- `%s`\n' "${CONFLICTS[@]}")"
+            COMMENT="$(cat <<EOF
+          ## Auto conflict resolver — trivial resolve
+
+          / Automatischer Konflikt-Resolver — triviale Konflikte gelöst
+
+          Merged \`origin/main\` into \`${HEAD_REF}\` and auto-resolved only allowlisted files (took \`main\`):
+
+          ${LIST}
+
+          CI should re-run. Review the merge commit if those files matter for this PR.
+
+          Nur Allowlist-Dateien wurden automatisch zugunsten von \`main\` gelöst. Bitte Merge-Commit prüfen.
+          EOF
+          )"
+            COMMENT="$(printf '%s\n' "$COMMENT" | sed 's/^          //')"
+            gh pr comment "$N" --repo "$REPO" --body "$COMMENT"
+            echo "Trivial conflicts resolved and pushed."
+            exit 0
+          fi
+
+          git merge --abort || true
+
+          UNSAFE_LIST="$(printf -- '- `%s`\n' "${UNSAFE[@]:-${CONFLICTS[@]}}")"
+          COMMENT="$(cat <<EOF
+          ## Auto conflict resolver — manual rebase needed
+
+          / Automatischer Konflikt-Resolver — manueller Rebase nötig
+
+          Could not safely merge \`origin/main\` into \`${HEAD_REF}\`. Non-trivial conflicts remain in:
+
+          ${UNSAFE_LIST}
+
+          This workflow never force-pushes and does not auto-resolve application source. Please rebase/merge \`main\` locally (or ask a new Evolve agent), then push.
+
+          Nicht-triviale Konflikte — kein Force-Push. Bitte \`main\` lokal mergen/rebasen (oder neuen Evolve-Agent starten) und pushen.
+          EOF
+          )"
+          COMMENT="$(printf '%s\n' "$COMMENT" | sed 's/^          //')"
+          gh pr comment "$N" --repo "$REPO" --body "$COMMENT"
+          echo "Non-trivial conflicts — commented and failing the job."
+          exit 1

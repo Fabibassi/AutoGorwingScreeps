@@ -56,6 +56,17 @@ Optional für **Dedicated/Private Server** (Workflow **Deploy Private Server**) 
 2. Workflow **Evolve** startet den Cursor Cloud Agent (Rate Limit: **max. 4 Läufe / Stunde**).
 3. Agent öffnet einen PR → Automerge (Label `automerge` oder Branch `cursor/…`) → Push auf `main` → erneutes Deploy.
 
+## Konflikt-Resolver (Agent-PRs)
+
+Workflow **Resolve Conflicts** (`pull_request_target`) für Branches `cursor/…` oder Labels `evolve` / `automerge`:
+
+1. Wenn der PR bereits mit `main` mergebar ist → nichts tun.
+2. Bei Konflikten: `origin/main` **in den PR-Branch mergen** (kein Force-Push, kein Rewrite).
+3. Nur Allowlist-Konflikte (z. B. `.github/workflows/*`, `package-lock.json`) werden zugunsten von `main` gelöst; Quellcode-Konflikte → PR-Kommentar + Job-Fail.
+4. Führt **keinen** Build/Test aus dem PR-Tree aus (Sicherheit bei `pull_request_target`).
+
+Manuell: Actions → **Resolve Conflicts** → PR-Nummer. Optional `AGS_GH_TOKEN`, falls `GITHUB_TOKEN` zum Push nicht reicht.
+
 ## Metriken
 
 - Cron: alle **15 Minuten** (`Metrics`-Workflow).
