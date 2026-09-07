@@ -11,19 +11,43 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      checks: read
+      statuses: read
     steps:
-      - uses: actions/checkout@v4
-      # GITHUB_TOKEN may be insufficient under branch protection; set secret AGS_GH_TOKEN (PAT) as fallback.
-      - name: Wait for CI checks
-        env:
-          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: |
-          # Fails the job if required/observed checks fail; --watch blocks until settled.
-          gh pr checks ${{ github.event.pull_request.number }} --watch --fail-fast || {
-            echo "CI checks failed or timed out — refusing automerge"
-            exit 1
-          }
+      # Do not use `gh pr checks --watch` with GITHUB_TOKEN on private repos:
+      # GraphQL statusCheckRollup often returns "Resource not accessible by integration".
+      # `gh pr merge --auto` queues merge and still respects required checks if Branch Protection is on.
+      # Optional: set secret AGS_GH_TOKEN (classic PAT with repo scope) if auto-merge is denied.
       - name: Enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: gh pr merge ${{ github.event.pull_request.number }} --auto --squash
+        run: |
+          set -euo pipefail
+          N="${{ github.event.pull_request.number }}"
+          # Ensure CI has been requested; poll Actions runs for this SHA until CI completes.
+          SHA="${{ github.event.pull_request.head.sha }}"
+          echo "Waiting for CI workflow on $SHA ..."
+          for i in $(seq 1 60); do
+            CONCLUSION=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&per_page=20" \
+              --jq '[.workflow_runs[] | select(.name=="CI")] | first | .conclusion // .status // "missing"')
+            echo "CI status/conclusion: $CONCLUSION"
+            case "$CONCLUSION" in
+              success) break ;;
+              failure|cancelled|timed_out)
+                echo "CI failed ($CONCLUSION) — refusing automerge"
+                exit 1
+                ;;
+              missing|queued|in_progress|waiting|pending|requested|null|"")
+                sleep 10
+                ;;
+              *)
+                sleep 10
+                ;;
+            esac
+            if [ "$i" -eq 60 ]; then
+              echo "Timed out waiting for CI"
+              exit 1
+            fi
+          done
+          gh pr merge "$N" --auto --squash
+          echo "Auto-merge enabled for PR #$N"
