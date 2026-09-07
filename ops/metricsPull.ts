@@ -9,7 +9,11 @@ import {
 } from "../src/telemetry";
 import { fetchMemory, fetchMemoryPath } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
-import { countOpenIssuesWithLabel, createIssue } from "./githubIssues";
+import {
+  countOpenIssuesWithLabel,
+  createIssue,
+  dispatchEvolveWorkflow,
+} from "./githubIssues";
 
 export type ForceAction = "none" | "evolve" | "rollback";
 
@@ -494,14 +498,25 @@ export async function main(): Promise<void> {
     return;
   }
 
-  await createIssue({
+  const issueNumber = await createIssue({
     token: githubToken,
     repo: githubRepo,
     title: plan.decision.title,
     body: plan.decision.body,
     labels: [plan.decision.action],
   });
-  console.log(`created ${plan.decision.action} issue: ${plan.decision.title}`);
+  console.log(
+    `created ${plan.decision.action} issue #${issueNumber}: ${plan.decision.title}`,
+  );
+
+  // Belt-and-suspenders: labeled may race or be missed; dispatch always starts Evolve.
+  // Concurrency group evolve-issue-N cancels duplicate labeled/dispatch runs.
+  await dispatchEvolveWorkflow({
+    token: githubToken,
+    repo: githubRepo,
+    issueNumber,
+  });
+  console.log(`dispatched evolve workflow for issue #${issueNumber}`);
 }
 
 function isExecutedAsCli(): boolean {
