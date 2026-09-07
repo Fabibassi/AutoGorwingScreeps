@@ -1,7 +1,7 @@
-import { runHarvester } from "./roles/harvester";
-import { runUpgrader } from "./roles/upgrader";
+import { runCreep } from "./roles";
 import { runSpawn } from "./spawn";
 import { tickTelemetry } from "./telemetry";
+import { showCreepJob } from "./visuals";
 
 export function loop(): void {
   let errorsThisTick = 0;
@@ -15,11 +15,8 @@ export function loop(): void {
     for (const name in Game.creeps) {
       const creep = Game.creeps[name];
       try {
-        if (creep.memory.role === "harvester") {
-          energyHarvestedThisTick += runHarvester(creep);
-        } else if (creep.memory.role === "upgrader") {
-          runUpgrader(creep);
-        }
+        energyHarvestedThisTick += runCreep(creep);
+        showCreepJob(creep);
       } catch (e) {
         errorsThisTick++;
         console.log(`creep ${name} error`, e);
