@@ -21,7 +21,10 @@ export function runSpawn(spawn: StructureSpawn): void {
   for (const role of order) {
     if (counts[role] < want[role]) {
       const name = `${role}-${Game.time}`;
-      spawn.spawnCreep(body, name, { memory: { role } });
+      const code = spawn.spawnCreep(body, name, { memory: { role } });
+      if (code === OK) {
+        console.log(`[t${Game.time}] spawn ${role} → ${name}`);
+      }
       return;
     }
   }
