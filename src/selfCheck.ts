@@ -3,6 +3,11 @@ import {
   useDedicatedMiners,
   type CreepQuotas,
 } from "./earlyGame";
+import {
+  countCreepsByRole,
+  countSourceContainers,
+  hasControllerContainer,
+} from "./room/queries";
 import type { AgsHealthCheck, AgsMemory } from "./types";
 
 export const SELF_CHECK_INTERVAL = 100;
