@@ -8,12 +8,24 @@ on:
         description: "GitHub issue number to evolve"
         required: true
         type: string
+
+# One agent per issue; newer trigger cancels older in-flight runs.
+concurrency:
+  group: evolve-issue-${{ github.event.issue.number || inputs.issue_number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   agent:
+    # opened/reopened: issue already has evolve|rollback (e.g. template).
+    # labeled: only when the *new* label is evolve|rollback (ignores other labels).
     if: >
       github.event_name == 'workflow_dispatch' ||
-      contains(github.event.issue.labels.*.name, 'evolve') ||
-      contains(github.event.issue.labels.*.name, 'rollback')
+      (github.event_name == 'issues' && github.event.action == 'labeled' &&
+        (github.event.label.name == 'evolve' || github.event.label.name == 'rollback')) ||
+      (github.event_name == 'issues' &&
+        (github.event.action == 'opened' || github.event.action == 'reopened') &&
+        (contains(github.event.issue.labels.*.name, 'evolve') ||
+         contains(github.event.issue.labels.*.name, 'rollback')))
     runs-on: ubuntu-latest
     permissions:
       contents: write
