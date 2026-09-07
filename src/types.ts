@@ -16,6 +16,9 @@ export interface AgsMemory {
 }
 
 declare global {
+  interface CreepMemory {
+    role?: string;
+  }
   interface Memory {
     ags?: AgsMemory;
   }
