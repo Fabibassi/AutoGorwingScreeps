@@ -1,53 +1,53 @@
+# Runs from the base branch (main) workflow file, not the PR head —
+# so automerge fixes apply immediately without updating open agent PRs.
 name: Automerge
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened, labeled]
 jobs:
   automerge:
     if: >
       contains(github.event.pull_request.labels.*.name, 'automerge') ||
-      startsWith(github.head_ref, 'cursor/')
+      startsWith(github.event.pull_request.head.ref, 'cursor/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+      actions: read
       checks: read
       statuses: read
     steps:
-      # Do not use `gh pr checks --watch` with GITHUB_TOKEN on private repos:
-      # GraphQL statusCheckRollup often returns "Resource not accessible by integration".
-      # `gh pr merge --auto` queues merge and still respects required checks if Branch Protection is on.
-      # Optional: set secret AGS_GH_TOKEN (classic PAT with repo scope) if auto-merge is denied.
-      - name: Enable auto-merge
+      # Never checkout PR code here (pull_request_target). Only use gh + trusted secrets.
+      # Avoid `gh pr checks` (GraphQL statusCheckRollup often blocked for GITHUB_TOKEN on private repos).
+      - name: Enable auto-merge after CI
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           N="${{ github.event.pull_request.number }}"
-          # Ensure CI has been requested; poll Actions runs for this SHA until CI completes.
           SHA="${{ github.event.pull_request.head.sha }}"
+          REPO="${{ github.repository }}"
           echo "Waiting for CI workflow on $SHA ..."
-          for i in $(seq 1 60); do
-            CONCLUSION=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&per_page=20" \
+          for i in $(seq 1 90); do
+            CONCLUSION=$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=30" \
               --jq '[.workflow_runs[] | select(.name=="CI")] | first | .conclusion // .status // "missing"')
-            echo "CI status/conclusion: $CONCLUSION"
+            echo "[$i] CI: $CONCLUSION"
             case "$CONCLUSION" in
-              success) break ;;
+              success)
+                break
+                ;;
               failure|cancelled|timed_out)
                 echo "CI failed ($CONCLUSION) — refusing automerge"
                 exit 1
-                ;;
-              missing|queued|in_progress|waiting|pending|requested|null|"")
-                sleep 10
                 ;;
               *)
                 sleep 10
                 ;;
             esac
-            if [ "$i" -eq 60 ]; then
+            if [ "$i" -eq 90 ]; then
               echo "Timed out waiting for CI"
               exit 1
             fi
           done
-          gh pr merge "$N" --auto --squash
+          gh pr merge "$N" --repo "$REPO" --auto --squash
           echo "Auto-merge enabled for PR #$N"
