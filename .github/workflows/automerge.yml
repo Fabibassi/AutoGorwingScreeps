@@ -15,10 +15,14 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      issues: write
       actions: read
       checks: read
       statuses: read
     steps:
+      - name: Checkout base branch scripts
+        uses: actions/checkout@v4
+
       - name: Enable auto-merge after CI
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
@@ -28,13 +32,24 @@ jobs:
           SHA="${{ github.event.pull_request.head.sha }}"
           REPO="${{ github.repository }}"
 
+          close_linked_if_merged() {
+            PR_STATE="$(gh pr view "$N" --repo "$REPO" --json state,mergedAt)"
+            if echo "$PR_STATE" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
+              chmod +x .github/scripts/close-linked-issues.sh
+              .github/scripts/close-linked-issues.sh "$N" "$REPO"
+            else
+              echo "PR #$N not merged yet — issue close deferred to close-issues-on-merge workflow."
+            fi
+          }
+
           echo "PR #$N head=$SHA"
 
           # Already merged or auto-merge already enabled → success (idempotent).
           PR_JSON="$(gh pr view "$N" --repo "$REPO" --json autoMergeRequest,state,mergedAt,mergeable,mergeStateStatus,isDraft)"
           echo "PR view: $PR_JSON"
           if echo "$PR_JSON" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
-            echo "PR #$N is already merged — nothing to do."
+            echo "PR #$N is already merged — closing linked issues if needed."
+            close_linked_if_merged
             exit 0
           fi
           if echo "$PR_JSON" | jq -e '.autoMergeRequest != null' >/dev/null; then
@@ -96,7 +111,8 @@ jobs:
           # Re-check after CI wait — another concurrent run may have enabled merge.
           PR_JSON="$(gh pr view "$N" --repo "$REPO" --json autoMergeRequest,state,mergedAt)"
           if echo "$PR_JSON" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
-            echo "PR #$N was merged while waiting — success."
+            echo "PR #$N was merged while waiting — closing linked issues if needed."
+            close_linked_if_merged
             exit 0
           fi
           if echo "$PR_JSON" | jq -e '.autoMergeRequest != null' >/dev/null; then
@@ -111,10 +127,13 @@ jobs:
           echo "$MERGE_OUT"
           if [ "$MERGE_RC" -eq 0 ]; then
             echo "Auto-merge enabled for PR #$N"
+            # --auto may only queue merge; close only if already merged, else closed-workflow covers it.
+            close_linked_if_merged
             exit 0
           fi
           if echo "$MERGE_OUT" | grep -qiE 'Merge already in progress|already merged|Pull request is already merged|already enabled|auto.?merge.*(already|enabled)'; then
             echo "Merge/auto-merge already in progress or done — treating as success."
+            close_linked_if_merged
             exit 0
           fi
           echo "gh pr merge failed with exit $MERGE_RC"

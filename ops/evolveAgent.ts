@@ -31,6 +31,10 @@ export async function main(): Promise<void> {
   }
   writeFileSync(stampFile, JSON.stringify(decision.nextTimestamps));
 
+  const closesRequirement = issueNumber
+    ? `- ALWAYS include exactly \`Closes #${issueNumber}\` in the PR description (required so GitHub auto-closes the issue on merge)\n`
+    : "";
+
   const prompt = `You are the AutoGrowingScreeps evolution agent.
 Work ONLY on this GitHub issue scope. Open/update a PR with focused changes.
 Issue #${issueNumber}: ${issueTitle}
@@ -43,7 +47,7 @@ Constraints:
 - Do not commit secrets
 - Follow docs/superpowers/specs/2026-09-07-autonomous-screeps-bot-design.md
 - Open the PR as ready for review (NOT draft) and add label "automerge" if possible
-`;
+${closesRequirement}`;
 
   try {
     const result = await Agent.prompt(prompt, {

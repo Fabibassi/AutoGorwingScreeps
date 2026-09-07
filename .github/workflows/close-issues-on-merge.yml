@@ -1,0 +1,26 @@
+# Close linked GitHub issues when a PR merges (any merge path).
+name: Close issues on merge
+on:
+  pull_request_target:
+    types: [closed]
+jobs:
+  close-linked-issues:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - name: Checkout base branch scripts
+        uses: actions/checkout@v4
+
+      - name: Close linked open issues
+        env:
+          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          chmod +x .github/scripts/close-linked-issues.sh
+          .github/scripts/close-linked-issues.sh \
+            "${{ github.event.pull_request.number }}" \
+            "${{ github.repository }}"
