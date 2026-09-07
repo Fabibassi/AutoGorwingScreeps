@@ -3,6 +3,9 @@ name: Automerge
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, labeled, ready_for_review]
+concurrency:
+  group: automerge-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   automerge:
     if: >
@@ -27,10 +30,22 @@ jobs:
 
           echo "PR #$N head=$SHA"
 
+          # Already merged or auto-merge already enabled → success (idempotent).
+          PR_JSON="$(gh pr view "$N" --repo "$REPO" --json autoMergeRequest,state,mergedAt,mergeable,mergeStateStatus,isDraft)"
+          echo "PR view: $PR_JSON"
+          if echo "$PR_JSON" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
+            echo "PR #$N is already merged — nothing to do."
+            exit 0
+          fi
+          if echo "$PR_JSON" | jq -e '.autoMergeRequest != null' >/dev/null; then
+            echo "Auto-merge already enabled for PR #$N — nothing to do."
+            exit 0
+          fi
+
           # Fail fast on merge conflicts — CI may never appear as useful signal.
-          STATE="$(gh pr view "$N" --repo "$REPO" --json mergeable,mergeStateStatus,isDraft -q '.mergeStateStatus + " draft=" + (.isDraft|tostring) + " mergeable=" + (.mergeable|tostring)')"
+          STATE="$(echo "$PR_JSON" | jq -r '.mergeStateStatus + " draft=" + (.isDraft|tostring) + " mergeable=" + (.mergeable|tostring)')"
           echo "PR state: $STATE"
-          if gh pr view "$N" --repo "$REPO" --json mergeStateStatus -q .mergeStateStatus | grep -qiE 'dirty|blocked'; then
+          if echo "$PR_JSON" | jq -r .mergeStateStatus | grep -qiE 'dirty|blocked'; then
             echo "PR has conflicts or is blocked — refusing automerge. Rebase/fix the PR first."
             exit 1
           fi
@@ -78,5 +93,29 @@ jobs:
             fi
           done
 
-          gh pr merge "$N" --repo "$REPO" --auto --squash
-          echo "Auto-merge enabled for PR #$N"
+          # Re-check after CI wait — another concurrent run may have enabled merge.
+          PR_JSON="$(gh pr view "$N" --repo "$REPO" --json autoMergeRequest,state,mergedAt)"
+          if echo "$PR_JSON" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
+            echo "PR #$N was merged while waiting — success."
+            exit 0
+          fi
+          if echo "$PR_JSON" | jq -e '.autoMergeRequest != null' >/dev/null; then
+            echo "Auto-merge already enabled for PR #$N after CI — success."
+            exit 0
+          fi
+
+          set +e
+          MERGE_OUT="$(gh pr merge "$N" --repo "$REPO" --auto --squash 2>&1)"
+          MERGE_RC=$?
+          set -e
+          echo "$MERGE_OUT"
+          if [ "$MERGE_RC" -eq 0 ]; then
+            echo "Auto-merge enabled for PR #$N"
+            exit 0
+          fi
+          if echo "$MERGE_OUT" | grep -qiE 'Merge already in progress|already merged|Pull request is already merged|already enabled|auto.?merge.*(already|enabled)'; then
+            echo "Merge/auto-merge already in progress or done — treating as success."
+            exit 0
+          fi
+          echo "gh pr merge failed with exit $MERGE_RC"
+          exit "$MERGE_RC"
