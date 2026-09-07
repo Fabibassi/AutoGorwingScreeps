@@ -1,0 +1,16 @@
+name: Evolve request
+description: Trigger the autonomous Screeps evolution agent
+title: "evolve: "
+labels: ["evolve"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: What should change?
+      description: Be specific. One evolution unit.
+    validations:
+      required: true
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Optional metrics / context

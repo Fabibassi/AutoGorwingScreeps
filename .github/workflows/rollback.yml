@@ -1,0 +1,28 @@
+# Manual rollback fallback (agent-first on "rollback" issues; use this when needed).
+# Input `sha` = the BAD commit to revert (creates a revert commit on main).
+name: Rollback
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Bad commit SHA to revert (not a known-good SHA)"
+        required: true
+        type: string
+jobs:
+  revert:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Revert bad commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "ags-bot"
+          git config user.email "ags-bot@users.noreply.github.com"
+          git checkout main
+          git pull --ff-only origin main
+          git revert --no-edit "${{ inputs.sha }}"
+          git push origin HEAD:main

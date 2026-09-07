@@ -1,0 +1,20 @@
+name: Automerge
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+jobs:
+  automerge:
+    if: >
+      contains(github.event.pull_request.labels.*.name, 'automerge') ||
+      startsWith(github.head_ref, 'cursor/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      # GITHUB_TOKEN may be insufficient under branch protection; set secret AGS_GH_TOKEN (PAT) as fallback.
+      - name: Enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: gh pr merge ${{ github.event.pull_request.number }} --auto --squash

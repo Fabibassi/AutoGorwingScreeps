@@ -1,0 +1,68 @@
+name: Evolve
+on:
+  issues:
+    types: [opened, labeled, reopened]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "GitHub issue number to evolve"
+        required: true
+        type: string
+jobs:
+  agent:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.issue.labels.*.name, 'evolve') ||
+      contains(github.event.issue.labels.*.name, 'rollback')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: .ags-agent-timestamps.json
+          key: ags-agent-timestamps-${{ github.repository }}
+          restore-keys: ags-agent-timestamps-
+      # Multiline issue bodies break plain env assignment; toJSON + decode is safe.
+      - name: Prepare issue context
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_NUMBER: ${{ inputs.issue_number }}
+          EVENT_NUMBER: ${{ github.event.issue.number }}
+          EVENT_TITLE_JSON: ${{ toJSON(github.event.issue.title) }}
+          EVENT_BODY_JSON: ${{ toJSON(github.event.issue.body) }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            NUM="$DISPATCH_NUMBER"
+            DATA=$(gh api "repos/${{ github.repository }}/issues/${NUM}")
+            TITLE=$(echo "$DATA" | jq -r .title)
+            BODY=$(echo "$DATA" | jq -r '.body // ""')
+          else
+            NUM="$EVENT_NUMBER"
+            TITLE=$(node -e 'process.stdout.write(JSON.parse(process.env.EVENT_TITLE_JSON ?? "null") ?? "")')
+            BODY=$(node -e 'process.stdout.write(JSON.parse(process.env.EVENT_BODY_JSON ?? "null") ?? "")')
+          fi
+          {
+            echo "ISSUE_NUMBER=${NUM}"
+            echo "ISSUE_TITLE<<AGS_EOF"
+            printf '%s\n' "$TITLE"
+            echo "AGS_EOF"
+            echo "ISSUE_BODY<<AGS_EOF"
+            printf '%s\n' "$BODY"
+            echo "AGS_EOF"
+          } >> "$GITHUB_ENV"
+      - name: Run Cursor Cloud Agent
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          REPO_URL: https://github.com/${{ github.repository }}
+        run: npx tsx ops/evolveAgent.ts
