@@ -1,6 +1,7 @@
 import { runHarvester } from "./roles/harvester";
 import { runUpgrader } from "./roles/upgrader";
 import { runSpawn } from "./spawn";
+import { maybeLogStatus } from "./statusLog";
 import { tickTelemetry } from "./telemetry";
 
 export function loop(): void {
@@ -28,6 +29,7 @@ export function loop(): void {
 
     const room = Object.values(Game.rooms)[0];
     const rcl = room?.controller?.level ?? 1;
+    maybeLogStatus(Game.time, rcl);
     Memory.ags = tickTelemetry({
       tick: Game.time,
       rcl,
