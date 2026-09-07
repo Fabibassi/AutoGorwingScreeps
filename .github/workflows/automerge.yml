@@ -30,11 +30,10 @@ jobs:
           echo "PR #$N head=$SHA branch=$BRANCH"
           echo "Waiting for CI ..."
 
-          # PR workflow runs are not always listed under head_sha alone.
-          # Match by head_branch / head_sha / linked PR number.
+          # gh api --jq does not support jq --arg; pipe JSON to jq instead.
           ci_state() {
             gh api "repos/${REPO}/actions/runs?per_page=30&event=pull_request" \
-              --jq --arg sha "$SHA" --arg branch "$BRANCH" --argjson n "$N" '
+              | jq -r --arg sha "$SHA" --arg branch "$BRANCH" --argjson n "$N" '
                 [
                   .workflow_runs[]
                   | select(.name == "CI")
@@ -72,8 +71,6 @@ jobs:
             esac
             if [ "$i" -eq 90 ]; then
               echo "Timed out waiting for CI"
-              # Last resort: still enable --auto so merge happens once checks exist
-              # (useful if Actions listing is delayed). Does not force-merge red CI.
               gh pr merge "$N" --repo "$REPO" --auto --squash
               echo "Enabled --auto after timeout; GitHub will merge when requirements allow."
               exit 0
