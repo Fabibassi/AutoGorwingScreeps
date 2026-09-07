@@ -33,15 +33,15 @@ Unter **Settings → Secrets and variables → Actions**:
 | `SCREEPS_SHARD` | z. B. `shard3` | Shard; leer lassen, wenn der Header weggelassen werden soll |
 | `SCREEPS_HOSTNAME` | leer | Optional; leer = `https://screeps.com`. Nur setzen, wenn die World-API umgeleitet wird |
 
-Optional für Private/Training-Server (Workflow **Deploy Training**):
+Optional für **Dedicated/Private Server** (Workflow **Deploy Private Server**) — nicht der Browser-Sim:
 
 | Name | Typ | Beschreibung |
 |------|-----|--------------|
-| `SCREEPS_TRAINING_HOSTNAME` | Variable | z. B. `http://127.0.0.1:21025` (nur mit **self-hosted Runner** erreichbar) oder öffentliche URL |
-| `SCREEPS_TRAINING_BRANCH` | Variable | meist `default` |
-| `SCREEPS_TRAINING_RUNNER` | Variable | z. B. `self-hosted` — sonst `ubuntu-latest` |
-| `SCREEPS_TRAINING_TOKEN` | Secret | Token am Training-Server (falls vorhanden) |
-| `SCREEPS_TRAINING_EMAIL` / `SCREEPS_TRAINING_PASSWORD` | Secrets | Alternative Auth per `/api/auth/signin` |
+| `SCREEPS_PRIVATE_HOSTNAME` | Variable | z. B. `http://127.0.0.1:21025` (nur mit **self-hosted Runner** erreichbar) oder öffentliche URL |
+| `SCREEPS_PRIVATE_BRANCH` | Variable | meist `default` |
+| `SCREEPS_PRIVATE_RUNNER` | Variable | z. B. `self-hosted` — sonst `ubuntu-latest` |
+| `SCREEPS_PRIVATE_TOKEN` | Secret | Token am Private Server (z. B. via screepsmod-auth) |
+| `SCREEPS_PRIVATE_EMAIL` / `SCREEPS_PRIVATE_PASSWORD` | Secrets | Alternative Auth per `/api/auth/signin` |
 
 ## Erster Deploy
 
@@ -67,22 +67,30 @@ Optional für Private/Training-Server (Workflow **Deploy Training**):
 1. Bevorzugt: Issue mit Label `rollback` (Agent-Pfad).
 2. Fallback: Actions → **Rollback** → **Run workflow**, Input `sha` = **schlechter Commit**, der reverted werden soll (nicht ein „bekannter guter“ SHA).
 
-## Training / Private Server (schnelle Ticks)
+## Umgebungen (nicht verwechseln)
 
-Derselbe Bot-Code. Deploy-Ziel über `SCREEPS_HOSTNAME`.
+| Umgebung | Was es ist | Tickrate | Unser Deploy |
+|----------|------------|----------|--------------|
+| **Screeps World** | Öffentlicher MMO | fest | `Deploy Screeps` → `screeps.com` |
+| **Dedicated / Private Server** | Echter Server (Steam/lokal/VPS), HTTP-API meist `:21025` | einstellbar (`system.setTickDuration`) | `deploy:private` / Workflow **Deploy Private Server** |
+| **Sim / Training** (Browser) | In-Browser-Simulator auf screeps.com | im UI änderbar | **kein** API-Deploy — Code manuell in den Sim-Editor; Globals/CPU weichen ab |
 
-**Wichtig:** GitHub-hosted Actions erreichen **nicht** `127.0.0.1` auf deinem PC. Für lokalen Training-Server:
+## Dedicated / Private Server (schnelle Ticks)
 
-1. **Lokal pushen (einfachste Variante):**
-   ```bash
+Derselbe Bot-Code. Ziel-URL über `SCREEPS_HOSTNAME` (z. B. `http://127.0.0.1:21025`).
+
+**Wichtig:** GitHub-hosted Actions erreichen **nicht** `127.0.0.1` auf deinem PC.
+
+1. **Lokal deployen:**
+   ```powershell
    $env:SCREEPS_HOSTNAME="http://127.0.0.1:21025"
    $env:SCREEPS_TOKEN="..."   # oder SCREEPS_EMAIL + SCREEPS_PASSWORD
    $env:SCREEPS_SHARD=""      # kein Shard auf Private Server
-   npm run deploy:training
+   npm run deploy:private
    ```
-2. **Oder** Self-hosted GitHub Runner auf dem PC + Workflow **Deploy Training** (`workflow_dispatch`) mit `SCREEPS_TRAINING_*` Vars/Secrets.
+2. **Oder** Self-hosted GitHub Runner auf dem PC + Workflow **Deploy Private Server** mit `SCREEPS_PRIVATE_*`.
 
-World-Deploy (`Deploy Screeps` auf `main`) bleibt unverändert auf screeps.com.
+World-Deploy bleibt unverändert.
 
 ## Lokal entwickeln (optional)
 

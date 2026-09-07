@@ -1,0 +1,27 @@
+# Deploy to a local/remote Screeps dedicated (private) server — not the browser Sim/Training.
+# GitHub-hosted runners CANNOT reach http://127.0.0.1 on your PC.
+# Use a self-hosted runner on the machine that runs the dedicated server, or a public host URL.
+name: Deploy Private Server
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    # Set repo variable SCREEPS_PRIVATE_RUNNER=self-hosted for a runner on your dedicated-server PC.
+    runs-on: ${{ vars.SCREEPS_PRIVATE_RUNNER != '' && vars.SCREEPS_PRIVATE_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy to dedicated/private server
+        env:
+          SCREEPS_TOKEN: ${{ secrets.SCREEPS_PRIVATE_TOKEN }}
+          SCREEPS_EMAIL: ${{ secrets.SCREEPS_PRIVATE_EMAIL }}
+          SCREEPS_PASSWORD: ${{ secrets.SCREEPS_PRIVATE_PASSWORD }}
+          SCREEPS_BRANCH: ${{ vars.SCREEPS_PRIVATE_BRANCH }}
+          SCREEPS_SHARD: ""
+          SCREEPS_HOSTNAME: ${{ vars.SCREEPS_PRIVATE_HOSTNAME }}
+        run: npx tsx ops/deploy.ts
