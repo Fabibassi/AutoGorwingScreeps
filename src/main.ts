@@ -1,8 +1,8 @@
-import { runHarvester } from "./roles/harvester";
-import { runUpgrader } from "./roles/upgrader";
+import { runCreep } from "./roles";
 import { runSpawn } from "./spawn";
-import { maybeLogStatus } from "./statusLog";
+import { logPlanStatusIfDue } from "./status";
 import { tickTelemetry } from "./telemetry";
+import { showCreepJob } from "./visuals";
 
 export function loop(): void {
   let errorsThisTick = 0;
@@ -16,11 +16,8 @@ export function loop(): void {
     for (const name in Game.creeps) {
       const creep = Game.creeps[name];
       try {
-        if (creep.memory.role === "harvester") {
-          energyHarvestedThisTick += runHarvester(creep);
-        } else if (creep.memory.role === "upgrader") {
-          runUpgrader(creep);
-        }
+        energyHarvestedThisTick += runCreep(creep);
+        showCreepJob(creep);
       } catch (e) {
         errorsThisTick++;
         console.log(`creep ${name} error`, e);
@@ -29,7 +26,6 @@ export function loop(): void {
 
     const room = Object.values(Game.rooms)[0];
     const rcl = room?.controller?.level ?? 1;
-    maybeLogStatus(Game.time, rcl);
     Memory.ags = tickTelemetry({
       tick: Game.time,
       rcl,
@@ -38,6 +34,8 @@ export function loop(): void {
       cpuUsed: Game.cpu.getUsed(),
       memory: Memory.ags,
     });
+
+    logPlanStatusIfDue(room, Memory.ags);
   } catch (e) {
     console.log("main loop error", e);
     if (!Memory.ags) {
