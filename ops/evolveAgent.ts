@@ -42,6 +42,7 @@ Constraints:
 - Keep changes small and testable; run npm test && npm run build
 - Do not commit secrets
 - Follow docs/superpowers/specs/2026-09-07-autonomous-screeps-bot-design.md
+- Open the PR as ready for review (NOT draft) and add label "automerge" if possible
 `;
 
   try {

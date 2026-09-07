@@ -2,7 +2,7 @@
 name: Automerge
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, labeled, ready_for_review]
 jobs:
   automerge:
     if: >
@@ -16,53 +16,43 @@ jobs:
       checks: read
       statuses: read
     steps:
-      # Never checkout PR code here (pull_request_target).
-      - name: Enable auto-merge after CI
+      - name: Enable auto-merge after checks
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           N="${{ github.event.pull_request.number }}"
           SHA="${{ github.event.pull_request.head.sha }}"
-          BRANCH="${{ github.event.pull_request.head.ref }}"
           REPO="${{ github.repository }}"
 
-          echo "PR #$N head=$SHA branch=$BRANCH"
-          echo "Waiting for CI ..."
+          echo "PR #$N head=$SHA"
 
-          # gh api --jq does not support jq --arg; pipe JSON to jq instead.
+          # Draft PRs cannot merge; Cursor agents often open drafts.
+          gh pr ready "$N" --repo "$REPO" 2>/dev/null || true
+
+          # Prefer commit check-runs (reliable) over actions/runs?event= filters.
           ci_state() {
-            gh api "repos/${REPO}/actions/runs?per_page=30&event=pull_request" \
-              | jq -r --arg sha "$SHA" --arg branch "$BRANCH" --argjson n "$N" '
-                [
-                  .workflow_runs[]
-                  | select(.name == "CI")
-                  | select(
-                      .head_sha == $sha
-                      or .head_branch == $branch
-                      or ((.pull_requests // []) | map(.number) | index($n) != null)
-                    )
-                ]
-                | first
-                | if . == null then "missing"
-                  elif .status != "completed" then .status
-                  else (.conclusion // "unknown")
-                  end
-              '
+            gh api "repos/${REPO}/commits/${SHA}/check-runs" --jq '
+              if (.total_count // (.check_runs|length)) == 0 then "missing"
+              elif [.check_runs[].status] | any(. != "completed") then "in_progress"
+              elif [.check_runs[].conclusion] | all(. == "success" or . == "skipped" or . == "neutral") then "success"
+              else "failure"
+              end
+            '
           }
 
+          echo "Waiting for check runs on commit ..."
           for i in $(seq 1 90); do
             STATE="$(ci_state)"
-            echo "[$i] CI: $STATE"
+            echo "[$i] checks: $STATE"
             case "$STATE" in
-              success)
-                break
-                ;;
-              failure|cancelled|timed_out|startup_failure|action_required)
-                echo "CI failed ($STATE) — refusing automerge"
+              success) break ;;
+              failure)
+                echo "Checks failed — refusing automerge"
+                gh api "repos/${REPO}/commits/${SHA}/check-runs" --jq '.check_runs[] | {name,status,conclusion}' || true
                 exit 1
                 ;;
-              missing|queued|in_progress|waiting|pending|requested|waiting_for_completion)
+              missing|in_progress)
                 sleep 10
                 ;;
               *)
@@ -70,10 +60,8 @@ jobs:
                 ;;
             esac
             if [ "$i" -eq 90 ]; then
-              echo "Timed out waiting for CI"
-              gh pr merge "$N" --repo "$REPO" --auto --squash
-              echo "Enabled --auto after timeout; GitHub will merge when requirements allow."
-              exit 0
+              echo "Timed out waiting for checks"
+              exit 1
             fi
           done
 
