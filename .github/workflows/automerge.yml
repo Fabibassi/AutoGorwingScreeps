@@ -1,62 +1,72 @@
 name: Automerge
 on:
+  # Primary path: CI finished on a PR → try auto-merge (no gh pr checks / GraphQL).
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  # Fallback: someone adds the automerge label after CI is already green.
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [labeled]
+
 jobs:
   automerge:
     if: >
-      contains(github.event.pull_request.labels.*.name, 'automerge') ||
-      startsWith(github.head_ref, 'cursor/')
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'labeled' &&
+       github.event.label.name == 'automerge')
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
-      checks: read
     steps:
-      - uses: actions/checkout@v4
-      # GITHUB_TOKEN may be insufficient under branch protection; set secret AGS_GH_TOKEN (PAT) as fallback.
-      - name: Wait for CI
-        env:
-          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
-        run: |
-          set -euo pipefail
-          for attempt in $(seq 1 36); do
-            mapfile -t buckets < <(
-              gh pr checks "$PR" --json workflow,bucket \
-                -q '.[] | select(.workflow == "CI") | .bucket'
-            )
-            if [ "${#buckets[@]}" -eq 0 ]; then
-              echo "CI not started yet (attempt ${attempt}/36)"
-            else
-              failed=0
-              for bucket in "${buckets[@]}"; do
-                case "$bucket" in
-                  pass) ;;
-                  pending|skipping)
-                    echo "CI still running (${bucket}, attempt ${attempt}/36)"
-                    failed=1
-                    break
-                    ;;
-                  *)
-                    echo "CI check failed (${bucket}) — refusing automerge"
-                    exit 1
-                    ;;
-                esac
-              done
-              if [ "$failed" -eq 0 ]; then
-                echo "CI passed"
-                break
-              fi
-            fi
-            if [ "$attempt" -eq 36 ]; then
-              echo "CI checks timed out — refusing automerge"
-              exit 1
-            fi
-            sleep 10
-          done
+      - name: Resolve eligible PR
+        id: meta
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch =
+              context.eventName === 'workflow_run'
+                ? context.payload.workflow_run.head_branch
+                : context.payload.pull_request.head.ref;
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${branch}`,
+              state: 'open',
+            });
+            const pr = prs[0];
+            if (!pr) {
+              core.info(`No open PR for branch ${branch}`);
+              return;
+            }
+            const hasAutomerge = pr.labels.some((l) => l.name === 'automerge');
+            const isCursor = branch.startsWith('cursor/');
+            if (!isCursor && !hasAutomerge) {
+              core.info('PR not eligible for automerge (needs cursor/* branch or automerge label)');
+              return;
+            }
+            if (context.eventName === 'pull_request') {
+              const sha = context.payload.pull_request.head.sha;
+              const { data: runs } =
+                await github.rest.actions.listWorkflowRunsForRepo({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  head_sha: sha,
+                });
+              const ci = runs.workflow_runs.find((r) => r.name === 'CI');
+              if (!ci || ci.conclusion !== 'success') {
+                core.setFailed('CI is not green yet — refusing automerge');
+                return;
+              }
+            }
+            core.setOutput('pr', String(pr.number));
+
       - name: Enable auto-merge
+        if: steps.meta.outputs.pr != ''
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
+          PR: ${{ steps.meta.outputs.pr }}
         run: gh pr merge "$PR" --auto --squash
