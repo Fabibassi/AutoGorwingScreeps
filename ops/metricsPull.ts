@@ -53,51 +53,119 @@ export function decideIssue(
   return null;
 }
 
-/**
- * Parse Screeps `/api/user/memory?path=ags` response.
- * - `data` may be a JSON string of the path value
- * - or gzip+base64 (full memory style); try gunzip after base64 decode
- */
-export function parseMemoryPathData(raw: unknown): AgsMemory {
-  if (raw == null || typeof raw !== "object") {
-    throw new Error("memory response is not an object");
-  }
-  const envelope = raw as { data?: unknown; ok?: number };
-  let data = envelope.data;
+const PREVIEW_MAX = 120;
 
-  if (typeof data === "string") {
-    const trimmed = data.trim();
-    // Plain JSON string for path queries
-    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-      data = JSON.parse(trimmed);
-    } else {
-      // Likely gzip+base64 (or gzip prefixed with gzip marker)
-      try {
-        const payload =
-          trimmed.startsWith("gz:") ? trimmed.slice(3) : trimmed;
-        const buf = Buffer.from(payload, "base64");
-        const json = gunzipSync(buf).toString("utf8");
-        data = JSON.parse(json);
-      } catch {
-        // Last resort: JSON.parse as-is
-        data = JSON.parse(trimmed);
-      }
+/** Truncated, safe-ish preview for error messages (no full dumps). */
+export function previewPayload(value: unknown, max = PREVIEW_MAX): string {
+  let s: string;
+  try {
+    s = typeof value === "string" ? value : JSON.stringify(value);
+  } catch {
+    s = String(value);
+  }
+  if (s == null) s = String(value);
+  if (s.length > max) return `${s.slice(0, max)}…`;
+  return s;
+}
+
+function looksLikeAgsMemory(value: unknown): value is AgsMemory {
+  if (value == null || typeof value !== "object") return false;
+  const obj = value as AgsMemory;
+  return !!obj.metrics && Array.isArray(obj.incomeWindows);
+}
+
+function tryGunzipBase64Json(trimmed: string): unknown {
+  const payload = trimmed.startsWith("gz:") ? trimmed.slice(3) : trimmed;
+  const buf = Buffer.from(payload, "base64");
+  if (buf.length === 0) {
+    throw new Error("empty base64 payload");
+  }
+  const json = gunzipSync(buf).toString("utf8").trim();
+  if (!json || json === "undefined") return null;
+  return JSON.parse(json);
+}
+
+/**
+ * Decode Screeps `data` field variants:
+ * - already a JSON object
+ * - JSON string of an object
+ * - gzip+base64 (with or without `gz:` prefix)
+ */
+export function decodeMemoryDataField(data: unknown): unknown {
+  if (data == null) return null;
+  if (typeof data === "object") return data;
+  if (typeof data !== "string") return data;
+
+  const trimmed = data.trim();
+  if (!trimmed || trimmed === "null" || trimmed === "undefined") return null;
+
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return JSON.parse(trimmed);
+  }
+
+  // Screeps often returns gzip+base64 even for path queries
+  try {
+    return tryGunzipBase64Json(trimmed);
+  } catch {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      throw new Error(
+        `ags memory path decode failed: typeof=${typeof data} preview=${previewPayload(data)}`,
+      );
     }
   }
+}
 
-  if (data == null || typeof data !== "object") {
-    throw new Error("ags memory path did not decode to an object");
+/**
+ * Parse Screeps `/api/user/memory?path=ags` response.
+ * Returns `null` when Memory.ags is empty/missing (ok response, no telemetry yet).
+ */
+export function parseMemoryPathData(raw: unknown): AgsMemory | null {
+  if (raw == null || typeof raw !== "object") {
+    throw new Error(
+      `memory response is not an object: typeof=${typeof raw} preview=${previewPayload(raw)}`,
+    );
+  }
+
+  const envelope = raw as { data?: unknown; ok?: number; metrics?: unknown };
+
+  // Rare: caller passed AgsMemory directly (already decoded object)
+  if (looksLikeAgsMemory(envelope)) {
+    return envelope;
+  }
+
+  const decoded = decodeMemoryDataField(envelope.data);
+
+  if (decoded == null) {
+    return null;
+  }
+
+  if (typeof decoded !== "object") {
+    throw new Error(
+      `ags memory path did not decode to an object: typeof=${typeof decoded} preview=${previewPayload(decoded)} raw=${previewPayload(raw)}`,
+    );
   }
 
   // Path=ags returns AgsMemory directly; full memory may nest under .ags
-  const obj = data as AgsMemory & { ags?: AgsMemory };
-  if (obj.metrics && Array.isArray(obj.incomeWindows)) {
-    return obj as AgsMemory;
+  if (looksLikeAgsMemory(decoded)) {
+    return decoded;
   }
-  if (obj.ags && obj.ags.metrics) {
-    return obj.ags;
+
+  const nested = decoded as { ags?: unknown };
+  if ("ags" in nested) {
+    if (nested.ags == null) return null;
+    if (looksLikeAgsMemory(nested.ags)) return nested.ags;
+    if (typeof nested.ags !== "object") {
+      throw new Error(
+        `ags memory path did not decode to an object: typeof=${typeof nested.ags} preview=${previewPayload(nested.ags)} raw=${previewPayload(raw)}`,
+      );
+    }
   }
-  throw new Error("decoded memory missing AgsMemory shape");
+
+  throw new Error(
+    `decoded memory missing AgsMemory shape: preview=${previewPayload(decoded)}`,
+  );
 }
 
 export async function main(): Promise<void> {
@@ -130,6 +198,10 @@ export async function main(): Promise<void> {
     hostname,
   });
   const ags = parseMemoryPathData(raw);
+  if (!ags) {
+    console.log("Memory.ags missing — bot not writing telemetry yet");
+    return;
+  }
 
   const stagnant = isStagnant(ags.incomeWindows, STAGNATION_THRESHOLD_PCT);
   const baselineIncome = ags.baseline?.energyIncomePerTick ?? 0;
