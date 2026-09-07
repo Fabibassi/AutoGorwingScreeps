@@ -9,6 +9,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "deploy": "npm run build && tsx ops/deploy.ts",
+    "deploy:training": "npm run build && tsx ops/deploy.ts",
     "metrics:pull": "tsx ops/metricsPull.ts",
     "agent:evolve": "tsx ops/evolveAgent.ts"
   },

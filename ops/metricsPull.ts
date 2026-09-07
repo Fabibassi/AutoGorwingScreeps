@@ -8,6 +8,7 @@ import {
   STAGNATION_THRESHOLD_PCT,
 } from "../src/telemetry";
 import { fetchMemoryPath } from "./screepsApi";
+import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 import { countOpenIssuesWithLabel, createIssue } from "./githubIssues";
 
 export type DecideIssueInput = {
@@ -100,15 +101,11 @@ export function parseMemoryPathData(raw: unknown): AgsMemory {
 }
 
 export async function main(): Promise<void> {
-  const screepsToken = process.env.SCREEPS_TOKEN;
   const githubToken = process.env.GITHUB_TOKEN;
   const githubRepo = process.env.GITHUB_REPO;
-  const shard = process.env.SCREEPS_SHARD || undefined;
+  const hostname = resolveHostname();
+  const shard = resolveShard();
 
-  if (!screepsToken) {
-    console.error("SCREEPS_TOKEN missing");
-    process.exit(1);
-  }
   if (!githubToken) {
     console.error("GITHUB_TOKEN missing");
     process.exit(1);
@@ -118,10 +115,19 @@ export async function main(): Promise<void> {
     process.exit(1);
   }
 
+  let screepsToken: string;
+  try {
+    screepsToken = await resolveToken(hostname);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : e);
+    process.exit(1);
+  }
+
   const raw = await fetchMemoryPath({
     token: screepsToken,
     path: "ags",
     shard,
+    hostname,
   });
   const ags = parseMemoryPathData(raw);
 

@@ -12,6 +12,29 @@ export function screepsHeaders(
   return headers;
 }
 
+/** Private-server friendly auth; returns token for X-Token header. */
+export async function signin(opts: {
+  email: string;
+  password: string;
+  hostname?: string;
+}): Promise<string> {
+  const host = opts.hostname ?? DEFAULT_HOST;
+  const res = await fetch(`${host}/api/auth/signin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: opts.email, password: opts.password }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`signin failed: ${res.status} ${text}`);
+  }
+  const body = JSON.parse(text) as { ok?: number; token?: string; error?: string };
+  if (body.ok === 0 || !body.token) {
+    throw new Error(`signin API error: ${body.error ?? text}`);
+  }
+  return body.token;
+}
+
 export async function uploadCode(opts: {
   token: string;
   branch: string;

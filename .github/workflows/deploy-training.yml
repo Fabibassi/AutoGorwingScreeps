@@ -1,0 +1,30 @@
+# Deploy to a private/training Screeps server (fast ticks).
+# GitHub-hosted runners CANNOT reach http://127.0.0.1 on your PC.
+# Use either:
+#   - a self-hosted runner on the machine that runs the private server, or
+#   - a publicly reachable training host in SCREEPS_TRAINING_HOSTNAME
+name: Deploy Training
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    # Set repo variable SCREEPS_TRAINING_RUNNER=self-hosted to use your PC runner.
+    # If unset, defaults to ubuntu-latest (only works for publicly reachable hosts).
+    runs-on: ${{ vars.SCREEPS_TRAINING_RUNNER != '' && vars.SCREEPS_TRAINING_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy to training server
+        env:
+          SCREEPS_TOKEN: ${{ secrets.SCREEPS_TRAINING_TOKEN }}
+          SCREEPS_EMAIL: ${{ secrets.SCREEPS_TRAINING_EMAIL }}
+          SCREEPS_PASSWORD: ${{ secrets.SCREEPS_TRAINING_PASSWORD }}
+          SCREEPS_BRANCH: ${{ vars.SCREEPS_TRAINING_BRANCH }}
+          SCREEPS_SHARD: ""
+          SCREEPS_HOSTNAME: ${{ vars.SCREEPS_TRAINING_HOSTNAME }}
+        run: npx tsx ops/deploy.ts

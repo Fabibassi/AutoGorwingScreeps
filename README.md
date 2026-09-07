@@ -31,6 +31,17 @@ Unter **Settings → Secrets and variables → Actions**:
 |------|------------|--------------|
 | `SCREEPS_BRANCH` | `default` | Ziel-Branch in Screeps (Code-Push) |
 | `SCREEPS_SHARD` | z. B. `shard3` | Shard; leer lassen, wenn der Header weggelassen werden soll |
+| `SCREEPS_HOSTNAME` | leer | Optional; leer = `https://screeps.com`. Nur setzen, wenn die World-API umgeleitet wird |
+
+Optional für Private/Training-Server (Workflow **Deploy Training**):
+
+| Name | Typ | Beschreibung |
+|------|-----|--------------|
+| `SCREEPS_TRAINING_HOSTNAME` | Variable | z. B. `http://127.0.0.1:21025` (nur mit **self-hosted Runner** erreichbar) oder öffentliche URL |
+| `SCREEPS_TRAINING_BRANCH` | Variable | meist `default` |
+| `SCREEPS_TRAINING_RUNNER` | Variable | z. B. `self-hosted` — sonst `ubuntu-latest` |
+| `SCREEPS_TRAINING_TOKEN` | Secret | Token am Training-Server (falls vorhanden) |
+| `SCREEPS_TRAINING_EMAIL` / `SCREEPS_TRAINING_PASSWORD` | Secrets | Alternative Auth per `/api/auth/signin` |
 
 ## Erster Deploy
 
@@ -56,6 +67,23 @@ Unter **Settings → Secrets and variables → Actions**:
 1. Bevorzugt: Issue mit Label `rollback` (Agent-Pfad).
 2. Fallback: Actions → **Rollback** → **Run workflow**, Input `sha` = **schlechter Commit**, der reverted werden soll (nicht ein „bekannter guter“ SHA).
 
+## Training / Private Server (schnelle Ticks)
+
+Derselbe Bot-Code. Deploy-Ziel über `SCREEPS_HOSTNAME`.
+
+**Wichtig:** GitHub-hosted Actions erreichen **nicht** `127.0.0.1` auf deinem PC. Für lokalen Training-Server:
+
+1. **Lokal pushen (einfachste Variante):**
+   ```bash
+   $env:SCREEPS_HOSTNAME="http://127.0.0.1:21025"
+   $env:SCREEPS_TOKEN="..."   # oder SCREEPS_EMAIL + SCREEPS_PASSWORD
+   $env:SCREEPS_SHARD=""      # kein Shard auf Private Server
+   npm run deploy:training
+   ```
+2. **Oder** Self-hosted GitHub Runner auf dem PC + Workflow **Deploy Training** (`workflow_dispatch`) mit `SCREEPS_TRAINING_*` Vars/Secrets.
+
+World-Deploy (`Deploy Screeps` auf `main`) bleibt unverändert auf screeps.com.
+
 ## Lokal entwickeln (optional)
 
 ```bash
@@ -65,7 +93,7 @@ npm run typecheck
 npm run build   # erzeugt dist/main.js
 ```
 
-Runtime braucht keinen lokalen Rechner — CI/CD und Cloud Agents laufen auf GitHub/Cursor.
+Runtime für World braucht keinen lokalen Rechner — CI/CD und Cloud Agents laufen auf GitHub/Cursor.
 
 ## Dokumentation
 
