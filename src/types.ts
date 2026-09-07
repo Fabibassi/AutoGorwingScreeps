@@ -7,6 +7,22 @@ export interface AgsMetrics {
   updatedAt: number;
 }
 
+export interface AgsHealthCheck {
+  tick: number;
+  rcl: number;
+  /** Total missing creeps across all roles. */
+  creepDeficit: number;
+  /** Roles below desired quota. */
+  understaffed: string[];
+  containersAtSources: number;
+  sourceCount: number;
+  dedicatedMiners: boolean;
+  /** Spawn energy fill ratio 0–1. */
+  spawnFillPct: number;
+  hasControllerContainer: boolean;
+  constructionSites: number;
+}
+
 export interface AgsMemory {
   metrics: AgsMetrics;
   baseline?: { energyIncomePerTick: number; updatedAt: number };
@@ -16,6 +32,8 @@ export interface AgsMemory {
   errorSamples: number[];
   /** Lifetime error total (debug); rollback uses metrics.errorCount (window). */
   lastErrors: number;
+  /** Periodic colony health snapshot (see selfCheck.ts). */
+  health?: AgsHealthCheck;
 }
 
 declare global {
