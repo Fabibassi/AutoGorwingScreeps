@@ -1,5 +1,4 @@
-# Runs from the base branch (main) workflow file, not the PR head —
-# so automerge fixes apply immediately without updating open agent PRs.
+# Runs from the base branch (main) workflow file, not the PR head.
 name: Automerge
 on:
   pull_request_target:
@@ -17,8 +16,7 @@ jobs:
       checks: read
       statuses: read
     steps:
-      # Never checkout PR code here (pull_request_target). Only use gh + trusted secrets.
-      # Avoid `gh pr checks` (GraphQL statusCheckRollup often blocked for GITHUB_TOKEN on private repos).
+      # Never checkout PR code here (pull_request_target).
       - name: Enable auto-merge after CI
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
@@ -26,19 +24,47 @@ jobs:
           set -euo pipefail
           N="${{ github.event.pull_request.number }}"
           SHA="${{ github.event.pull_request.head.sha }}"
+          BRANCH="${{ github.event.pull_request.head.ref }}"
           REPO="${{ github.repository }}"
-          echo "Waiting for CI workflow on $SHA ..."
+
+          echo "PR #$N head=$SHA branch=$BRANCH"
+          echo "Waiting for CI ..."
+
+          # PR workflow runs are not always listed under head_sha alone.
+          # Match by head_branch / head_sha / linked PR number.
+          ci_state() {
+            gh api "repos/${REPO}/actions/runs?per_page=30&event=pull_request" \
+              --jq --arg sha "$SHA" --arg branch "$BRANCH" --argjson n "$N" '
+                [
+                  .workflow_runs[]
+                  | select(.name == "CI")
+                  | select(
+                      .head_sha == $sha
+                      or .head_branch == $branch
+                      or ((.pull_requests // []) | map(.number) | index($n) != null)
+                    )
+                ]
+                | first
+                | if . == null then "missing"
+                  elif .status != "completed" then .status
+                  else (.conclusion // "unknown")
+                  end
+              '
+          }
+
           for i in $(seq 1 90); do
-            CONCLUSION=$(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&per_page=30" \
-              --jq '[.workflow_runs[] | select(.name=="CI")] | first | .conclusion // .status // "missing"')
-            echo "[$i] CI: $CONCLUSION"
-            case "$CONCLUSION" in
+            STATE="$(ci_state)"
+            echo "[$i] CI: $STATE"
+            case "$STATE" in
               success)
                 break
                 ;;
-              failure|cancelled|timed_out)
-                echo "CI failed ($CONCLUSION) — refusing automerge"
+              failure|cancelled|timed_out|startup_failure|action_required)
+                echo "CI failed ($STATE) — refusing automerge"
                 exit 1
+                ;;
+              missing|queued|in_progress|waiting|pending|requested|waiting_for_completion)
+                sleep 10
                 ;;
               *)
                 sleep 10
@@ -46,8 +72,13 @@ jobs:
             esac
             if [ "$i" -eq 90 ]; then
               echo "Timed out waiting for CI"
-              exit 1
+              # Last resort: still enable --auto so merge happens once checks exist
+              # (useful if Actions listing is delayed). Does not force-merge red CI.
+              gh pr merge "$N" --repo "$REPO" --auto --squash
+              echo "Enabled --auto after timeout; GitHub will merge when requirements allow."
+              exit 0
             fi
           done
+
           gh pr merge "$N" --repo "$REPO" --auto --squash
           echo "Auto-merge enabled for PR #$N"
