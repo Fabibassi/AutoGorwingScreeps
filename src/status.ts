@@ -1,9 +1,12 @@
-import { desiredCreeps, countCreepsByRole, getSpawnPriority, type SpawnPriority } from "./spawn";
+import { desiredCreeps, type CreepQuotas } from "./earlyGame";
 import type { AgsMemory } from "./types";
 
 export const STATUS_LOG_INTERVAL = 20;
 
-export type { SpawnPriority };
+export type SpawnPriority =
+  | { kind: "spawning"; role: string }
+  | { kind: "spawn"; role: string }
+  | { kind: "maintain" };
 
 export interface PlanSnapshot {
   tick: number;
@@ -11,12 +14,39 @@ export interface PlanSnapshot {
   spawnEnergy: number;
   spawnCapacity: number;
   creepEnergy: number;
-  harvesters: number;
-  upgraders: number;
-  wantHarvesters: number;
-  wantUpgraders: number;
+  counts: CreepQuotas;
+  want: CreepQuotas;
   priority: SpawnPriority;
   energyIncomePerTick: number;
+}
+
+function countCreepsByRole(): CreepQuotas {
+  const counts: CreepQuotas = {
+    harvester: 0,
+    miner: 0,
+    hauler: 0,
+    upgrader: 0,
+    builder: 0,
+  };
+  for (const name in Game.creeps) {
+    const role = Game.creeps[name].memory.role as keyof CreepQuotas | undefined;
+    if (role && role in counts) counts[role]++;
+  }
+  return counts;
+}
+
+function countSourceContainers(room: Room): number {
+  let count = 0;
+  for (const source of room.find(FIND_SOURCES)) {
+    if (
+      source.pos.findInRange(FIND_STRUCTURES, 1, {
+        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+      }).length > 0
+    ) {
+      count++;
+    }
+  }
+  return count;
 }
 
 export function creepEnergyTotal(): number {
@@ -30,7 +60,29 @@ export function creepEnergyTotal(): number {
 export function formatPriority(priority: SpawnPriority): string {
   if (priority.kind === "spawning") return `spawn:${priority.role} (busy)`;
   if (priority.kind === "spawn") return `spawn:${priority.role}`;
-  return "maintain (harvest/upgrade)";
+  return "maintain";
+}
+
+export function inferSpawnPriority(
+  spawn: StructureSpawn | undefined,
+  counts: CreepQuotas,
+  want: CreepQuotas,
+): SpawnPriority {
+  if (spawn?.spawning) {
+    const role = spawn.spawning.name.split("-")[0] || "unknown";
+    return { kind: "spawning", role };
+  }
+  const order: Array<keyof CreepQuotas> = [
+    "miner",
+    "hauler",
+    "harvester",
+    "upgrader",
+    "builder",
+  ];
+  for (const role of order) {
+    if (counts[role] < want[role]) return { kind: "spawn", role };
+  }
+  return { kind: "maintain" };
 }
 
 export function buildPlanSnapshot(
@@ -39,9 +91,17 @@ export function buildPlanSnapshot(
   ags: AgsMemory | undefined,
 ): PlanSnapshot {
   const rcl = room.controller?.level ?? 1;
-  const want = desiredCreeps(rcl);
+  const sourceCount = room.find(FIND_SOURCES).length;
+  const containersAtSources = countSourceContainers(room);
+  const hasConstructionSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
+  const want = desiredCreeps(
+    rcl,
+    sourceCount,
+    containersAtSources,
+    hasConstructionSites,
+  );
   const counts = countCreepsByRole();
-  const priority = spawn ? getSpawnPriority(spawn) : { kind: "maintain" as const };
+  const priority = inferSpawnPriority(spawn, counts, want);
 
   return {
     tick: Game.time,
@@ -49,22 +109,22 @@ export function buildPlanSnapshot(
     spawnEnergy: spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0,
     spawnCapacity: spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 0,
     creepEnergy: creepEnergyTotal(),
-    harvesters: counts.harvester,
-    upgraders: counts.upgrader,
-    wantHarvesters: want.harvester,
-    wantUpgraders: want.upgrader,
+    counts,
+    want,
     priority,
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
   };
 }
 
 export function formatPlanStatus(snapshot: PlanSnapshot): string {
-  const priority = formatPriority(snapshot.priority);
+  const { counts: c, want: w } = snapshot;
   return (
     `[T${snapshot.tick}] RCL${snapshot.rcl} | ` +
     `energy spawn=${snapshot.spawnEnergy}/${snapshot.spawnCapacity} creeps=${snapshot.creepEnergy} | ` +
-    `H:${snapshot.harvesters}/${snapshot.wantHarvesters} U:${snapshot.upgraders}/${snapshot.wantUpgraders} | ` +
-    `priority=${priority} | income=${snapshot.energyIncomePerTick.toFixed(1)}/t`
+    `H:${c.harvester}/${w.harvester} M:${c.miner}/${w.miner} Ha:${c.hauler}/${w.hauler} ` +
+    `U:${c.upgrader}/${w.upgrader} B:${c.builder}/${w.builder} | ` +
+    `priority=${formatPriority(snapshot.priority)} | ` +
+    `income=${snapshot.energyIncomePerTick.toFixed(1)}/t`
   );
 }
 
@@ -74,8 +134,6 @@ export function logPlanStatusIfDue(
   interval: number = STATUS_LOG_INTERVAL,
 ): void {
   if (!room || Game.time % interval !== 0) return;
-
   const spawn = room.find(FIND_MY_SPAWNS)[0];
-  const snapshot = buildPlanSnapshot(room, spawn, ags);
-  console.log(formatPlanStatus(snapshot));
+  console.log(formatPlanStatus(buildPlanSnapshot(room, spawn, ags)));
 }

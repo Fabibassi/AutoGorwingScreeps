@@ -3,7 +3,7 @@ import { registeredRoles, runCreep } from "../src/roles";
 
 describe("runCreep", () => {
   test("returns 0 for unknown role", () => {
-    const creep = { memory: { role: "builder" } } as Creep;
+    const creep = { memory: { role: "scout" } } as Creep;
     expect(runCreep(creep)).toBe(0);
   });
 
@@ -12,9 +12,15 @@ describe("runCreep", () => {
     expect(runCreep(creep)).toBe(0);
   });
 
-  test("registeredRoles includes harvester and upgrader", () => {
+  test("registeredRoles includes core and early-game roles", () => {
     expect(registeredRoles()).toEqual(
-      expect.arrayContaining(["harvester", "upgrader"]),
+      expect.arrayContaining([
+        "harvester",
+        "miner",
+        "hauler",
+        "builder",
+        "upgrader",
+      ]),
     );
   });
 });

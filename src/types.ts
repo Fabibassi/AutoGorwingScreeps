@@ -21,6 +21,8 @@ export interface AgsMemory {
 declare global {
   interface CreepMemory {
     role?: string;
+    /** Assigned energy source for dedicated miners. */
+    sourceId?: Id<Source>;
   }
   interface Memory {
     ags?: AgsMemory;

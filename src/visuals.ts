@@ -1,6 +1,9 @@
 /** Unicode icons shown above creeps (visual-only say bubbles). */
 export const ROLE_ICONS: Readonly<Record<string, string>> = {
   harvester: "⛏",
+  miner: "⛏",
+  hauler: "📦",
+  builder: "🔨",
   upgrader: "⚡",
 };
 

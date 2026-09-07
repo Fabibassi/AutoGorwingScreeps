@@ -12,29 +12,35 @@ const baseSnapshot: PlanSnapshot = {
   spawnEnergy: 250,
   spawnCapacity: 300,
   creepEnergy: 180,
-  harvesters: 3,
-  upgraders: 1,
-  wantHarvesters: 4,
-  wantUpgraders: 2,
-  priority: { kind: "spawn", role: "harvester" },
+  counts: {
+    harvester: 1,
+    miner: 1,
+    hauler: 1,
+    upgrader: 1,
+    builder: 0,
+  },
+  want: {
+    harvester: 0,
+    miner: 2,
+    hauler: 2,
+    upgrader: 2,
+    builder: 1,
+  },
+  priority: { kind: "spawn", role: "miner" },
   energyIncomePerTick: 8.5,
 };
 
 describe("formatPriority", () => {
   test("spawn role", () => {
-    expect(formatPriority({ kind: "spawn", role: "harvester" })).toBe(
-      "spawn:harvester",
-    );
+    expect(formatPriority({ kind: "spawn", role: "miner" })).toBe("spawn:miner");
   });
   test("spawning busy", () => {
-    expect(formatPriority({ kind: "spawning", role: "upgrader" })).toBe(
-      "spawn:upgrader (busy)",
+    expect(formatPriority({ kind: "spawning", role: "hauler" })).toBe(
+      "spawn:hauler (busy)",
     );
   });
   test("maintain", () => {
-    expect(formatPriority({ kind: "maintain" })).toBe(
-      "maintain (harvest/upgrade)",
-    );
+    expect(formatPriority({ kind: "maintain" })).toBe("maintain");
   });
 });
 
@@ -44,9 +50,8 @@ describe("formatPlanStatus", () => {
     expect(line).toContain("[T120]");
     expect(line).toContain("RCL2");
     expect(line).toContain("spawn=250/300");
-    expect(line).toContain("creeps=180");
-    expect(line).toContain("H:3/4 U:1/2");
-    expect(line).toContain("priority=spawn:harvester");
+    expect(line).toContain("M:1/2");
+    expect(line).toContain("priority=spawn:miner");
     expect(line).toContain("income=8.5/t");
   });
 });

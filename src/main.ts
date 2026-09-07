@@ -1,3 +1,4 @@
+import { runConstruction } from "./construction";
 import { runCreep } from "./roles";
 import { runSpawn } from "./spawn";
 import { logPlanStatusIfDue } from "./status";
@@ -9,6 +10,13 @@ export function loop(): void {
   let energyHarvestedThisTick = 0;
 
   try {
+    for (const name in Game.rooms) {
+      const room = Game.rooms[name];
+      if (room.controller?.my) {
+        runConstruction(room);
+      }
+    }
+
     for (const name in Game.spawns) {
       runSpawn(Game.spawns[name]);
     }

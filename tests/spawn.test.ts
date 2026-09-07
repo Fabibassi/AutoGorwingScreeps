@@ -1,58 +1,22 @@
 import { describe, expect, test } from "vitest";
-import { desiredCreeps, getSpawnPriority } from "../src/spawn";
+import { desiredCreeps } from "../src/spawn";
 
-describe("desiredCreeps", () => {
-  test("rcl1 wants 3 harvesters and 1 upgrader", () => {
-    expect(desiredCreeps(1)).toEqual({ harvester: 3, upgrader: 1 });
-  });
-  test("rcl2+ wants 4 harvesters and 2 upgraders", () => {
-    expect(desiredCreeps(2)).toEqual({ harvester: 4, upgrader: 2 });
-    expect(desiredCreeps(3)).toEqual({ harvester: 4, upgrader: 2 });
-  });
-});
-
-describe("getSpawnPriority", () => {
-  test("returns spawning when busy", () => {
-    const spawn = {
-      spawning: { name: "harvester-99" },
-      room: { controller: { level: 1 } },
-    } as unknown as StructureSpawn;
-    expect(getSpawnPriority(spawn)).toEqual({
-      kind: "spawning",
-      role: "harvester",
+describe("desiredCreeps (spawn re-export)", () => {
+  test("rcl1 wants lean bootstrap", () => {
+    expect(desiredCreeps(1, 2, 0, false)).toEqual({
+      harvester: 2,
+      miner: 0,
+      hauler: 0,
+      upgrader: 1,
+      builder: 0,
     });
   });
 
-  test("prioritizes harvester when below target", () => {
-    (globalThis as { Game: { creeps: Record<string, Creep> } }).Game = {
-      creeps: {
-        h1: { memory: { role: "harvester" } } as Creep,
-        u1: { memory: { role: "upgrader" } } as Creep,
-      },
-    };
-    const spawn = {
-      spawning: null,
-      room: { controller: { level: 1 } },
-    } as unknown as StructureSpawn;
-    expect(getSpawnPriority(spawn)).toEqual({
-      kind: "spawn",
-      role: "harvester",
+  test("rcl2 with static mining wants miner/hauler per source", () => {
+    expect(desiredCreeps(2, 2, 2, false)).toMatchObject({
+      miner: 2,
+      hauler: 2,
+      harvester: 0,
     });
-  });
-
-  test("returns maintain when at target counts", () => {
-    (globalThis as { Game: { creeps: Record<string, Creep> } }).Game = {
-      creeps: {
-        h1: { memory: { role: "harvester" } } as Creep,
-        h2: { memory: { role: "harvester" } } as Creep,
-        h3: { memory: { role: "harvester" } } as Creep,
-        u1: { memory: { role: "upgrader" } } as Creep,
-      },
-    };
-    const spawn = {
-      spawning: null,
-      room: { controller: { level: 1 } },
-    } as unknown as StructureSpawn;
-    expect(getSpawnPriority(spawn)).toEqual({ kind: "maintain" });
   });
 });

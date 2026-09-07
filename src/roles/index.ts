@@ -1,4 +1,7 @@
+import { runBuilder } from "./builder";
 import { runHarvester } from "./harvester";
+import { runHauler } from "./hauler";
+import { runMiner } from "./miner";
 import { runUpgrader } from "./upgrader";
 
 /** Energy harvested this tick; 0 for non-harvest roles. */
@@ -6,6 +9,15 @@ export type RoleRunner = (creep: Creep) => number;
 
 const roleRunners: Record<string, RoleRunner> = {
   harvester: runHarvester,
+  miner: runMiner,
+  hauler: (creep) => {
+    runHauler(creep);
+    return 0;
+  },
+  builder: (creep) => {
+    runBuilder(creep);
+    return 0;
+  },
   upgrader: (creep) => {
     runUpgrader(creep);
     return 0;

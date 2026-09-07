@@ -17,7 +17,7 @@ describe("showCreepJob", () => {
   test("does nothing for unknown role", () => {
     const say = vi.fn();
     const creep = {
-      memory: { role: "builder" },
+      memory: { role: "scout" },
       say,
     } as unknown as Creep;
 
