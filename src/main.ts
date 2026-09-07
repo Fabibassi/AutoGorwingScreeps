@@ -1,4 +1,5 @@
 import { runConstruction } from "./construction";
+import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
 import { runCreep } from "./roles";
 import { runSpawn } from "./spawn";
 import { logPlanStatusIfDue } from "./status";
@@ -46,30 +47,6 @@ export function loop(): void {
     logPlanStatusIfDue(room, Memory.ags);
   } catch (e) {
     console.log("main loop error", e);
-    if (!Memory.ags) {
-      Memory.ags = {
-        metrics: {
-          tick: Game.time,
-          rcl: 1,
-          energyIncomePerTick: 0,
-          errorCount: 1,
-          cpuUsedAvg: Game.cpu.getUsed(),
-          updatedAt: Game.time,
-        },
-        incomeSamples: [],
-        incomeWindows: [],
-        errorSamples: [1],
-        lastErrors: 1,
-      };
-    } else {
-      Memory.ags = tickTelemetry({
-        tick: Game.time,
-        rcl: Memory.ags.metrics.rcl,
-        energyHarvestedThisTick: 0,
-        errorsThisTick: 1,
-        cpuUsed: Game.cpu.getUsed(),
-        memory: Memory.ags,
-      });
-    }
+    Memory.ags = recoverTelemetryOnLoopError(Memory.ags);
   }
 }

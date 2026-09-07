@@ -1,4 +1,5 @@
 import { desiredCreeps, type CreepQuotas } from "./earlyGame";
+import { countCreepsByRole, countSourceContainers } from "./room/queries";
 import type { AgsMemory } from "./types";
 
 export const STATUS_LOG_INTERVAL = 20;
@@ -18,35 +19,6 @@ export interface PlanSnapshot {
   want: CreepQuotas;
   priority: SpawnPriority;
   energyIncomePerTick: number;
-}
-
-function countCreepsByRole(): CreepQuotas {
-  const counts: CreepQuotas = {
-    harvester: 0,
-    miner: 0,
-    hauler: 0,
-    upgrader: 0,
-    builder: 0,
-  };
-  for (const name in Game.creeps) {
-    const role = Game.creeps[name].memory.role as keyof CreepQuotas | undefined;
-    if (role && role in counts) counts[role]++;
-  }
-  return counts;
-}
-
-function countSourceContainers(room: Room): number {
-  let count = 0;
-  for (const source of room.find(FIND_SOURCES)) {
-    if (
-      source.pos.findInRange(FIND_STRUCTURES, 1, {
-        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-      }).length > 0
-    ) {
-      count++;
-    }
-  }
-  return count;
 }
 
 export function creepEnergyTotal(): number {
