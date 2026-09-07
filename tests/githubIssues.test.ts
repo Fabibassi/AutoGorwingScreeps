@@ -17,12 +17,16 @@ describe("createIssue", () => {
         if (url.endsWith("/issues") && init?.method === "POST") {
           return {
             ok: true,
-            json: async () => ({ number: 42 }),
-            text: async () => "",
+            json: async (): Promise<{ number: number }> => ({ number: 42 }),
+            text: async (): Promise<string> => "",
           };
         }
         if (url.endsWith("/issues/42/labels")) {
-          return { ok: true, json: async () => [], text: async () => "" };
+          return {
+            ok: true,
+            json: async (): Promise<unknown[]> => [],
+            text: async (): Promise<string> => "",
+          };
         }
         throw new Error(`unexpected fetch ${url}`);
       }),
@@ -53,9 +57,9 @@ describe("createIssue", () => {
 
 describe("dispatchEvolveWorkflow", () => {
   test("posts workflow_dispatch with issue_number", async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
       ok: true,
-      text: async () => "",
+      text: async (): Promise<string> => "",
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -66,11 +70,11 @@ describe("dispatchEvolveWorkflow", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe(
       "https://api.github.com/repos/owner/repo/actions/workflows/evolve.yml/dispatches",
     );
-    expect(JSON.parse(String(init.body))).toEqual({
+    expect(JSON.parse(String(init?.body))).toEqual({
       ref: "main",
       inputs: { issue_number: "42" },
     });
