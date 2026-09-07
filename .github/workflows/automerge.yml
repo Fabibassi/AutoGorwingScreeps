@@ -16,7 +16,7 @@ jobs:
       checks: read
       statuses: read
     steps:
-      - name: Enable auto-merge after checks
+      - name: Enable auto-merge after CI
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
@@ -27,29 +27,40 @@ jobs:
 
           echo "PR #$N head=$SHA"
 
-          # Draft PRs cannot merge; Cursor agents often open drafts.
+          # Fail fast on merge conflicts — CI may never appear as useful signal.
+          STATE="$(gh pr view "$N" --repo "$REPO" --json mergeable,mergeStateStatus,isDraft -q '.mergeStateStatus + " draft=" + (.isDraft|tostring) + " mergeable=" + (.mergeable|tostring)')"
+          echo "PR state: $STATE"
+          if gh pr view "$N" --repo "$REPO" --json mergeStateStatus -q .mergeStateStatus | grep -qiE 'dirty|blocked'; then
+            echo "PR has conflicts or is blocked — refusing automerge. Rebase/fix the PR first."
+            exit 1
+          fi
+
           gh pr ready "$N" --repo "$REPO" 2>/dev/null || true
 
-          # Prefer commit check-runs (reliable) over actions/runs?event= filters.
+          # ONLY wait for the CI job named "test".
+          # Never wait on "automerge" (this job) — that deadlocks forever.
           ci_state() {
             gh api "repos/${REPO}/commits/${SHA}/check-runs" --jq '
-              if (.total_count // (.check_runs|length)) == 0 then "missing"
-              elif [.check_runs[].status] | any(. != "completed") then "in_progress"
-              elif [.check_runs[].conclusion] | all(. == "success" or . == "skipped" or . == "neutral") then "success"
-              else "failure"
-              end
+              [
+                .check_runs[]
+                | select(.name == "test")
+              ] as $ci
+              | if ($ci | length) == 0 then "missing"
+                elif [$ci[].status] | any(. != "completed") then "in_progress"
+                elif [$ci[].conclusion] | all(. == "success" or . == "skipped" or . == "neutral") then "success"
+                else "failure"
+                end
             '
           }
 
-          echo "Waiting for check runs on commit ..."
-          for i in $(seq 1 90); do
+          echo "Waiting for CI job 'test' (ignoring automerge checks) ..."
+          for i in $(seq 1 60); do
             STATE="$(ci_state)"
-            echo "[$i] checks: $STATE"
+            echo "[$i] CI test: $STATE"
             case "$STATE" in
               success) break ;;
               failure)
-                echo "Checks failed — refusing automerge"
-                gh api "repos/${REPO}/commits/${SHA}/check-runs" --jq '.check_runs[] | {name,status,conclusion}' || true
+                echo "CI failed — refusing automerge"
                 exit 1
                 ;;
               missing|in_progress)
@@ -59,8 +70,10 @@ jobs:
                 sleep 10
                 ;;
             esac
-            if [ "$i" -eq 90 ]; then
-              echo "Timed out waiting for checks"
+            if [ "$i" -eq 60 ]; then
+              echo "Timed out: CI job 'test' never went green (missing or stuck)."
+              echo "Dumping check-runs:"
+              gh api "repos/${REPO}/commits/${SHA}/check-runs" --jq '.check_runs[] | {name,status,conclusion}' || true
               exit 1
             fi
           done
