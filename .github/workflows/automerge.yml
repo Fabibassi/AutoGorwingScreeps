@@ -11,19 +11,52 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      checks: read
     steps:
       - uses: actions/checkout@v4
       # GITHUB_TOKEN may be insufficient under branch protection; set secret AGS_GH_TOKEN (PAT) as fallback.
-      - name: Wait for CI checks
+      - name: Wait for CI
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
         run: |
-          # Fails the job if required/observed checks fail; --watch blocks until settled.
-          gh pr checks ${{ github.event.pull_request.number }} --watch --fail-fast || {
-            echo "CI checks failed or timed out — refusing automerge"
-            exit 1
-          }
+          set -euo pipefail
+          for attempt in $(seq 1 36); do
+            mapfile -t buckets < <(
+              gh pr checks "$PR" --json workflow,bucket \
+                -q '.[] | select(.workflow == "CI") | .bucket'
+            )
+            if [ "${#buckets[@]}" -eq 0 ]; then
+              echo "CI not started yet (attempt ${attempt}/36)"
+            else
+              failed=0
+              for bucket in "${buckets[@]}"; do
+                case "$bucket" in
+                  pass) ;;
+                  pending|skipping)
+                    echo "CI still running (${bucket}, attempt ${attempt}/36)"
+                    failed=1
+                    break
+                    ;;
+                  *)
+                    echo "CI check failed (${bucket}) — refusing automerge"
+                    exit 1
+                    ;;
+                esac
+              done
+              if [ "$failed" -eq 0 ]; then
+                echo "CI passed"
+                break
+              fi
+            fi
+            if [ "$attempt" -eq 36 ]; then
+              echo "CI checks timed out — refusing automerge"
+              exit 1
+            fi
+            sleep 10
+          done
       - name: Enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
-        run: gh pr merge ${{ github.event.pull_request.number }} --auto --squash
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr merge "$PR" --auto --squash
