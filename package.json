@@ -4,7 +4,7 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "scripts": {
-    "build": "node esbuild.config.mjs",
+    "build": "tsx ops/buildModules.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

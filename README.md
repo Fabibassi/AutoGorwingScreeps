@@ -48,7 +48,8 @@ Optional für **Dedicated/Private Server** (Workflow **Deploy Private Server**) 
 1. Secrets/Variablen setzen (oben).
 2. Nach `main` pushen → Workflow **Deploy Screeps** läuft automatisch (auch manuell per `workflow_dispatch`).
 3. In der **Screeps UI** den Code-Branch `default` aktivieren (muss zu `SCREEPS_BRANCH` passen).
-4. Im Screeps-Console prüfen: `Memory.ags` (Telemetrie erscheint nach ein paar Ticks).
+4. Im Code-Editor sollten **mehrere Module** sichtbar sein (nicht nur `main`) — z. B. `roles`, `roles.harvester`, `spawn`, `telemetry`.
+5. Im Screeps-Console prüfen: `Memory.ags` (Telemetrie erscheint nach ein paar Ticks).
 
 ## Handy-Test (Evolve)
 
@@ -109,8 +110,24 @@ World-Deploy bleibt unverändert.
 npm ci
 npm test
 npm run typecheck
-npm run build   # erzeugt dist/main.js
+npm run build   # erzeugt mehrere Dateien unter dist/*.js (Screeps-Module)
 ```
+
+### Screeps-Module (Multi-Modul-Build)
+
+`npm run build` kompiliert jedes `src/**/*.ts` zu einem eigenen CommonJS-Modul unter `dist/`. Deploy lädt **alle** Module hoch (`moduleName → Quelltext`), nicht nur `main`.
+
+| Quelle | Screeps-Modulname |
+|--------|-------------------|
+| `src/main.ts` | `main` (Entry, exportiert `loop`) |
+| `src/spawn.ts` | `spawn` |
+| `src/roles/index.ts` | `roles` |
+| `src/roles/harvester.ts` | `roles.harvester` |
+| `src/loop/recoverTelemetry.ts` | `loop.recoverTelemetry` |
+
+Regel: Pfad unter `src/` → Punkte statt `/`; `index.ts` wird zum Ordnernamen. Zwischen Modulen nutzt der Build `require("modul.name")` (Screeps-üblich).
+
+**Verifikation in der Screeps UI:** Nach Deploy den Branch öffnen → Modul-Liste links zeigt `main` plus die übrigen Module → `main` enthält `module.exports.loop` / `exports.loop`.
 
 Runtime für World braucht keinen lokalen Rechner — CI/CD und Cloud Agents laufen auf GitHub/Cursor.
 
