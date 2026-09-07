@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+!/usr/bin/env bash
 # Close GitHub issues linked from a merged PR (idempotent).
 # Usage: close-linked-issues.sh <pr-number> [repo]
 # Env: GH_TOKEN (required), GITHUB_REPOSITORY (if repo omitted)
@@ -59,4 +59,3 @@ for ISSUE in "${ISSUES[@]}"; do
   gh issue close "$ISSUE" --repo "$REPO" --comment "$COMMENT"
   echo "Closed issue #$ISSUE"
 done
-
