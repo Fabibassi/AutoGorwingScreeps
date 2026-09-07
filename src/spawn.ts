@@ -6,17 +6,15 @@ export function desiredCreeps(rcl: number): {
   return { harvester: 4, upgrader: 2 };
 }
 
+import { countCreepsByRole } from "./status";
+
 export function runSpawn(spawn: StructureSpawn): void {
   if (spawn.spawning) return;
   const body: BodyPartConstant[] = [WORK, CARRY, MOVE];
   const room = spawn.room;
   const rcl = room.controller?.level ?? 1;
   const want = desiredCreeps(rcl);
-  const counts = { harvester: 0, upgrader: 0 };
-  for (const name in Game.creeps) {
-    const role = Game.creeps[name].memory.role as keyof typeof counts;
-    if (role in counts) counts[role]++;
-  }
+  const counts = countCreepsByRole();
   const order: Array<keyof typeof want> = ["harvester", "upgrader"];
   for (const role of order) {
     if (counts[role] < want[role]) {
