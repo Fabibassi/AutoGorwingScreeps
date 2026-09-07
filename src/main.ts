@@ -1,4 +1,8 @@
+import { runConstruction } from "./construction";
+import { runBuilder } from "./roles/builder";
 import { runHarvester } from "./roles/harvester";
+import { runHauler } from "./roles/hauler";
+import { runMiner } from "./roles/miner";
 import { runUpgrader } from "./roles/upgrader";
 import { runSpawn } from "./spawn";
 import { tickTelemetry } from "./telemetry";
@@ -8,6 +12,13 @@ export function loop(): void {
   let energyHarvestedThisTick = 0;
 
   try {
+    for (const name in Game.rooms) {
+      const room = Game.rooms[name];
+      if (room.controller?.my) {
+        runConstruction(room);
+      }
+    }
+
     for (const name in Game.spawns) {
       runSpawn(Game.spawns[name]);
     }
@@ -15,10 +26,22 @@ export function loop(): void {
     for (const name in Game.creeps) {
       const creep = Game.creeps[name];
       try {
-        if (creep.memory.role === "harvester") {
-          energyHarvestedThisTick += runHarvester(creep);
-        } else if (creep.memory.role === "upgrader") {
-          runUpgrader(creep);
+        switch (creep.memory.role) {
+          case "harvester":
+            energyHarvestedThisTick += runHarvester(creep);
+            break;
+          case "miner":
+            energyHarvestedThisTick += runMiner(creep);
+            break;
+          case "hauler":
+            runHauler(creep);
+            break;
+          case "builder":
+            runBuilder(creep);
+            break;
+          case "upgrader":
+            runUpgrader(creep);
+            break;
         }
       } catch (e) {
         errorsThisTick++;
