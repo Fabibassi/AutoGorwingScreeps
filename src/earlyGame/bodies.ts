@@ -15,14 +15,12 @@ const PART_COST: Record<BodyPartConstant, number> = {
 export function buildMinerBody(energyAvailable: number): BodyPartConstant[] {
   const body: BodyPartConstant[] = [];
   let remaining = energyAvailable;
-  while (remaining >= PART_COST.work + PART_COST.move && body.filter((p) => p === "work").length < 5) {
-    if (remaining >= PART_COST.work) {
-      body.push("work");
-      remaining -= PART_COST.work;
-    } else break;
-  }
-  if (remaining >= PART_COST.move) {
-    body.push("move");
+  while (
+    remaining >= PART_COST.work + PART_COST.move &&
+    body.filter((p) => p === "work").length < 5
+  ) {
+    body.push("work", "move");
+    remaining -= PART_COST.work + PART_COST.move;
   }
   if (body.length === 0) {
     return ["work", "move"];
