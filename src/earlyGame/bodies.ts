@@ -13,29 +13,31 @@ const PART_COST: Record<BodyPartConstant, number> = {
 };
 
 export function buildMinerBody(energyAvailable: number): BodyPartConstant[] {
+  const pairCost = PART_COST.work + PART_COST.move;
   const body: BodyPartConstant[] = [];
   let remaining = energyAvailable;
   while (
-    remaining >= PART_COST.work + PART_COST.move &&
+    remaining >= pairCost &&
     body.filter((p) => p === "work").length < 5
   ) {
     body.push("work", "move");
-    remaining -= PART_COST.work + PART_COST.move;
+    remaining -= pairCost;
   }
-  if (body.length === 0) {
+  if (body.length === 0 && energyAvailable >= pairCost) {
     return ["work", "move"];
   }
   return body;
 }
 
 export function buildHaulerBody(energyAvailable: number): BodyPartConstant[] {
+  const pairCost = PART_COST.carry + PART_COST.move;
   const body: BodyPartConstant[] = [];
   let remaining = energyAvailable;
-  while (remaining >= PART_COST.carry + PART_COST.move) {
+  while (remaining >= pairCost) {
     body.push("carry", "move");
-    remaining -= PART_COST.carry + PART_COST.move;
+    remaining -= pairCost;
   }
-  if (body.length === 0) {
+  if (body.length === 0 && energyAvailable >= pairCost) {
     return ["carry", "move"];
   }
   return body;
@@ -43,12 +45,20 @@ export function buildHaulerBody(energyAvailable: number): BodyPartConstant[] {
 
 export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
   const unit = PART_COST.work + PART_COST.carry + PART_COST.move;
-  const repeats = Math.max(1, Math.floor(energyAvailable / unit));
-  const body: BodyPartConstant[] = [];
-  for (let i = 0; i < repeats; i++) {
-    body.push("work", "carry", "move");
+  if (energyAvailable >= unit) {
+    const repeats = Math.floor(energyAvailable / unit);
+    const body: BodyPartConstant[] = [];
+    for (let i = 0; i < repeats; i++) {
+      body.push("work", "carry", "move");
+    }
+    return body;
   }
-  return body;
+  // Recovery: spawn a minimal harvester when extensions cannot fill a full worker.
+  const bootstrapCost = PART_COST.work + PART_COST.move;
+  if (energyAvailable >= bootstrapCost) {
+    return ["work", "move"];
+  }
+  return [];
 }
 
 export function bodyForRole(
