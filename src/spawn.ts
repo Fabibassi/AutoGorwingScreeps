@@ -24,11 +24,18 @@ export function runSpawn(spawn: StructureSpawn): void {
   const sourceCount = room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(room);
   const hasConstructionSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
+  const spawnCapacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 1;
+  const spawnFillPct =
+    spawn.store.getUsedCapacity(RESOURCE_ENERGY) / spawnCapacity;
   const want = desiredCreeps(
     rcl,
     sourceCount,
     containersAtSources,
     hasConstructionSites,
+    {
+      energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
+      spawnFillPct,
+    },
   );
   const counts = countCreepsByRole();
   const energyAvailable = room.energyAvailable;

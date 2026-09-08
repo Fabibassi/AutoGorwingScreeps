@@ -82,6 +82,32 @@ describe("desiredCreeps", () => {
       builder: 1,
     });
   });
+
+  test("rcl2 dedicated mining keeps bootstrap harvester when income is zero", () => {
+    expect(
+      desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 0 }),
+    ).toMatchObject({
+      harvester: 1,
+      miner: 2,
+      hauler: 2,
+    });
+  });
+
+  test("rcl2 dedicated mining drops bootstrap harvester when income recovers", () => {
+    expect(
+      desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 4 }),
+    ).toMatchObject({
+      harvester: 0,
+    });
+  });
+
+  test("rcl2 dedicated mining keeps bootstrap harvester when spawn is nearly empty", () => {
+    expect(
+      desiredCreeps(2, 2, 2, false, { energyIncomePerTick: 3, spawnFillPct: 0.1 }),
+    ).toMatchObject({
+      harvester: 1,
+    });
+  });
 });
 
 describe("constructionPriority", () => {

@@ -1,7 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import type { AgsMemory, AgsMetrics } from "../src/types";
+import type { AgsMemory, AgsMetrics, AgsHealthCheck } from "../src/types";
 import {
   isStagnant,
   shouldRollback,
@@ -28,6 +28,7 @@ export type DecideIssueInput = {
   stagnant: boolean;
   rollback: boolean;
   metrics: AgsMetrics;
+  health?: AgsHealthCheck;
   openEvolveCount: number;
   openRollbackCount?: number;
   /** Manual override from workflow_dispatch / FORCE_ACTION (default none). */
@@ -50,10 +51,18 @@ export const PLACEHOLDER_METRICS: AgsMetrics = {
   updatedAt: 0,
 };
 
-function metricsBody(metrics: AgsMetrics, note?: string): string {
+function metricsBody(
+  metrics: AgsMetrics,
+  note?: string,
+  health?: AgsHealthCheck,
+): string {
   const parts = ["## Metrics snapshot"];
   if (note) parts.push(note);
   parts.push("```json", JSON.stringify(metrics, null, 2), "```");
+  if (health) {
+    parts.push("## Health check");
+    parts.push("```json", JSON.stringify(health, null, 2), "```");
+  }
   return parts.join("\n");
 }
 
@@ -118,6 +127,7 @@ export function decideIssue(
         input.metrics === PLACEHOLDER_METRICS
           ? "_Note: Memory.ags was missing/unreadable; force still opened this issue._"
           : undefined,
+        input.health,
       ),
     };
   }
@@ -126,7 +136,7 @@ export function decideIssue(
     return {
       action: "evolve",
       title: `AGS evolve: stagnation at tick ${input.metrics.tick}`,
-      body: metricsBody(input.metrics),
+      body: metricsBody(input.metrics, undefined, input.health),
     };
   }
   return null;
@@ -158,6 +168,7 @@ export function planMetricsAction(input: {
       stagnant: false,
       rollback: false,
       metrics: ags?.metrics ?? PLACEHOLDER_METRICS,
+      health: ags?.health,
       openEvolveCount,
       openRollbackCount,
       forceAction,
@@ -208,6 +219,7 @@ export function planMetricsAction(input: {
     stagnant,
     rollback,
     metrics: ags.metrics,
+    health: ags.health,
     openEvolveCount,
     openRollbackCount,
     forceAction: "none",

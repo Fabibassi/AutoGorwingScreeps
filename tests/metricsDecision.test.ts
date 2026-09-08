@@ -80,6 +80,31 @@ test("force evolve when not stagnant", () => {
   expect(d?.title).toContain("forced");
 });
 
+test("force evolve includes health snapshot when provided", () => {
+  const health = {
+    tick: 1000,
+    rcl: 2,
+    creepDeficit: 2,
+    understaffed: ["harvester"],
+    containersAtSources: 2,
+    sourceCount: 2,
+    dedicatedMiners: true,
+    spawnFillPct: 0.05,
+    hasControllerContainer: false,
+    constructionSites: 1,
+  };
+  const d = decideIssue({
+    stagnant: false,
+    rollback: false,
+    metrics,
+    health,
+    openEvolveCount: 0,
+    forceAction: "evolve",
+  });
+  expect(d?.body).toContain("## Health check");
+  expect(d?.body).toContain('"creepDeficit": 2');
+});
+
 test("force evolve skipped when open evolve exists", () => {
   expect(
     decideIssue({
