@@ -24,6 +24,11 @@ export function runSpawn(spawn: StructureSpawn): void {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
     spawnFillPct,
   };
+  const infrastructureDedicated = useDedicatedMiners(
+    rcl,
+    containersAtSources,
+    sourceCount,
+  );
   const want = desiredCreeps(
     rcl,
     sourceCount,
@@ -33,10 +38,7 @@ export function runSpawn(spawn: StructureSpawn): void {
   );
   const counts = countCreepsByRole();
   const energyAvailable = room.energyAvailable;
-  const spawnOrder = spawnPriorityOrder(
-    useDedicatedMiners(rcl, containersAtSources, sourceCount),
-    economy,
-  );
+  const spawnOrder = spawnPriorityOrder(infrastructureDedicated, economy);
 
   for (const role of spawnOrder) {
     if (counts[role] >= want[role]) continue;

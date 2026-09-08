@@ -9,6 +9,7 @@ import {
   shouldBuildStorage,
   shouldBuildWalls,
   spawnPriorityOrder,
+  shouldFallbackToMobileHarvest,
   useDedicatedMiners,
 } from "../src/earlyGame";
 
@@ -87,11 +88,22 @@ describe("desiredCreeps", () => {
   test("rcl2 dedicated mining keeps bootstrap harvester when income is zero", () => {
     expect(
       desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 0 }),
-    ).toMatchObject({
-      harvester: 1,
-      miner: 2,
-      hauler: 2,
+    ).toEqual({
+      harvester: 3,
+      miner: 0,
+      hauler: 0,
+      upgrader: 1,
+      builder: 0,
     });
+  });
+
+  test("rcl2 zero income falls back to mobile harvesters not bootstrap add-on", () => {
+    expect(shouldFallbackToMobileHarvest(true, { energyIncomePerTick: 0 })).toBe(
+      true,
+    );
+    expect(
+      shouldFallbackToMobileHarvest(true, { energyIncomePerTick: 0.1 }),
+    ).toBe(false);
   });
 
   test("rcl2 dedicated mining drops bootstrap harvester when income recovers", () => {
@@ -122,17 +134,15 @@ describe("spawnPriorityOrder", () => {
     ]);
   });
 
-  test("harvester first when income stalled at zero", () => {
+  test("harvester first when income stalled at zero (mobile fallback)", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 })).toEqual([
       "harvester",
-      "hauler",
-      "miner",
       "upgrader",
       "builder",
     ]);
   });
 
-  test("harvester first when spawn is nearly empty", () => {
+  test("harvester first when spawn is nearly empty but income positive", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 3, spawnFillPct: 0.1 })).toEqual([
       "harvester",
       "hauler",

@@ -73,6 +73,11 @@ export function buildPlanSnapshot(
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
     spawnFillPct,
   };
+  const infrastructureDedicated = useDedicatedMiners(
+    rcl,
+    containersAtSources,
+    sourceCount,
+  );
   const want = desiredCreeps(
     rcl,
     sourceCount,
@@ -81,10 +86,7 @@ export function buildPlanSnapshot(
     economy,
   );
   const counts = countCreepsByRole();
-  const spawnOrder = spawnPriorityOrder(
-    useDedicatedMiners(rcl, containersAtSources, sourceCount),
-    economy,
-  );
+  const spawnOrder = spawnPriorityOrder(infrastructureDedicated, economy);
   const priority = inferSpawnPriority(spawn, counts, want, spawnOrder);
 
   return {

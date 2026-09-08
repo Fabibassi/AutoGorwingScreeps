@@ -76,6 +76,26 @@ export function needsBootstrapHarvester(
   return income <= 0 || fill < 0.2;
 }
 
+/** Zero income with static mining — revert to mobile harvesters until recovery. */
+export function shouldFallbackToMobileHarvest(
+  dedicatedMiners: boolean,
+  ctx?: EconomyContext,
+): boolean {
+  if (!dedicatedMiners || !ctx) return false;
+  return (ctx.energyIncomePerTick ?? 0) <= 0;
+}
+
+/** Whether spawn/quota logic should use the static miner pipeline this tick. */
+export function effectiveDedicatedMiners(
+  rcl: number,
+  containersAtSources: number,
+  sourceCount: number,
+  economy?: EconomyContext,
+): boolean {
+  const dedicated = useDedicatedMiners(rcl, containersAtSources, sourceCount);
+  return dedicated && !shouldFallbackToMobileHarvest(dedicated, economy);
+}
+
 export const DEFAULT_SPAWN_ORDER: Array<keyof CreepQuotas> = [
   "hauler",
   "miner",
@@ -89,6 +109,9 @@ export function spawnPriorityOrder(
   dedicatedMiners: boolean,
   ctx?: EconomyContext,
 ): Array<keyof CreepQuotas> {
+  if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
+    return ["harvester", "upgrader", "builder"];
+  }
   if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
     return ["harvester", "hauler", "miner", "upgrader", "builder"];
   }
@@ -114,7 +137,19 @@ export function desiredCreeps(
     };
   }
 
-  if (!useDedicatedMiners(rcl, containersAtSources, sources)) {
+  const dedicatedMiners = useDedicatedMiners(rcl, containersAtSources, sources);
+
+  if (shouldFallbackToMobileHarvest(dedicatedMiners, economy)) {
+    return {
+      harvester: sources + 1,
+      miner: 0,
+      hauler: 0,
+      upgrader: 1,
+      builder: 0,
+    };
+  }
+
+  if (!dedicatedMiners) {
     return {
       harvester: sources + 1,
       miner: 0,
