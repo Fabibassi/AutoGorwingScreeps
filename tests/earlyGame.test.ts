@@ -209,6 +209,21 @@ describe("bodyForRole", () => {
       body.filter((p) => p === "move").length,
     );
   });
+
+  test("worker scales down to work/move bootstrap when energy is below full unit", () => {
+    expect(bodyForRole("harvester", 150)).toEqual(["work", "move"]);
+    expect(bodyForRole("harvester", 199)).toEqual(["work", "move"]);
+  });
+
+  test("worker returns empty body when energy cannot afford bootstrap creep", () => {
+    expect(bodyForRole("harvester", 0)).toEqual([]);
+    expect(bodyForRole("harvester", 100)).toEqual([]);
+  });
+
+  test("miner and hauler return empty when energy is insufficient", () => {
+    expect(bodyForRole("miner", 100)).toEqual([]);
+    expect(bodyForRole("hauler", 50)).toEqual([]);
+  });
 });
 
 describe("threshold constants", () => {

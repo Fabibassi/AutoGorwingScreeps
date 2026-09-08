@@ -43,6 +43,7 @@ export function runSpawn(spawn: StructureSpawn): void {
   for (const role of spawnOrder) {
     if (counts[role] >= want[role]) continue;
     const body = bodyForRole(role, energyAvailable);
+    if (body.length === 0) continue;
     const name = `${role}-${Game.time}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
@@ -57,7 +58,8 @@ export function runSpawn(spawn: StructureSpawn): void {
       const free = sources.find((s) => !assigned.has(s.id));
       if (free) memory.sourceId = free.id;
     }
-    spawn.spawnCreep(body, name, { memory });
-    return;
+    if (spawn.spawnCreep(body, name, { memory }) === OK) {
+      return;
+    }
   }
 }
