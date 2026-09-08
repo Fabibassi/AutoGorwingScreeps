@@ -85,13 +85,13 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl2 dedicated mining keeps bootstrap harvester when income is zero", () => {
+  test("rcl2 zero income keeps haulers to drain trapped container energy", () => {
     expect(
       desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 0 }),
     ).toEqual({
       harvester: 3,
       miner: 0,
-      hauler: 0,
+      hauler: 2,
       upgrader: 1,
       builder: 0,
     });
@@ -134,8 +134,18 @@ describe("spawnPriorityOrder", () => {
     ]);
   });
 
-  test("harvester first when income stalled at zero (mobile fallback)", () => {
+  test("hauler first when income stalled at zero (drain containers before harvesters)", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 })).toEqual([
+      "hauler",
+      "harvester",
+      "upgrader",
+      "builder",
+    ]);
+  });
+
+  test("hauler first when spawn is nearly empty during zero-income fallback", () => {
+    expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.05 })).toEqual([
+      "hauler",
       "harvester",
       "upgrader",
       "builder",
@@ -223,6 +233,11 @@ describe("bodyForRole", () => {
   test("miner and hauler return empty when energy is insufficient", () => {
     expect(bodyForRole("miner", 100)).toEqual([]);
     expect(bodyForRole("hauler", 50)).toEqual([]);
+  });
+
+  test("hauler bootstrap body spawns at 100 energy when harvester needs 150", () => {
+    expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
+    expect(bodyForRole("harvester", 100)).toEqual([]);
   });
 });
 

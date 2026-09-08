@@ -64,7 +64,7 @@ describe("formatPlanStatus", () => {
 });
 
 describe("inferSpawnPriority", () => {
-  test("prefers harvester when bootstrap order puts it first", () => {
+  test("prefers hauler when zero-income fallback drains containers first", () => {
     const counts = {
       harvester: 0,
       miner: 2,
@@ -82,7 +82,7 @@ describe("inferSpawnPriority", () => {
     const order = spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 });
     expect(inferSpawnPriority(undefined, counts, want, order)).toEqual({
       kind: "spawn",
-      role: "harvester",
+      role: "hauler",
     });
   });
 
