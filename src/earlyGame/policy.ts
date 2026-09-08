@@ -60,11 +60,28 @@ export function useDedicatedMiners(
   );
 }
 
+export interface EconomyContext {
+  energyIncomePerTick?: number;
+  spawnFillPct?: number;
+}
+
+/** Keep one mobile harvester when static mining economy has stalled. */
+export function needsBootstrapHarvester(
+  dedicatedMiners: boolean,
+  ctx?: EconomyContext,
+): boolean {
+  if (!dedicatedMiners || !ctx) return false;
+  const income = ctx.energyIncomePerTick ?? 0;
+  const fill = ctx.spawnFillPct ?? 1;
+  return income <= 0 || fill < 0.2;
+}
+
 export function desiredCreeps(
   rcl: number,
   sourceCount: number,
   containersAtSources: number,
   hasConstructionSites: boolean,
+  economy?: EconomyContext,
 ): CreepQuotas {
   const sources = Math.max(1, sourceCount);
 
@@ -88,13 +105,19 @@ export function desiredCreeps(
     };
   }
 
-  return {
+  const quotas: CreepQuotas = {
     harvester: 0,
     miner: sources,
     hauler: sources,
     upgrader: 2,
     builder: hasConstructionSites ? 1 : 0,
   };
+
+  if (needsBootstrapHarvester(true, economy)) {
+    quotas.harvester = 1;
+  }
+
+  return quotas;
 }
 
 /** Ordered build priorities for early rooms (excludes walls/storage early). */

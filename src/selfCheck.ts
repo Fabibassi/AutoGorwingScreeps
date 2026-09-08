@@ -57,17 +57,25 @@ export function computeHealthCheck(input: HealthCheckInput): AgsHealthCheck {
 export function buildHealthCheck(
   room: Room,
   spawn: StructureSpawn | undefined,
+  ags?: AgsMemory,
 ): AgsHealthCheck {
   const rcl = room.controller?.level ?? 1;
   const sourceCount = room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(room);
   const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
   const hasConstructionSites = constructionSites > 0;
+  const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
+  const spawnFillPct =
+    (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / spawnCapacity;
   const want = desiredCreeps(
     rcl,
     sourceCount,
     containersAtSources,
     hasConstructionSites,
+    {
+      energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
+      spawnFillPct,
+    },
   );
 
   return computeHealthCheck({
@@ -118,5 +126,5 @@ export function maybeUpdateHealthCheck(
 ): AgsMemory | undefined {
   if (!room || !ags || Game.time % interval !== 0) return ags;
   const spawn = room.find(FIND_MY_SPAWNS)[0];
-  return { ...ags, health: buildHealthCheck(room, spawn) };
+  return { ...ags, health: buildHealthCheck(room, spawn, ags) };
 }

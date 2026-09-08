@@ -46,8 +46,8 @@ export function inferSpawnPriority(
     return { kind: "spawning", role };
   }
   const order: Array<keyof CreepQuotas> = [
-    "miner",
     "hauler",
+    "miner",
     "harvester",
     "upgrader",
     "builder",
@@ -67,11 +67,18 @@ export function buildPlanSnapshot(
   const sourceCount = room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(room);
   const hasConstructionSites = room.find(FIND_CONSTRUCTION_SITES).length > 0;
+  const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
+  const spawnFillPct =
+    (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / spawnCapacity;
   const want = desiredCreeps(
     rcl,
     sourceCount,
     containersAtSources,
     hasConstructionSites,
+    {
+      energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
+      spawnFillPct,
+    },
   );
   const counts = countCreepsByRole();
   const priority = inferSpawnPriority(spawn, counts, want);

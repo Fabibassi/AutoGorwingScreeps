@@ -26,7 +26,7 @@ const baseSnapshot: PlanSnapshot = {
     upgrader: 2,
     builder: 1,
   },
-  priority: { kind: "spawn", role: "miner" },
+  priority: { kind: "spawn", role: "hauler" },
   energyIncomePerTick: 8.5,
 };
 
@@ -51,7 +51,7 @@ describe("formatPlanStatus", () => {
     expect(line).toContain("RCL2");
     expect(line).toContain("spawn=250/300");
     expect(line).toContain("M:1/2");
-    expect(line).toContain("priority=spawn:miner");
+    expect(line).toContain("priority=spawn:hauler");
     expect(line).toContain("income=8.5/t");
   });
 
