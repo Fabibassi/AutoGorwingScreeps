@@ -110,7 +110,8 @@ export function spawnPriorityOrder(
   ctx?: EconomyContext,
 ): Array<keyof CreepQuotas> {
   if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
-    return ["harvester", "upgrader", "builder"];
+    // Hauler-first: containers may hold all room energy; hauler body costs 100 vs 150.
+    return ["hauler", "harvester", "upgrader", "builder"];
   }
   if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
     return ["harvester", "hauler", "miner", "upgrader", "builder"];
@@ -143,7 +144,8 @@ export function desiredCreeps(
     return {
       harvester: sources + 1,
       miner: 0,
-      hauler: 0,
+      // Static mining always had source containers; haulers unlock energy for spawn.
+      hauler: sources,
       upgrader: 1,
       builder: 0,
     };
