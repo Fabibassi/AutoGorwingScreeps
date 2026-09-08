@@ -1,6 +1,6 @@
 import {
   desiredCreeps,
-  useDedicatedMiners,
+  effectiveDedicatedMiners,
   type CreepQuotas,
 } from "./earlyGame";
 import {
@@ -89,7 +89,15 @@ export function buildHealthCheck(
     want,
     spawnEnergy: spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0,
     spawnCapacity: spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 0,
-    dedicatedMiners: useDedicatedMiners(rcl, containersAtSources, sourceCount),
+    dedicatedMiners: effectiveDedicatedMiners(
+      rcl,
+      containersAtSources,
+      sourceCount,
+      {
+        energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
+        spawnFillPct,
+      },
+    ),
   });
 }
 
