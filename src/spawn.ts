@@ -1,20 +1,13 @@
 import {
   bodyForRole,
   desiredCreeps,
+  spawnPriorityOrder,
+  useDedicatedMiners,
   type CreepQuotas,
 } from "./earlyGame";
 import { countCreepsByRole, countSourceContainers } from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
-
-/** Haulers before miners so spawn energy returns before static miners go out. */
-const SPAWN_ORDER: Array<keyof CreepQuotas> = [
-  "hauler",
-  "miner",
-  "harvester",
-  "upgrader",
-  "builder",
-];
 
 export function runSpawn(spawn: StructureSpawn): void {
   if (spawn.spawning) return;
@@ -27,20 +20,25 @@ export function runSpawn(spawn: StructureSpawn): void {
   const spawnCapacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const spawnFillPct =
     spawn.store.getUsedCapacity(RESOURCE_ENERGY) / spawnCapacity;
+  const economy = {
+    energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
+    spawnFillPct,
+  };
   const want = desiredCreeps(
     rcl,
     sourceCount,
     containersAtSources,
     hasConstructionSites,
-    {
-      energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
-      spawnFillPct,
-    },
+    economy,
   );
   const counts = countCreepsByRole();
   const energyAvailable = room.energyAvailable;
+  const spawnOrder = spawnPriorityOrder(
+    useDedicatedMiners(rcl, containersAtSources, sourceCount),
+    economy,
+  );
 
-  for (const role of SPAWN_ORDER) {
+  for (const role of spawnOrder) {
     if (counts[role] >= want[role]) continue;
     const body = bodyForRole(role, energyAvailable);
     const name = `${role}-${Game.time}`;

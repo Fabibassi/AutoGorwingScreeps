@@ -76,6 +76,25 @@ export function needsBootstrapHarvester(
   return income <= 0 || fill < 0.2;
 }
 
+export const DEFAULT_SPAWN_ORDER: Array<keyof CreepQuotas> = [
+  "hauler",
+  "miner",
+  "harvester",
+  "upgrader",
+  "builder",
+];
+
+/** Spawn harvester first when static mining stalled — hauler-first starves recovery. */
+export function spawnPriorityOrder(
+  dedicatedMiners: boolean,
+  ctx?: EconomyContext,
+): Array<keyof CreepQuotas> {
+  if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
+    return ["harvester", "hauler", "miner", "upgrader", "builder"];
+  }
+  return DEFAULT_SPAWN_ORDER;
+}
+
 export function desiredCreeps(
   rcl: number,
   sourceCount: number,

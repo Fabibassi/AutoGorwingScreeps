@@ -2,9 +2,11 @@ import { describe, expect, test } from "vitest";
 import {
   formatPlanStatus,
   formatPriority,
+  inferSpawnPriority,
   STATUS_LOG_INTERVAL,
   type PlanSnapshot,
 } from "../src/status";
+import { DEFAULT_SPAWN_ORDER, spawnPriorityOrder } from "../src/earlyGame";
 
 const baseSnapshot: PlanSnapshot = {
   tick: 120,
@@ -58,6 +60,51 @@ describe("formatPlanStatus", () => {
   test("appends health summary when not ok", () => {
     const line = formatPlanStatus(baseSnapshot, "deficit=2(miner,hauler)");
     expect(line).toContain("check=deficit=2(miner,hauler)");
+  });
+});
+
+describe("inferSpawnPriority", () => {
+  test("prefers harvester when bootstrap order puts it first", () => {
+    const counts = {
+      harvester: 0,
+      miner: 2,
+      hauler: 1,
+      upgrader: 2,
+      builder: 0,
+    };
+    const want = {
+      harvester: 1,
+      miner: 2,
+      hauler: 2,
+      upgrader: 2,
+      builder: 0,
+    };
+    const order = spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 });
+    expect(inferSpawnPriority(undefined, counts, want, order)).toEqual({
+      kind: "spawn",
+      role: "harvester",
+    });
+  });
+
+  test("hauler first under default order when healthy", () => {
+    const counts = {
+      harvester: 0,
+      miner: 2,
+      hauler: 1,
+      upgrader: 2,
+      builder: 0,
+    };
+    const want = {
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 2,
+      builder: 0,
+    };
+    expect(inferSpawnPriority(undefined, counts, want, DEFAULT_SPAWN_ORDER)).toEqual({
+      kind: "spawn",
+      role: "hauler",
+    });
   });
 });
 

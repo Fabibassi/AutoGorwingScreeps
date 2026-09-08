@@ -8,6 +8,7 @@ import {
   shouldBuildRoads,
   shouldBuildStorage,
   shouldBuildWalls,
+  spawnPriorityOrder,
   useDedicatedMiners,
 } from "../src/earlyGame";
 
@@ -107,6 +108,38 @@ describe("desiredCreeps", () => {
     ).toMatchObject({
       harvester: 1,
     });
+  });
+});
+
+describe("spawnPriorityOrder", () => {
+  test("hauler first when dedicated mining is healthy", () => {
+    expect(spawnPriorityOrder(true, { energyIncomePerTick: 5, spawnFillPct: 0.8 })).toEqual([
+      "hauler",
+      "miner",
+      "harvester",
+      "upgrader",
+      "builder",
+    ]);
+  });
+
+  test("harvester first when income stalled at zero", () => {
+    expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 })).toEqual([
+      "harvester",
+      "hauler",
+      "miner",
+      "upgrader",
+      "builder",
+    ]);
+  });
+
+  test("harvester first when spawn is nearly empty", () => {
+    expect(spawnPriorityOrder(true, { energyIncomePerTick: 3, spawnFillPct: 0.1 })).toEqual([
+      "harvester",
+      "hauler",
+      "miner",
+      "upgrader",
+      "builder",
+    ]);
   });
 });
 
