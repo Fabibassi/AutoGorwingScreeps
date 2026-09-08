@@ -47,9 +47,16 @@ export function shouldBuildWalls(rcl: number): boolean {
   return rcl >= EARLY_GAME_THRESHOLDS.minRclForWalls;
 }
 
-export function useDedicatedMiners(rcl: number, containersAtSources: number): boolean {
+/** Wait until every source has a finished container before dropping harvesters. */
+export function useDedicatedMiners(
+  rcl: number,
+  containersAtSources: number,
+  sourceCount: number,
+): boolean {
+  const sources = Math.max(1, sourceCount);
   return (
-    rcl >= EARLY_GAME_THRESHOLDS.minRclForDedicatedMiners && containersAtSources > 0
+    rcl >= EARLY_GAME_THRESHOLDS.minRclForDedicatedMiners &&
+    containersAtSources >= sources
   );
 }
 
@@ -71,7 +78,7 @@ export function desiredCreeps(
     };
   }
 
-  if (!useDedicatedMiners(rcl, containersAtSources)) {
+  if (!useDedicatedMiners(rcl, containersAtSources, sources)) {
     return {
       harvester: sources + 1,
       miner: 0,

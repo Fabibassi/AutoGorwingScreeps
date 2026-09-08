@@ -34,10 +34,11 @@ describe("early game infrastructure thresholds", () => {
 });
 
 describe("dedicated miners", () => {
-  test("only after RCL 2 and source containers exist", () => {
-    expect(useDedicatedMiners(1, 1)).toBe(false);
-    expect(useDedicatedMiners(2, 0)).toBe(false);
-    expect(useDedicatedMiners(2, 1)).toBe(true);
+  test("only after RCL 2 and every source has a container", () => {
+    expect(useDedicatedMiners(1, 1, 2)).toBe(false);
+    expect(useDedicatedMiners(2, 0, 2)).toBe(false);
+    expect(useDedicatedMiners(2, 1, 2)).toBe(false);
+    expect(useDedicatedMiners(2, 2, 2)).toBe(true);
   });
 });
 
@@ -62,7 +63,17 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl2 with containers switches to miner/hauler pairs", () => {
+  test("rcl2 with partial containers keeps mobile harvesters", () => {
+    expect(desiredCreeps(2, 2, 1, false)).toEqual({
+      harvester: 3,
+      miner: 0,
+      hauler: 0,
+      upgrader: 2,
+      builder: 0,
+    });
+  });
+
+  test("rcl2 with all source containers switches to miner/hauler pairs", () => {
     expect(desiredCreeps(2, 2, 2, true)).toEqual({
       harvester: 0,
       miner: 2,
@@ -111,10 +122,16 @@ describe("constructionPriority", () => {
 });
 
 describe("bodyForRole", () => {
+  test("miner uses balanced work/move pairs", () => {
+    const body = bodyForRole("miner", 300);
+    expect(body.filter((p) => p === "work")).toHaveLength(2);
+    expect(body.filter((p) => p === "move")).toHaveLength(2);
+  });
+
   test("miner scales WORK up to 5 with enough energy", () => {
     const body = bodyForRole("miner", 550);
-    expect(body.filter((p) => p === "work")).toHaveLength(5);
-    expect(body).toContain("move");
+    expect(body.filter((p) => p === "work")).toHaveLength(3);
+    expect(body.filter((p) => p === "move")).toHaveLength(3);
   });
 
   test("hauler uses carry/move pairs", () => {

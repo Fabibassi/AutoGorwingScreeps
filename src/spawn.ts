@@ -7,9 +7,10 @@ import { countCreepsByRole, countSourceContainers } from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
 
+/** Haulers before miners so spawn energy returns before static miners go out. */
 const SPAWN_ORDER: Array<keyof CreepQuotas> = [
-  "miner",
   "hauler",
+  "miner",
   "harvester",
   "upgrader",
   "builder",

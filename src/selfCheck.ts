@@ -81,7 +81,7 @@ export function buildHealthCheck(
     want,
     spawnEnergy: spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0,
     spawnCapacity: spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 0,
-    dedicatedMiners: useDedicatedMiners(rcl, containersAtSources),
+    dedicatedMiners: useDedicatedMiners(rcl, containersAtSources, sourceCount),
   });
 }
 
