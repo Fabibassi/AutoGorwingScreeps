@@ -11,9 +11,10 @@ export interface StorageHaulContext {
 /** Keep spawn/extensions fed before RCL4 storage absorbs recoverable energy. */
 export function shouldDepositInStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists) return false;
-  if (ctx.energyIncomePerTick <= 0) return false;
   if (ctx.spawnFillPct < 0.85) return false;
   if (ctx.extensionsNeedingEnergy > 0) return false;
+  // Spawn/extensions gates suffice; blocking on zero income stranded full haulers
+  // when spawn+extensions were already topped up (RCL4 rollback #32).
   return true;
 }
 

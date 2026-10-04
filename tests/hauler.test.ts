@@ -5,11 +5,22 @@ import {
 } from "../src/roles/hauler";
 
 describe("storage haul policy", () => {
-  test("blocks storage deposits while income is zero", () => {
+  test("allows storage overflow at zero income when spawn and extensions are full", () => {
     expect(
       shouldDepositInStorage({
         energyIncomePerTick: 0,
         spawnFillPct: 1,
+        extensionsNeedingEnergy: 0,
+        storageExists: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("blocks storage deposits at zero income while spawn still needs energy", () => {
+    expect(
+      shouldDepositInStorage({
+        energyIncomePerTick: 0,
+        spawnFillPct: 0.4,
         extensionsNeedingEnergy: 0,
         storageExists: true,
       }),
