@@ -1,0 +1,27 @@
+name: Live Probe
+on:
+  workflow_dispatch:
+    inputs:
+      room:
+        description: "Room to probe"
+        required: false
+        default: "W21N35"
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Probe Screeps live state
+        env:
+          SCREEPS_TOKEN: ${{ secrets.SCREEPS_TOKEN }}
+          SCREEPS_EMAIL: ${{ secrets.SCREEPS_EMAIL }}
+          SCREEPS_PASSWORD: ${{ secrets.SCREEPS_PASSWORD }}
+          SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
+          SCREEPS_HOSTNAME: ${{ vars.SCREEPS_HOSTNAME }}
+          SCREEPS_ROOM: ${{ inputs.room }}
+        run: npx tsx ops/liveProbe.ts
