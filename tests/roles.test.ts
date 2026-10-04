@@ -4,7 +4,7 @@ import { registeredRoles, runCreep } from "../src/roles";
 
 describe("runMiner", () => {
   beforeEach(() => {
-    vi.stubGlobal("ERR_FULL", -6);
+    vi.stubGlobal("ERR_FULL", -8);
     vi.stubGlobal("OK", 0);
     vi.stubGlobal("WORK", "work");
     vi.stubGlobal("FIND_MY_SPAWNS", 105);
@@ -22,7 +22,7 @@ describe("runMiner", () => {
         isEqualTo: (pos: { x: number; y: number }) =>
           pos.x === 10 && pos.y === 10,
       },
-      harvest: vi.fn(() => -6),
+      harvest: vi.fn(() => -8),
       getActiveBodyparts: () => 2,
       moveTo,
       room: {

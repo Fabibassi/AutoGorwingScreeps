@@ -31,7 +31,9 @@ export function runMiner(creep: Creep): number {
     if (code === OK) {
       return creep.getActiveBodyparts(WORK) * 2;
     }
-    if (code === ERR_FULL) {
+    // Drop-mine into a full container returns ERR_FULL at runtime; @types/screeps
+    // omits it from harvest()'s return type, so compare numerically.
+    if ((code as number) === ERR_FULL) {
       retreatFromFullSource(creep);
     }
     return 0;
