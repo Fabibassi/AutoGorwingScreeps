@@ -4,6 +4,8 @@ import {
   constructionPriority,
   desiredCreeps,
   EARLY_GAME_THRESHOLDS,
+  extensionQuota,
+  isSoftLocked,
   shouldBuildContainers,
   shouldBuildRoads,
   shouldBuildStorage,
@@ -183,26 +185,30 @@ describe("spawnPriorityOrder", () => {
 });
 
 describe("constructionPriority", () => {
-  test("source containers before controller container before storage", () => {
+  test("extensions before source containers", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 0,
       sourceCount: 2,
       hasControllerContainer: false,
       hasStorage: false,
       roadSitesAllowed: false,
+      extensionCount: 0,
     });
+    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
+    expect(queue[0]).toBe("extension");
     expect(queue.filter((s) => s === "container")).toHaveLength(3);
     expect(queue.includes("storage")).toBe(false);
     expect(queue.includes("road")).toBe(false);
   });
 
-  test("storage queued at RCL 4 when missing", () => {
+  test("storage after full extensions at RCL 4", () => {
     const queue = constructionPriority(4, {
       sourceContainerCount: 2,
       sourceCount: 2,
       hasControllerContainer: true,
       hasStorage: false,
       roadSitesAllowed: false,
+      extensionCount: extensionQuota(4),
     });
     expect(queue[0]).toBe("storage");
   });
@@ -214,8 +220,17 @@ describe("constructionPriority", () => {
       hasControllerContainer: true,
       hasStorage: false,
       roadSitesAllowed: true,
+      extensionCount: extensionQuota(2),
     });
     expect(queue.at(-1)).toBe("road");
+  });
+});
+
+describe("isSoftLocked", () => {
+  test("true when no economy creeps and energy below WORK+MOVE", () => {
+    expect(isSoftLocked(69, { harvester: 0, miner: 0 })).toBe(true);
+    expect(isSoftLocked(150, { harvester: 0, miner: 0 })).toBe(false);
+    expect(isSoftLocked(0, { harvester: 1, miner: 0 })).toBe(false);
   });
 });
 

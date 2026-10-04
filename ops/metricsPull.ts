@@ -57,10 +57,12 @@ Critical colony failures mean the strategy is wrong — do not only patch \`inco
 Review and improve the path to **exponential growth**:
 - Specialized **miner/hauler** pairs once source containers exist; never leave 0 economy creeps
 - **Spawn priority**: harvesters/miners before builders when the economy is empty; never drain spawn into builders
+- **Extensions** up to RCL quota (energy capacity — top RCL2–4 growth lever)
 - **Containers** at sources + controller; **roads** on high-traffic paths
 - **Walls/ramparts** from RCL3+; **towers** when unlocked
 - Sustained **upgrader** throughput so the controller never approaches downgrade
-- Prefer durable self-heal in \`src/\` so Metrics→Evolve does not need babysitting`;
+- Prefer durable self-heal in \`src/\` so Metrics→Evolve does not need babysitting
+- If \`softLock\`: colony cannot spawn WORK+MOVE (<150 energy, no miners) — recover spawn refill + never leave 0 economy creeps again`;
 
 /** Criticals that must open Evolve (incomeCollapsed alone still uses rollback path). */
 export function healthNeedsEvolve(health?: AgsHealthCheck): boolean {
@@ -68,7 +70,9 @@ export function healthNeedsEvolve(health?: AgsHealthCheck): boolean {
   if (health.noEconomyCreeps || health.downgradeRisk) return true;
   const critical = health.critical ?? [];
   return (
-    critical.includes("noEconomyCreeps") || critical.includes("downgradeRisk")
+    critical.includes("softLock") ||
+    critical.includes("noEconomyCreeps") ||
+    critical.includes("downgradeRisk")
   );
 }
 

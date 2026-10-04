@@ -170,6 +170,42 @@ describe("downgrade / critical helpers", () => {
     });
     expect(signals).toEqual(["incomeCollapsed"]);
   });
+
+  test("computeCriticalSignals flags softLock when stuck below bootstrap energy", () => {
+    const signals = computeCriticalSignals({
+      tick: 1,
+      rcl: 4,
+      sourceCount: 2,
+      containersAtSources: 0,
+      hasControllerContainer: false,
+      constructionSites: 0,
+      counts: {
+        harvester: 0,
+        miner: 0,
+        hauler: 0,
+        upgrader: 0,
+        builder: 0,
+      },
+      want: {
+        harvester: 3,
+        miner: 0,
+        hauler: 0,
+        upgrader: 2,
+        builder: 0,
+      },
+      spawnEnergy: 69,
+      spawnCapacity: 300,
+      energyAvailable: 69,
+      dedicatedMiners: false,
+      energyIncomePerTick: 0,
+      baselineIncome: 4,
+      ticksToDowngrade: 39_000,
+    });
+    expect(signals[0]).toBe("softLock");
+    expect(signals).toEqual(
+      expect.arrayContaining(["softLock", "noEconomyCreeps", "incomeCollapsed", "noUpgraders"]),
+    );
+  });
 });
 
 describe("SELF_CHECK_INTERVAL", () => {

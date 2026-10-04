@@ -19,12 +19,35 @@ export interface CreepQuotas {
 export const EARLY_GAME_THRESHOLDS = {
   minRclForContainers: 2,
   minRclForDedicatedMiners: 2,
+  minRclForExtensions: 2,
   minRclForRoads: 2,
   minRclForWalls: 3,
   minRclForStorage: 4,
   /** Keep spawn buffer before spending on roads (extensions/containers first). */
   minSpawnEnergyForRoads: 200,
+  /** Cheapest economy bootstrap body (WORK+MOVE) — below this with no miners = soft-lock. */
+  minBootstrapEnergy: 150,
 } as const;
+
+/** CONTROLLER_STRUCTURES.extension mirror (Screeps World). */
+export const EXTENSIONS_BY_RCL: Record<number, number> = {
+  1: 0,
+  2: 5,
+  3: 10,
+  4: 20,
+  5: 30,
+  6: 40,
+  7: 50,
+  8: 60,
+};
+
+export function extensionQuota(rcl: number): number {
+  return EXTENSIONS_BY_RCL[rcl] ?? 0;
+}
+
+export function shouldBuildExtensions(rcl: number): boolean {
+  return rcl >= EARLY_GAME_THRESHOLDS.minRclForExtensions;
+}
 
 export function shouldBuildStorage(rcl: number): boolean {
   return rcl >= EARLY_GAME_THRESHOLDS.minRclForStorage;
@@ -190,7 +213,7 @@ export function desiredCreeps(
   return quotas;
 }
 
-/** Ordered build priorities for early rooms (excludes walls/storage early). */
+/** Ordered build priorities for early rooms (extensions before containers/storage). */
 export function constructionPriority(
   rcl: number,
   opts: {
@@ -199,9 +222,20 @@ export function constructionPriority(
     hasControllerContainer: boolean;
     hasStorage: boolean;
     roadSitesAllowed: boolean;
+    /** Built extensions + extension construction sites. */
+    extensionCount?: number;
   },
 ): BuildableStructureConstant[] {
   const queue: BuildableStructureConstant[] = [];
+
+  // Energy capacity is the highest RCL2–4 growth lever — queue before containers.
+  if (shouldBuildExtensions(rcl)) {
+    const have = opts.extensionCount ?? 0;
+    const missing = Math.max(0, extensionQuota(rcl) - have);
+    for (let i = 0; i < missing; i++) {
+      queue.push("extension");
+    }
+  }
 
   if (shouldBuildContainers(rcl)) {
     const missingSourceContainers = Math.max(
@@ -225,4 +259,15 @@ export function constructionPriority(
   }
 
   return queue;
+}
+
+/** Cannot spawn WORK+MOVE bootstrap and have no economy creeps left. */
+export function isSoftLocked(
+  energyAvailable: number,
+  counts: Pick<CreepQuotas, "harvester" | "miner">,
+): boolean {
+  return (
+    hasNoEconomyCreeps(counts) &&
+    energyAvailable < EARLY_GAME_THRESHOLDS.minBootstrapEnergy
+  );
 }

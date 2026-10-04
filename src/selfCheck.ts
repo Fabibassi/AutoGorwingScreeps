@@ -2,6 +2,7 @@ import {
   desiredCreeps,
   effectiveDedicatedMiners,
   hasNoEconomyCreeps,
+  isSoftLocked,
   type CreepQuotas,
 } from "./earlyGame";
 import {
@@ -30,6 +31,7 @@ export const CONTROLLER_DOWNGRADE_TICKS: Record<number, number> = {
 export const DOWNGRADE_RISK_FRACTION = 0.25;
 
 export type CriticalSignal =
+  | "softLock"
   | "noEconomyCreeps"
   | "incomeCollapsed"
   | "downgradeRisk"
@@ -46,6 +48,8 @@ export interface HealthCheckInput {
   want: CreepQuotas;
   spawnEnergy: number;
   spawnCapacity: number;
+  /** Room energyAvailable (spawn + extensions); used for soft-lock detection. */
+  energyAvailable?: number;
   dedicatedMiners: boolean;
   energyIncomePerTick?: number;
   baselineIncome?: number;
@@ -55,7 +59,12 @@ export interface HealthCheckInput {
 /** Pure: which critical colony failures are active. */
 export function computeCriticalSignals(input: HealthCheckInput): CriticalSignal[] {
   const critical: CriticalSignal[] = [];
+  const energyAvailable = input.energyAvailable ?? input.spawnEnergy;
   const noEconomy = hasNoEconomyCreeps(input.counts);
+
+  if (isSoftLocked(energyAvailable, input.counts)) {
+    critical.push("softLock");
+  }
   if (noEconomy) critical.push("noEconomyCreeps");
 
   const income = input.energyIncomePerTick ?? 0;
@@ -166,6 +175,7 @@ export function buildHealthCheck(
     want,
     spawnEnergy: spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0,
     spawnCapacity: spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 0,
+    energyAvailable: room.energyAvailable,
     dedicatedMiners: effectiveDedicatedMiners(
       rcl,
       containersAtSources,

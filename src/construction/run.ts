@@ -1,5 +1,6 @@
 import {
   constructionPriority,
+  extensionQuota,
   shouldBuildRoads,
   shouldBuildWalls,
 } from "../earlyGame";
@@ -9,7 +10,14 @@ import {
   hasControllerContainer,
   sourceMissingContainer,
 } from "../room/queries";
-import { findAdjacentSpot, tryPlaceContainer, tryPlaceRoadOnPath } from "./placement";
+import {
+  findAdjacentSpot,
+  tryPlaceContainer,
+  tryPlaceExtension,
+  tryPlaceRoadOnPath,
+} from "./placement";
+
+const MAX_NON_ROAD_SITES = 3;
 
 export function runConstruction(room: Room): void {
   const rcl = room.controller?.level ?? 1;
@@ -18,7 +26,25 @@ export function runConstruction(room: Room): void {
 
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
   const nonRoadSites = existingSites.filter((s) => s.structureType !== STRUCTURE_ROAD);
-  if (nonRoadSites.length >= 3) return;
+  const extensionBuilt = countStructures(room, STRUCTURE_EXTENSION);
+  const extensionSites = existingSites.filter(
+    (s) => s.structureType === STRUCTURE_EXTENSION,
+  ).length;
+  const extensionCount = extensionBuilt + extensionSites;
+  const needExtensions = extensionCount < extensionQuota(rcl);
+
+  // Container sites were blocking the 3-slot cap forever — free a slot for extensions.
+  if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
+    if (needExtensions) {
+      const sacrificial = nonRoadSites.find(
+        (s) => s.structureType !== STRUCTURE_EXTENSION,
+      );
+      if (sacrificial) sacrificial.remove();
+      else return;
+    } else {
+      return;
+    }
+  }
 
   const sourceCount = room.find(FIND_SOURCES).length;
   const sourceContainerCount = countSourceContainers(room, { includeSites: true });
@@ -28,7 +54,7 @@ export function runConstruction(room: Room): void {
   const roadSitesAllowed = shouldBuildRoads(
     rcl,
     spawnEnergy,
-    nonRoadSites.length > 0,
+    nonRoadSites.length > 0 || needExtensions,
   );
 
   const queue = constructionPriority(rcl, {
@@ -37,9 +63,15 @@ export function runConstruction(room: Room): void {
     hasControllerContainer: controllerContainer,
     hasStorage,
     roadSitesAllowed,
+    extensionCount,
   });
 
   for (const structureType of queue) {
+    if (structureType === STRUCTURE_EXTENSION) {
+      if (tryPlaceExtension(room, spawn.pos)) return;
+      continue;
+    }
+
     if (structureType === STRUCTURE_CONTAINER) {
       const source = sourceMissingContainer(room);
       if (source && tryPlaceContainer(room, source.pos)) return;
