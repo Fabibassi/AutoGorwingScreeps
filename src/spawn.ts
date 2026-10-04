@@ -1,6 +1,7 @@
 import {
   bodyForRole,
   desiredCreeps,
+  shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
   useDedicatedMiners,
   type CreepQuotas,
@@ -29,6 +30,16 @@ export function runSpawn(spawn: StructureSpawn): void {
     containersAtSources,
     sourceCount,
   );
+
+  if (shouldFallbackToMobileHarvest(infrastructureDedicated, economy)) {
+    for (const name in Game.creeps) {
+      const creep = Game.creeps[name];
+      if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
+      creep.memory.role = "harvester";
+      delete creep.memory.sourceId;
+    }
+  }
+
   const want = desiredCreeps(
     rcl,
     sourceCount,
