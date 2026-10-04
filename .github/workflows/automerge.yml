@@ -140,8 +140,10 @@ jobs:
           # Merge immediately (CI already green). Prefer --squash over --auto so this
           # job can close issues + dispatch Deploy before exiting; --auto alone can
           # finish after the workflow and leave Screeps undeployed under GITHUB_TOKEN.
+          # Do not --delete-branch: GITHUB_TOKEN often lacks that permission and would
+          # fail an otherwise successful merge.
           set +e
-          MERGE_OUT="$(gh pr merge "$N" --repo "$REPO" --squash --delete-branch 2>&1)"
+          MERGE_OUT="$(gh pr merge "$N" --repo "$REPO" --squash 2>&1)"
           MERGE_RC=$?
           set -e
           echo "$MERGE_OUT"
@@ -163,7 +165,7 @@ jobs:
           echo "$AUTO_OUT"
           if [ "$AUTO_RC" -eq 0 ] || echo "$AUTO_OUT" | grep -qiE 'already enabled|auto.?merge.*(already|enabled)|already merged'; then
             echo "Auto-merge enabled for PR #$N — waiting briefly for merge to complete."
-            for i in $(seq 1 30); do
+            for i in $(seq 1 18); do
               PR_JSON="$(gh pr view "$N" --repo "$REPO" --json state,mergedAt)"
               if echo "$PR_JSON" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
                 close_linked_if_merged
