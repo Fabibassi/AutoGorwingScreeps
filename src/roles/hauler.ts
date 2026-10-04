@@ -1,5 +1,49 @@
 type HaulTarget = StructureSpawn | StructureExtension | StructureContainer | StructureStorage;
 
+export interface StorageHaulContext {
+  energyIncomePerTick: number;
+  spawnFillPct: number;
+  extensionsNeedingEnergy: number;
+  storageExists: boolean;
+  storageEnergy?: number;
+}
+
+/** Keep spawn/extensions fed before RCL4 storage absorbs recoverable energy. */
+export function shouldDepositInStorage(ctx: StorageHaulContext): boolean {
+  if (!ctx.storageExists) return false;
+  if (ctx.energyIncomePerTick <= 0) return false;
+  if (ctx.spawnFillPct < 0.85) return false;
+  if (ctx.extensionsNeedingEnergy > 0) return false;
+  return true;
+}
+
+/** Pull from storage when income stalled and spawn energy is unavailable for spawning. */
+export function shouldWithdrawFromStorage(ctx: StorageHaulContext): boolean {
+  if (!ctx.storageExists || (ctx.storageEnergy ?? 0) <= 0) return false;
+  if (ctx.energyIncomePerTick <= 0 || ctx.spawnFillPct < 0.5) return true;
+  return false;
+}
+
+function haulContext(creep: Creep): StorageHaulContext {
+  const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+  const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
+  const spawnFillPct =
+    (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / spawnCapacity;
+  const extensionsNeedingEnergy = creep.room.find(FIND_MY_STRUCTURES, {
+    filter: (s): s is StructureExtension =>
+      s.structureType === STRUCTURE_EXTENSION &&
+      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+  }).length;
+  const storage = creep.room.storage;
+  return {
+    energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
+    spawnFillPct,
+    extensionsNeedingEnergy,
+    storageExists: storage !== undefined,
+    storageEnergy: storage?.store[RESOURCE_ENERGY] ?? 0,
+  };
+}
+
 function findEnergyTarget(creep: Creep): HaulTarget | null {
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
   if (!spawn) return null;
@@ -28,15 +72,20 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
   )[0];
   if (controllerContainer) return controllerContainer;
 
+  const ctx = haulContext(creep);
   const storage = creep.room.storage;
-  if (storage && storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+  if (
+    storage &&
+    storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0 &&
+    shouldDepositInStorage(ctx)
+  ) {
     return storage;
   }
 
   return null;
 }
 
-function findEnergySource(creep: Creep): StructureContainer | Resource | null {
+function findEnergySource(creep: Creep): StructureContainer | StructureStorage | Resource | null {
   const controller = creep.room.controller;
   const containers = creep.room.find(FIND_STRUCTURES, {
     filter: (s): s is StructureContainer =>
@@ -53,6 +102,11 @@ function findEnergySource(creep: Creep): StructureContainer | Resource | null {
   });
   if (dropped.length > 0) {
     return creep.pos.findClosestByPath(dropped);
+  }
+
+  const storage = creep.room.storage;
+  if (storage && shouldWithdrawFromStorage(haulContext(creep))) {
+    return storage;
   }
 
   return null;

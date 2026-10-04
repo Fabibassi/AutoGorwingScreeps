@@ -16,10 +16,18 @@ export function runUpgrader(creep: Creep): void {
     }
 
     const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
-    if (!spawn) return;
-    if (spawn.store[RESOURCE_ENERGY] > 0) {
+    if (spawn?.store[RESOURCE_ENERGY] > 0) {
       if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
         creep.moveTo(spawn);
+      }
+      return;
+    }
+
+    const storage = creep.room.storage;
+    const income = Memory.ags?.metrics.energyIncomePerTick ?? 0;
+    if (storage && storage.store[RESOURCE_ENERGY] > 0 && income <= 0) {
+      if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+        creep.moveTo(storage);
       }
     }
     return;
