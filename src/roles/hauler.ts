@@ -120,8 +120,13 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     return creep.pos.findClosestByPath(containers);
   }
 
+  // Soft-lock recovery: pick up small piles when spawn cannot afford WORK+MOVE.
+  const spawnRef = creep.room.find(FIND_MY_SPAWNS)[0];
+  const spawnStarving =
+    (spawnRef?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) < 150;
+  const minDrop = spawnStarving ? 1 : 25;
   const dropped = creep.room.find(FIND_DROPPED_RESOURCES, {
-    filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 25,
+    filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= minDrop,
   });
   if (dropped.length > 0) {
     return creep.pos.findClosestByPath(dropped);

@@ -212,7 +212,8 @@ export function desiredCreeps(
     return {
       harvester: sources + 1,
       miner: 0,
-      hauler: 0,
+      // Soft-lock: spawn order prefers hauler at <150 energy, but want must be >0.
+      hauler: depressed ? 1 : 0,
       upgrader: depressed ? 1 : 2,
       builder: hasConstructionSites && !depressed ? 1 : 0,
     };
