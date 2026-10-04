@@ -92,7 +92,23 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
   return null;
 }
 
-function findEnergySource(creep: Creep): StructureContainer | StructureStorage | Resource | null {
+function findExtensionWithEnergy(creep: Creep): StructureExtension | null {
+  const extensions = creep.room.find(FIND_MY_STRUCTURES, {
+    filter: (s): s is StructureExtension =>
+      s.structureType === STRUCTURE_EXTENSION && s.store[RESOURCE_ENERGY] > 0,
+  });
+  if (extensions.length === 0) return null;
+  return creep.pos.findClosestByPath(extensions);
+}
+
+function findEnergySource(creep: Creep): StructureContainer | StructureStorage | StructureExtension | Resource | null {
+  const ctx = haulContext(creep);
+  // Soft-lock recovery: pull energy out of extensions when spawn cannot afford bootstrap.
+  if (ctx.spawnFillPct < 0.5 && ctx.extensionsNeedingEnergy === 0) {
+    const ext = findExtensionWithEnergy(creep);
+    if (ext) return ext;
+  }
+
   const controller = creep.room.controller;
   const containers = creep.room.find(FIND_STRUCTURES, {
     filter: (s): s is StructureContainer =>
@@ -112,7 +128,7 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
   }
 
   const storage = creep.room.storage;
-  if (storage && shouldWithdrawFromStorage(haulContext(creep))) {
+  if (storage && shouldWithdrawFromStorage(ctx)) {
     return storage;
   }
 

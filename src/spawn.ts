@@ -77,6 +77,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     infrastructureDedicated,
     economy,
     liveCounts,
+    energyAvailable,
   );
 
   for (const role of spawnOrder) {

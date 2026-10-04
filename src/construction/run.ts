@@ -26,6 +26,9 @@ export function runConstruction(room: Room): void {
 
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
   const nonRoadSites = existingSites.filter((s) => s.structureType !== STRUCTURE_ROAD);
+  const sourceCount = room.find(FIND_SOURCES).length;
+  const sourceContainerCount = countSourceContainers(room, { includeSites: true });
+  const needSourceContainers = sourceContainerCount < sourceCount;
   const extensionBuilt = countStructures(room, STRUCTURE_EXTENSION);
   const extensionSites = existingSites.filter(
     (s) => s.structureType === STRUCTURE_EXTENSION,
@@ -33,9 +36,15 @@ export function runConstruction(room: Room): void {
   const extensionCount = extensionBuilt + extensionSites;
   const needExtensions = extensionCount < extensionQuota(rcl);
 
-  // Container sites were blocking the 3-slot cap forever — free a slot for extensions.
+  // At the 3-site cap: prefer source containers over extension spam (RCL4 soft-lock).
   if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
-    if (needExtensions) {
+    if (needSourceContainers) {
+      const extensionSite = nonRoadSites.find(
+        (s) => s.structureType === STRUCTURE_EXTENSION,
+      );
+      if (extensionSite) extensionSite.remove();
+      else return;
+    } else if (needExtensions) {
       const sacrificial = nonRoadSites.find(
         (s) => s.structureType !== STRUCTURE_EXTENSION,
       );
@@ -45,9 +54,6 @@ export function runConstruction(room: Room): void {
       return;
     }
   }
-
-  const sourceCount = room.find(FIND_SOURCES).length;
-  const sourceContainerCount = countSourceContainers(room, { includeSites: true });
   const controllerContainer = hasControllerContainer(room);
   const hasStorage = countStructures(room, STRUCTURE_STORAGE) > 0;
   const spawnEnergy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
