@@ -91,6 +91,15 @@ export interface EconomyContext {
   spawnFillPct?: number;
 }
 
+/** Income collapsed or spawn nearly empty — defer builders and trim upgraders. */
+export function isEconomyDepressed(ctx?: EconomyContext): boolean {
+  if (!ctx) return false;
+  const income = ctx.energyIncomePerTick ?? 0;
+  if (income <= 0) return true;
+  if (isIncomeStalled(income, ctx.baselineIncome)) return true;
+  return (ctx.spawnFillPct ?? 1) < 0.35;
+}
+
 /** Keep one mobile harvester when static mining economy has stalled. */
 export function needsBootstrapHarvester(
   dedicatedMiners: boolean,
@@ -141,7 +150,16 @@ export function spawnPriorityOrder(
   dedicatedMiners: boolean,
   ctx?: EconomyContext,
   counts?: Pick<CreepQuotas, "harvester" | "miner">,
+  energyAvailable?: number,
 ): Array<keyof CreepQuotas> {
+  // Soft-lock: energy trapped in extensions — hauler (100) consolidates into spawn for harvester (150).
+  if (
+    counts &&
+    energyAvailable != null &&
+    isSoftLocked(energyAvailable, counts)
+  ) {
+    return ["hauler", "harvester", "miner", "upgrader", "builder"];
+  }
   // Empty economy: always bootstrap a harvester before haulers/builders.
   if (counts && hasNoEconomyCreeps(counts)) {
     return ["harvester", "hauler", "miner", "upgrader", "builder"];
@@ -188,13 +206,15 @@ export function desiredCreeps(
     };
   }
 
+  const depressed = isEconomyDepressed(economy);
+
   if (!dedicatedMiners) {
     return {
       harvester: sources + 1,
       miner: 0,
       hauler: 0,
-      upgrader: 2,
-      builder: hasConstructionSites ? 1 : 0,
+      upgrader: depressed ? 1 : 2,
+      builder: hasConstructionSites && !depressed ? 1 : 0,
     };
   }
 
@@ -202,8 +222,8 @@ export function desiredCreeps(
     harvester: 0,
     miner: sources,
     hauler: sources,
-    upgrader: 2,
-    builder: hasConstructionSites ? 1 : 0,
+    upgrader: depressed ? 1 : 2,
+    builder: hasConstructionSites && !depressed ? 1 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {
@@ -228,7 +248,15 @@ export function constructionPriority(
 ): BuildableStructureConstant[] {
   const queue: BuildableStructureConstant[] = [];
 
-  // Energy capacity is the highest RCL2–4 growth lever — queue before containers.
+  const missingSourceContainers = shouldBuildContainers(rcl)
+    ? Math.max(0, opts.sourceCount - opts.sourceContainerCount)
+    : 0;
+
+  // Source containers unlock miner/hauler pairs — never defer them past extension spam.
+  for (let i = 0; i < missingSourceContainers; i++) {
+    queue.push("container");
+  }
+
   if (shouldBuildExtensions(rcl)) {
     const have = opts.extensionCount ?? 0;
     const missing = Math.max(0, extensionQuota(rcl) - have);
@@ -237,17 +265,8 @@ export function constructionPriority(
     }
   }
 
-  if (shouldBuildContainers(rcl)) {
-    const missingSourceContainers = Math.max(
-      0,
-      opts.sourceCount - opts.sourceContainerCount,
-    );
-    for (let i = 0; i < missingSourceContainers; i++) {
-      queue.push("container");
-    }
-    if (!opts.hasControllerContainer) {
-      queue.push("container");
-    }
+  if (shouldBuildContainers(rcl) && !opts.hasControllerContainer) {
+    queue.push("container");
   }
 
   if (shouldBuildStorage(rcl) && !opts.hasStorage) {

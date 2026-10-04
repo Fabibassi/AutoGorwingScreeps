@@ -13,6 +13,7 @@ export {
   effectiveDedicatedMiners,
   extensionQuota,
   hasNoEconomyCreeps,
+  isEconomyDepressed,
   isSoftLocked,
   needsBootstrapHarvester,
   shouldBuildContainers,

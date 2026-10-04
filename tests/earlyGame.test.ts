@@ -11,6 +11,7 @@ import {
   shouldBuildStorage,
   shouldBuildWalls,
   spawnPriorityOrder,
+  isEconomyDepressed,
   shouldFallbackToMobileHarvest,
   useDedicatedMiners,
 } from "../src/earlyGame";
@@ -63,6 +64,18 @@ describe("desiredCreeps", () => {
       miner: 0,
       hauler: 0,
       upgrader: 2,
+      builder: 0,
+    });
+  });
+
+  test("rcl4 zero income skips builders and trims upgraders (#36)", () => {
+    expect(
+      desiredCreeps(4, 2, 0, true, { energyIncomePerTick: 0, spawnFillPct: 0.27 }),
+    ).toEqual({
+      harvester: 3,
+      miner: 0,
+      hauler: 0,
+      upgrader: 1,
       builder: 0,
     });
   });
@@ -182,10 +195,21 @@ describe("spawnPriorityOrder", () => {
       ),
     ).toEqual(["harvester", "hauler", "miner", "upgrader", "builder"]);
   });
+
+  test("hauler first when soft-locked below bootstrap energy (#36)", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        { energyIncomePerTick: 0, spawnFillPct: 0.27 },
+        { harvester: 0, miner: 0 },
+        81,
+      ),
+    ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
+  });
 });
 
 describe("constructionPriority", () => {
-  test("extensions before source containers", () => {
+  test("source containers before extensions when sources lack containers", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 0,
       sourceCount: 2,
@@ -194,11 +218,24 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
-    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
-    expect(queue[0]).toBe("extension");
     expect(queue.filter((s) => s === "container")).toHaveLength(3);
+    expect(queue[0]).toBe("container");
+    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
     expect(queue.includes("storage")).toBe(false);
     expect(queue.includes("road")).toBe(false);
+  });
+
+  test("extensions lead once every source has a container", () => {
+    const queue = constructionPriority(2, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+    });
+    expect(queue[0]).toBe("extension");
+    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
   });
 
   test("storage after full extensions at RCL 4", () => {
@@ -223,6 +260,20 @@ describe("constructionPriority", () => {
       extensionCount: extensionQuota(2),
     });
     expect(queue.at(-1)).toBe("road");
+  });
+});
+
+describe("isEconomyDepressed", () => {
+  test("true at zero income or low spawn fill", () => {
+    expect(isEconomyDepressed({ energyIncomePerTick: 0, spawnFillPct: 0.5 })).toBe(
+      true,
+    );
+    expect(isEconomyDepressed({ energyIncomePerTick: 5, spawnFillPct: 0.2 })).toBe(
+      true,
+    );
+    expect(isEconomyDepressed({ energyIncomePerTick: 5, spawnFillPct: 0.8 })).toBe(
+      false,
+    );
   });
 });
 
