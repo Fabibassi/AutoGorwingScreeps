@@ -112,6 +112,8 @@ describe("computeHealthCheck", () => {
       },
       spawnEnergy: 50,
       spawnCapacity: 300,
+      energyAvailable: 300,
+      hasCarryCreep: true,
       dedicatedMiners: false,
       energyIncomePerTick: 3,
       baselineIncome: 3,

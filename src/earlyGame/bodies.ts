@@ -53,11 +53,9 @@ export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
     }
     return body;
   }
-  // Recovery: spawn a minimal harvester when extensions cannot fill a full worker.
-  const bootstrapCost = PART_COST.work + PART_COST.move;
-  if (energyAvailable >= bootstrapCost) {
-    return ["work", "move"];
-  }
+  // Do NOT spawn WORK+MOVE: zero CARRY means store capacity 0, so harvesters
+  // never call harvest() and cannot refill spawn. Soft-lock recovery uses haulers
+  // (CARRY+MOVE @ 100) until a full WORK+CARRY+MOVE worker is affordable.
   return [];
 }
 

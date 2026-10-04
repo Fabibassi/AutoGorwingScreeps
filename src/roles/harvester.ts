@@ -1,5 +1,21 @@
 export function runHarvester(creep: Creep): number {
   let harvested = 0;
+  const capacity = creep.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+
+  // WORK+MOVE bootstrap (legacy): drop-mine so a hauler can scoop.
+  if (capacity === 0) {
+    const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+    if (!source) return 0;
+    const code = creep.harvest(source);
+    if (code === OK) {
+      const work = creep.getActiveBodyparts(WORK);
+      harvested = work * 2;
+    } else if (code === ERR_NOT_IN_RANGE) {
+      creep.moveTo(source, { visualizePathStyle: { stroke: "#ffaa00" } });
+    }
+    return harvested;
+  }
+
   if (creep.store.getFreeCapacity() > 0) {
     const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
     if (!source) return 0;

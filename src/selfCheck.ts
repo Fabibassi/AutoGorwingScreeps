@@ -50,6 +50,8 @@ export interface HealthCheckInput {
   spawnCapacity: number;
   /** Room energyAvailable (spawn + extensions); used for soft-lock detection. */
   energyAvailable?: number;
+  /** Any live creep with CARRY (can move energy into spawn). */
+  hasCarryCreep?: boolean;
   dedicatedMiners: boolean;
   energyIncomePerTick?: number;
   baselineIncome?: number;
@@ -62,7 +64,7 @@ export function computeCriticalSignals(input: HealthCheckInput): CriticalSignal[
   const energyAvailable = input.energyAvailable ?? input.spawnEnergy;
   const noEconomy = hasNoEconomyCreeps(input.counts);
 
-  if (isSoftLocked(energyAvailable, input.counts)) {
+  if (isSoftLocked(energyAvailable, input.counts, input.hasCarryCreep === true)) {
     critical.push("softLock");
   }
   if (noEconomy) critical.push("noEconomyCreeps");
@@ -176,6 +178,9 @@ export function buildHealthCheck(
     spawnEnergy: spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0,
     spawnCapacity: spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 0,
     energyAvailable: room.energyAvailable,
+    hasCarryCreep: Object.keys(Game.creeps).some(
+      (name) => Game.creeps[name].getActiveBodyparts(CARRY) > 0,
+    ),
     dedicatedMiners: effectiveDedicatedMiners(
       rcl,
       containersAtSources,

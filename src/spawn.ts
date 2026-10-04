@@ -30,6 +30,25 @@ export function reassignForEconomySurvival(
   }
 }
 
+/** Recycle carry-less creeps next to spawn to claw energy back toward a hauler spawn. */
+export function recycleCarryLessBootstrap(spawn: StructureSpawn): boolean {
+  if (spawn.spawning) return false;
+  if (spawn.room.energyAvailable >= 100) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.getActiveBodyparts(CARRY) > 0) continue;
+    if (creep.getActiveBodyparts(WORK) === 0) continue;
+    if (creep.pos.isNearTo(spawn)) {
+      return spawn.recycleCreep(creep) === OK;
+    }
+    creep.moveTo(spawn);
+    return true;
+  }
+  return false;
+}
+
 export function runSpawn(spawn: StructureSpawn): void {
   if (spawn.spawning) return;
 
@@ -41,10 +60,12 @@ export function runSpawn(spawn: StructureSpawn): void {
   const spawnCapacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const spawnFillPct =
     spawn.store.getUsedCapacity(RESOURCE_ENERGY) / spawnCapacity;
+  const energyAvailable = room.energyAvailable;
   const economy = {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
     baselineIncome: Memory.ags?.baseline?.energyIncomePerTick,
     spawnFillPct,
+    energyAvailable,
   };
   const infrastructureDedicated = useDedicatedMiners(
     rcl,
@@ -72,7 +93,14 @@ export function runSpawn(spawn: StructureSpawn): void {
   reassignForEconomySurvival(room, counts);
   // Recount after possible role reassignment so quotas/spawn order stay consistent.
   const liveCounts = countCreepsByRole();
-  const energyAvailable = room.energyAvailable;
+
+  const hasCarry = Object.keys(Game.creeps).some(
+    (n) => Game.creeps[n].getActiveBodyparts(CARRY) > 0,
+  );
+  if (!hasCarry && energyAvailable < 100) {
+    if (recycleCarryLessBootstrap(spawn)) return;
+  }
+
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,

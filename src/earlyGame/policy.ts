@@ -25,8 +25,10 @@ export const EARLY_GAME_THRESHOLDS = {
   minRclForStorage: 4,
   /** Keep spawn buffer before spending on roads (extensions/containers first). */
   minSpawnEnergyForRoads: 200,
-  /** Cheapest economy bootstrap body (WORK+MOVE) — below this with no miners = soft-lock. */
-  minBootstrapEnergy: 150,
+  /** Full worker (WORK+CARRY+MOVE). */
+  minBootstrapEnergy: 200,
+  /** Cheapest recovery hauler (CARRY+MOVE). Below this with no CARRY creeps = soft-lock. */
+  minHaulerEnergy: 100,
 } as const;
 
 /** CONTROLLER_STRUCTURES.extension mirror (Screeps World). */
@@ -281,13 +283,15 @@ export function constructionPriority(
   return queue;
 }
 
-/** Cannot spawn WORK+MOVE bootstrap and have no economy creeps left. */
+/**
+ * Soft-lock: cannot spawn a hauler (100) and nobody can move energy into spawn.
+ * Carry-less WORK creeps do not clear this — they cannot transfer.
+ */
 export function isSoftLocked(
   energyAvailable: number,
-  counts: Pick<CreepQuotas, "harvester" | "miner">,
+  _counts?: Pick<CreepQuotas, "harvester" | "miner">,
+  hasCarryCreep = false,
 ): boolean {
-  return (
-    hasNoEconomyCreeps(counts) &&
-    energyAvailable < EARLY_GAME_THRESHOLDS.minBootstrapEnergy
-  );
+  if (hasCarryCreep) return false;
+  return energyAvailable < EARLY_GAME_THRESHOLDS.minHaulerEnergy;
 }

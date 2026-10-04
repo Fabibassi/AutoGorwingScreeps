@@ -278,10 +278,11 @@ describe("isEconomyDepressed", () => {
 });
 
 describe("isSoftLocked", () => {
-  test("true when no economy creeps and energy below WORK+MOVE", () => {
+  test("true when below hauler cost and nobody has CARRY", () => {
     expect(isSoftLocked(69, { harvester: 0, miner: 0 })).toBe(true);
-    expect(isSoftLocked(150, { harvester: 0, miner: 0 })).toBe(false);
-    expect(isSoftLocked(0, { harvester: 1, miner: 0 })).toBe(false);
+    expect(isSoftLocked(5, { harvester: 1, miner: 0 })).toBe(true);
+    expect(isSoftLocked(100, { harvester: 0, miner: 0 })).toBe(false);
+    expect(isSoftLocked(5, { harvester: 1, miner: 0 }, true)).toBe(false);
   });
 });
 
@@ -305,12 +306,12 @@ describe("bodyForRole", () => {
     );
   });
 
-  test("worker scales down to work/move bootstrap when energy is below full unit", () => {
-    expect(bodyForRole("harvester", 150)).toEqual(["work", "move"]);
-    expect(bodyForRole("harvester", 199)).toEqual(["work", "move"]);
+  test("worker refuses WORK+MOVE bootstrap (carry-less creeps cannot refill spawn)", () => {
+    expect(bodyForRole("harvester", 150)).toEqual([]);
+    expect(bodyForRole("harvester", 199)).toEqual([]);
   });
 
-  test("worker returns empty body when energy cannot afford bootstrap creep", () => {
+  test("worker returns empty body when energy cannot afford WORK+CARRY+MOVE", () => {
     expect(bodyForRole("harvester", 0)).toEqual([]);
     expect(bodyForRole("harvester", 100)).toEqual([]);
   });
@@ -320,9 +321,10 @@ describe("bodyForRole", () => {
     expect(bodyForRole("hauler", 50)).toEqual([]);
   });
 
-  test("hauler bootstrap body spawns at 100 energy when harvester needs 150", () => {
+  test("hauler bootstrap body spawns at 100 energy when harvester needs 200", () => {
     expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
     expect(bodyForRole("harvester", 100)).toEqual([]);
+    expect(bodyForRole("harvester", 200)).toEqual(["work", "carry", "move"]);
   });
 });
 
