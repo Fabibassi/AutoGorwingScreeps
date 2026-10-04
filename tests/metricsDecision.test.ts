@@ -47,6 +47,58 @@ test("evolve when stagnant and no open evolve issues", () => {
   expect(d?.action).toBe("evolve");
 });
 
+test("evolve on noEconomyCreeps before income rollback", () => {
+  const health = {
+    tick: 1000,
+    rcl: 4,
+    creepDeficit: 5,
+    understaffed: ["harvester", "hauler", "upgrader"],
+    containersAtSources: 2,
+    sourceCount: 2,
+    dedicatedMiners: false,
+    spawnFillPct: 0.01,
+    hasControllerContainer: true,
+    constructionSites: 3,
+    noEconomyCreeps: true,
+  };
+  const d = decideIssue({
+    stagnant: false,
+    rollback: true,
+    metrics,
+    health,
+    openEvolveCount: 0,
+    openRollbackCount: 0,
+  });
+  expect(d?.action).toBe("evolve");
+  expect(d?.title).toContain("no economy creeps");
+  expect(d?.body).toContain("noEconomyCreeps");
+});
+
+test("noEconomyCreeps skipped when evolve already open", () => {
+  expect(
+    decideIssue({
+      stagnant: false,
+      rollback: true,
+      metrics,
+      health: {
+        tick: 1,
+        rcl: 4,
+        creepDeficit: 1,
+        understaffed: ["harvester"],
+        containersAtSources: 2,
+        sourceCount: 2,
+        dedicatedMiners: false,
+        spawnFillPct: 0,
+        hasControllerContainer: true,
+        constructionSites: 0,
+        noEconomyCreeps: true,
+      },
+      openEvolveCount: 1,
+      openRollbackCount: 0,
+    })?.action,
+  ).toBe("rollback");
+});
+
 test("none when stagnant but evolve already open", () => {
   const d = decideIssue({
     stagnant: true,
@@ -92,6 +144,7 @@ test("force evolve includes health snapshot when provided", () => {
     spawnFillPct: 0.05,
     hasControllerContainer: false,
     constructionSites: 1,
+    noEconomyCreeps: false,
   };
   const d = decideIssue({
     stagnant: false,

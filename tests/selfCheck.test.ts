@@ -34,8 +34,39 @@ describe("computeHealthCheck", () => {
     });
     expect(health.creepDeficit).toBe(0);
     expect(health.understaffed).toEqual([]);
+    expect(health.noEconomyCreeps).toBe(false);
     expect(health.spawnFillPct).toBeCloseTo(250 / 300);
     expect(formatHealthCheck(health)).toBe("ok");
+  });
+
+  test("flags CRITICAL when no harvesters or miners remain", () => {
+    const health = computeHealthCheck({
+      tick: 83433278,
+      rcl: 4,
+      sourceCount: 2,
+      containersAtSources: 2,
+      hasControllerContainer: true,
+      constructionSites: 3,
+      counts: {
+        harvester: 0,
+        miner: 0,
+        hauler: 0,
+        upgrader: 0,
+        builder: 1,
+      },
+      want: {
+        harvester: 3,
+        miner: 0,
+        hauler: 2,
+        upgrader: 1,
+        builder: 0,
+      },
+      spawnEnergy: 4,
+      spawnCapacity: 300,
+      dedicatedMiners: false,
+    });
+    expect(health.noEconomyCreeps).toBe(true);
+    expect(formatHealthCheck(health)).toContain("CRITICAL:noEconomyCreeps");
   });
 
   test("flags understaffed roles and container gaps at RCL2", () => {

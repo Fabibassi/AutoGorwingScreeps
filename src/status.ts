@@ -86,7 +86,7 @@ export function buildPlanSnapshot(
     economy,
   );
   const counts = countCreepsByRole();
-  const spawnOrder = spawnPriorityOrder(infrastructureDedicated, economy);
+  const spawnOrder = spawnPriorityOrder(infrastructureDedicated, economy, counts);
   const priority = inferSpawnPriority(spawn, counts, want, spawnOrder);
 
   return {

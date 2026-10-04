@@ -1,6 +1,7 @@
 import {
   desiredCreeps,
   effectiveDedicatedMiners,
+  hasNoEconomyCreeps,
   type CreepQuotas,
 } from "./earlyGame";
 import {
@@ -51,6 +52,7 @@ export function computeHealthCheck(input: HealthCheckInput): AgsHealthCheck {
     spawnFillPct: input.spawnEnergy / spawnCapacity,
     hasControllerContainer: input.hasControllerContainer,
     constructionSites: input.constructionSites,
+    noEconomyCreeps: hasNoEconomyCreeps(input.counts),
   };
 }
 
@@ -106,6 +108,7 @@ export function buildHealthCheck(
 /** One-line health summary for console / metrics debugging. */
 export function formatHealthCheck(health: AgsHealthCheck): string {
   if (
+    !health.noEconomyCreeps &&
     health.creepDeficit === 0 &&
     health.containersAtSources >= health.sourceCount &&
     (health.hasControllerContainer || health.rcl < 2)
@@ -114,6 +117,9 @@ export function formatHealthCheck(health: AgsHealthCheck): string {
   }
 
   const parts: string[] = [];
+  if (health.noEconomyCreeps) {
+    parts.push("CRITICAL:noEconomyCreeps");
+  }
   if (health.creepDeficit > 0) {
     parts.push(`deficit=${health.creepDeficit}(${health.understaffed.join(",")})`);
   }

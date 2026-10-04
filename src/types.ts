@@ -21,6 +21,11 @@ export interface AgsHealthCheck {
   spawnFillPct: number;
   hasControllerContainer: boolean;
   constructionSites: number;
+  /**
+   * Critical: claimed room has zero harvesters and zero miners.
+   * Metrics should evolve on this without waiting for income-window stagnation.
+   */
+  noEconomyCreeps: boolean;
 }
 
 export interface AgsMemory {

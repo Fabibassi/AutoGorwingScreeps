@@ -105,15 +105,13 @@ export function decideIssue(
 ): DecideIssueResult | null {
   const force = input.forceAction ?? "none";
 
-  if (force === "rollback" || (force === "none" && input.rollback)) {
+  // Manual overrides stay dispatch-only and win over automatic signals.
+  if (force === "rollback") {
     if ((input.openRollbackCount ?? 0) > 0) return null;
     return {
       action: "rollback",
-      title:
-        force === "rollback"
-          ? `AGS rollback: forced at tick ${input.metrics.tick}`
-          : `AGS rollback: income/errors at tick ${input.metrics.tick}`,
-      body: metricsBody(input.metrics),
+      title: `AGS rollback: forced at tick ${input.metrics.tick}`,
+      body: metricsBody(input.metrics, undefined, input.health),
     };
   }
 
@@ -129,6 +127,28 @@ export function decideIssue(
           : undefined,
         input.health,
       ),
+    };
+  }
+
+  // Critical: 0 harvesters/miners — evolve before income-rollback (strategy bug, not revert).
+  if (input.health?.noEconomyCreeps && input.openEvolveCount === 0) {
+    return {
+      action: "evolve",
+      title: `AGS evolve: no economy creeps at tick ${input.metrics.tick}`,
+      body: metricsBody(
+        input.metrics,
+        "_Critical: claimed room has 0 harvesters and 0 miners._",
+        input.health,
+      ),
+    };
+  }
+
+  if (input.rollback) {
+    if ((input.openRollbackCount ?? 0) > 0) return null;
+    return {
+      action: "rollback",
+      title: `AGS rollback: income/errors at tick ${input.metrics.tick}`,
+      body: metricsBody(input.metrics, undefined, input.health),
     };
   }
 
@@ -226,9 +246,13 @@ export function planMetricsAction(input: {
   });
 
   let reason: string | undefined;
-  if (!decision) {
+  if (decision?.title.includes("no economy creeps")) {
+    reason = "no_economy_creeps";
+  } else if (!decision) {
     if (rollback && openRollbackCount > 0) {
       reason = "open_rollback_exists";
+    } else if (ags.health?.noEconomyCreeps && openEvolveCount > 0) {
+      reason = "open_evolve_exists";
     } else if (!stagnant) {
       reason = windows < 4 ? "need_4_windows" : "not_stagnant";
     } else if (openEvolveCount > 0) {
@@ -462,6 +486,9 @@ export async function main(): Promise<void> {
     hostname,
   });
   console.log(`ags source=${source}`);
+  if (ags?.health) {
+    console.log(`health=${JSON.stringify(ags.health)}`);
+  }
 
   const needIssueCounts =
     forceAction !== "none" || ags != null;

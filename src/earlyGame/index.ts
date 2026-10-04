@@ -10,6 +10,7 @@ export {
   desiredCreeps,
   EARLY_GAME_THRESHOLDS,
   effectiveDedicatedMiners,
+  hasNoEconomyCreeps,
   needsBootstrapHarvester,
   shouldBuildContainers,
   shouldFallbackToMobileHarvest,

@@ -1,3 +1,14 @@
+/** Builders must not drain spawn energy needed to respawn harvesters/miners. */
+export function canWithdrawFromSpawn(
+  spawnEnergy: number,
+  spawnCapacity: number,
+  hasEconomyCreeps: boolean,
+): boolean {
+  if (!hasEconomyCreeps) return false;
+  if (spawnCapacity <= 0) return false;
+  return spawnEnergy / spawnCapacity >= 0.85;
+}
+
 export function runBuilder(creep: Creep): number {
   if (creep.store[RESOURCE_ENERGY] === 0) {
     const container = creep.pos.findClosestByPath(FIND_STRUCTURES, {
@@ -12,9 +23,18 @@ export function runBuilder(creep: Creep): number {
     }
 
     const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
-    if (spawn?.store[RESOURCE_ENERGY] > 0) {
-      if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(spawn);
+    if (spawn) {
+      const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+      const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+      let economyCreeps = 0;
+      for (const name in Game.creeps) {
+        const role = Game.creeps[name].memory.role;
+        if (role === "harvester" || role === "miner") economyCreeps++;
+      }
+      if (canWithdrawFromSpawn(energy, capacity, economyCreeps > 0)) {
+        if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          creep.moveTo(spawn);
+        }
       }
     }
     return 0;

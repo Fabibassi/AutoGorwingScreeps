@@ -170,6 +170,16 @@ describe("spawnPriorityOrder", () => {
       "builder",
     ]);
   });
+
+  test("harvester first when economy creeps are zero even if hauler-first would apply", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0, spawnFillPct: 0.01 },
+        { harvester: 0, miner: 0 },
+      ),
+    ).toEqual(["harvester", "hauler", "miner", "upgrader", "builder"]);
+  });
 });
 
 describe("constructionPriority", () => {

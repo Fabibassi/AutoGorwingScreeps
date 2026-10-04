@@ -7,11 +7,21 @@ import { logPlanStatusIfDue } from "./status";
 import { tickTelemetry } from "./telemetry";
 import { showCreepJob } from "./visuals";
 
+function clearDeadCreepMemory(): void {
+  for (const name in Memory.creeps) {
+    if (!(name in Game.creeps)) {
+      delete Memory.creeps[name];
+    }
+  }
+}
+
 export function loop(): void {
   let errorsThisTick = 0;
   let energyHarvestedThisTick = 0;
 
   try {
+    clearDeadCreepMemory();
+
     for (const name in Game.rooms) {
       const room = Game.rooms[name];
       if (room.controller?.my) {

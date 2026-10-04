@@ -108,11 +108,21 @@ export const DEFAULT_SPAWN_ORDER: Array<keyof CreepQuotas> = [
   "builder",
 ];
 
+/** No mobile/static harvesters left — colony cannot refill spawn without intervention. */
+export function hasNoEconomyCreeps(counts: Pick<CreepQuotas, "harvester" | "miner">): boolean {
+  return (counts.harvester ?? 0) + (counts.miner ?? 0) === 0;
+}
+
 /** Spawn harvester first when static mining stalled — hauler-first starves recovery. */
 export function spawnPriorityOrder(
   dedicatedMiners: boolean,
   ctx?: EconomyContext,
+  counts?: Pick<CreepQuotas, "harvester" | "miner">,
 ): Array<keyof CreepQuotas> {
+  // Empty economy: always bootstrap a harvester before haulers/builders.
+  if (counts && hasNoEconomyCreeps(counts)) {
+    return ["harvester", "hauler", "miner", "upgrader", "builder"];
+  }
   if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
     // Hauler-first: containers may hold all room energy; hauler body costs 100 vs 150.
     return ["hauler", "harvester", "upgrader", "builder"];

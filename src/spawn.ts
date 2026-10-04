@@ -1,6 +1,7 @@
 import {
   bodyForRole,
   desiredCreeps,
+  hasNoEconomyCreeps,
   shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
   useDedicatedMiners,
@@ -9,6 +10,25 @@ import {
 import { countCreepsByRole, countSourceContainers } from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
+
+/** Reassign idle non-economy creeps to harvester when mining capacity is zero. */
+export function reassignForEconomySurvival(
+  room: Room,
+  counts: CreepQuotas,
+): void {
+  if (!hasNoEconomyCreeps(counts)) return;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "builder" && creep.memory.role !== "upgrader") {
+      continue;
+    }
+    creep.memory.role = "harvester";
+    delete creep.memory.sourceId;
+    return;
+  }
+}
 
 export function runSpawn(spawn: StructureSpawn): void {
   if (spawn.spawning) return;
@@ -49,11 +69,18 @@ export function runSpawn(spawn: StructureSpawn): void {
     economy,
   );
   const counts = countCreepsByRole();
+  reassignForEconomySurvival(room, counts);
+  // Recount after possible role reassignment so quotas/spawn order stay consistent.
+  const liveCounts = countCreepsByRole();
   const energyAvailable = room.energyAvailable;
-  const spawnOrder = spawnPriorityOrder(infrastructureDedicated, economy);
+  const spawnOrder = spawnPriorityOrder(
+    infrastructureDedicated,
+    economy,
+    liveCounts,
+  );
 
   for (const role of spawnOrder) {
-    if (counts[role] >= want[role]) continue;
+    if (liveCounts[role] >= want[role]) continue;
     const body = bodyForRole(role, energyAvailable);
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}`;

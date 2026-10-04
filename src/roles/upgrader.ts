@@ -1,4 +1,5 @@
 import { isIncomeStalled } from "../telemetry";
+import { canWithdrawFromSpawn } from "./builder";
 
 export function runUpgrader(creep: Creep): void {
   if (creep.store[RESOURCE_ENERGY] === 0) {
@@ -18,11 +19,20 @@ export function runUpgrader(creep: Creep): void {
     }
 
     const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
-    if (spawn?.store[RESOURCE_ENERGY] > 0) {
-      if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(spawn);
+    if (spawn) {
+      const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+      const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+      let economyCreeps = 0;
+      for (const name in Game.creeps) {
+        const role = Game.creeps[name].memory.role;
+        if (role === "harvester" || role === "miner") economyCreeps++;
       }
-      return;
+      if (canWithdrawFromSpawn(energy, capacity, economyCreeps > 0)) {
+        if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          creep.moveTo(spawn);
+        }
+        return;
+      }
     }
 
     const storage = creep.room.storage;
