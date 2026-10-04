@@ -41,12 +41,19 @@ Issue #${issueNumber}: ${issueTitle}
 
 ${issueBody}
 
+Mission: make the colony robust toward exponential growth (not a one-off income=0 patch).
+When the issue shows CRITICAL signals (noEconomyCreeps, incomeCollapsed, downgradeRisk, noUpgraders):
+- Fix survival first (economy creeps before builders; never drain spawn into non-economy roles)
+- Then strengthen the growth path: dedicated miners/haulers, source+controller containers, roads, walls/towers when RCL allows, reliable upgraders for RCL progression
+- Prefer durable detection in selfCheck/telemetry so Metrics can re-trigger Evolve without manual force_evolve
+
 Constraints:
 - TypeScript bot lives in src/; ops in ops/
 - Keep changes small and testable; run npm test && npm run build
 - Do not commit secrets
 - Follow docs/superpowers/specs/2026-09-07-autonomous-screeps-bot-design.md
 - Open the PR as ready for review (NOT draft) and add label "automerge" if possible
+- Respect existing rate limits; do not add extra agent runs or spam workflows
 ${closesRequirement}`;
 
   try {

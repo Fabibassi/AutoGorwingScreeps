@@ -26,6 +26,15 @@ export interface AgsHealthCheck {
    * Metrics should evolve on this without waiting for income-window stagnation.
    */
   noEconomyCreeps: boolean;
+  /** Controller downgrade timer is low or nobody is upgrading. */
+  downgradeRisk: boolean;
+  /** Controller.ticksToDowngrade when known. */
+  ticksToDowngrade?: number;
+  /**
+   * Active critical signals (noEconomyCreeps, incomeCollapsed, downgradeRisk, …).
+   * Metrics evolves when this is non-empty (unless force/rollback overrides).
+   */
+  critical: string[];
 }
 
 export interface AgsMemory {

@@ -51,10 +51,32 @@ export const PLACEHOLDER_METRICS: AgsMetrics = {
   updatedAt: 0,
 };
 
+/** Nudge Evolve agents toward growth specialization, not only income=0 patches. */
+export const GROWTH_MANDATE = `## Growth mandate
+Critical colony failures mean the strategy is wrong — do not only patch \`income=0\`.
+Review and improve the path to **exponential growth**:
+- Specialized **miner/hauler** pairs once source containers exist; never leave 0 economy creeps
+- **Spawn priority**: harvesters/miners before builders when the economy is empty; never drain spawn into builders
+- **Containers** at sources + controller; **roads** on high-traffic paths
+- **Walls/ramparts** from RCL3+; **towers** when unlocked
+- Sustained **upgrader** throughput so the controller never approaches downgrade
+- Prefer durable self-heal in \`src/\` so Metrics→Evolve does not need babysitting`;
+
+/** Criticals that must open Evolve (incomeCollapsed alone still uses rollback path). */
+export function healthNeedsEvolve(health?: AgsHealthCheck): boolean {
+  if (!health) return false;
+  if (health.noEconomyCreeps || health.downgradeRisk) return true;
+  const critical = health.critical ?? [];
+  return (
+    critical.includes("noEconomyCreeps") || critical.includes("downgradeRisk")
+  );
+}
+
 function metricsBody(
   metrics: AgsMetrics,
   note?: string,
   health?: AgsHealthCheck,
+  opts?: { includeGrowthMandate?: boolean },
 ): string {
   const parts = ["## Metrics snapshot"];
   if (note) parts.push(note);
@@ -62,6 +84,12 @@ function metricsBody(
   if (health) {
     parts.push("## Health check");
     parts.push("```json", JSON.stringify(health, null, 2), "```");
+    if (health.critical?.length) {
+      parts.push(`## Critical signals\n\`${health.critical.join("`, `")}\``);
+    }
+  }
+  if (opts?.includeGrowthMandate ?? healthNeedsEvolve(health)) {
+    parts.push(GROWTH_MANDATE);
   }
   return parts.join("\n");
 }
@@ -130,15 +158,21 @@ export function decideIssue(
     };
   }
 
-  // Critical: 0 harvesters/miners — evolve before income-rollback (strategy bug, not revert).
-  if (input.health?.noEconomyCreeps && input.openEvolveCount === 0) {
+  // Critical colony failure → evolve before income-rollback (strategy bug, not revert).
+  if (healthNeedsEvolve(input.health) && input.openEvolveCount === 0) {
+    const signals = input.health?.critical?.length
+      ? input.health.critical.join(",")
+      : input.health?.noEconomyCreeps
+        ? "noEconomyCreeps"
+        : "downgradeRisk";
     return {
       action: "evolve",
-      title: `AGS evolve: no economy creeps at tick ${input.metrics.tick}`,
+      title: `AGS evolve: critical ${signals} at tick ${input.metrics.tick}`,
       body: metricsBody(
         input.metrics,
-        "_Critical: claimed room has 0 harvesters and 0 miners._",
+        `_Critical colony failure: \`${signals}\`._`,
         input.health,
+        { includeGrowthMandate: true },
       ),
     };
   }
@@ -156,7 +190,9 @@ export function decideIssue(
     return {
       action: "evolve",
       title: `AGS evolve: stagnation at tick ${input.metrics.tick}`,
-      body: metricsBody(input.metrics, undefined, input.health),
+      body: metricsBody(input.metrics, undefined, input.health, {
+        includeGrowthMandate: true,
+      }),
     };
   }
   return null;
@@ -246,12 +282,12 @@ export function planMetricsAction(input: {
   });
 
   let reason: string | undefined;
-  if (decision?.title.includes("no economy creeps")) {
-    reason = "no_economy_creeps";
+  if (decision?.title.includes("critical")) {
+    reason = `critical:${(ags.health?.critical ?? []).join(",") || "health"}`;
   } else if (!decision) {
     if (rollback && openRollbackCount > 0) {
       reason = "open_rollback_exists";
-    } else if (ags.health?.noEconomyCreeps && openEvolveCount > 0) {
+    } else if (healthNeedsEvolve(ags.health) && openEvolveCount > 0) {
       reason = "open_evolve_exists";
     } else if (!stagnant) {
       reason = windows < 4 ? "need_4_windows" : "not_stagnant";

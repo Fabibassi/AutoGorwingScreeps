@@ -47,7 +47,7 @@ test("evolve when stagnant and no open evolve issues", () => {
   expect(d?.action).toBe("evolve");
 });
 
-test("evolve on noEconomyCreeps before income rollback", () => {
+test("evolve on critical noEconomyCreeps before income rollback", () => {
   const health = {
     tick: 1000,
     rcl: 4,
@@ -60,6 +60,9 @@ test("evolve on noEconomyCreeps before income rollback", () => {
     hasControllerContainer: true,
     constructionSites: 3,
     noEconomyCreeps: true,
+    downgradeRisk: true,
+    ticksToDowngrade: 8000,
+    critical: ["noEconomyCreeps", "incomeCollapsed", "downgradeRisk", "noUpgraders"],
   };
   const d = decideIssue({
     stagnant: false,
@@ -70,11 +73,13 @@ test("evolve on noEconomyCreeps before income rollback", () => {
     openRollbackCount: 0,
   });
   expect(d?.action).toBe("evolve");
-  expect(d?.title).toContain("no economy creeps");
+  expect(d?.title).toContain("critical");
   expect(d?.body).toContain("noEconomyCreeps");
+  expect(d?.body).toContain("Growth mandate");
+  expect(d?.body).toContain("miner/hauler");
 });
 
-test("noEconomyCreeps skipped when evolve already open", () => {
+test("critical skipped when evolve already open falls through to rollback", () => {
   expect(
     decideIssue({
       stagnant: false,
@@ -92,11 +97,41 @@ test("noEconomyCreeps skipped when evolve already open", () => {
         hasControllerContainer: true,
         constructionSites: 0,
         noEconomyCreeps: true,
+        downgradeRisk: false,
+        critical: ["noEconomyCreeps", "incomeCollapsed"],
       },
       openEvolveCount: 1,
       openRollbackCount: 0,
     })?.action,
   ).toBe("rollback");
+});
+
+test("downgradeRisk alone opens evolve with growth mandate", () => {
+  const d = decideIssue({
+    stagnant: false,
+    rollback: false,
+    metrics,
+    health: {
+      tick: 1,
+      rcl: 4,
+      creepDeficit: 0,
+      understaffed: [],
+      containersAtSources: 2,
+      sourceCount: 2,
+      dedicatedMiners: true,
+      spawnFillPct: 0.9,
+      hasControllerContainer: true,
+      constructionSites: 0,
+      noEconomyCreeps: false,
+      downgradeRisk: true,
+      ticksToDowngrade: 4000,
+      critical: ["downgradeRisk"],
+    },
+    openEvolveCount: 0,
+  });
+  expect(d?.action).toBe("evolve");
+  expect(d?.title).toContain("downgradeRisk");
+  expect(d?.body).toContain("Growth mandate");
 });
 
 test("none when stagnant but evolve already open", () => {
@@ -145,6 +180,8 @@ test("force evolve includes health snapshot when provided", () => {
     hasControllerContainer: false,
     constructionSites: 1,
     noEconomyCreeps: false,
+    downgradeRisk: false,
+    critical: [],
   };
   const d = decideIssue({
     stagnant: false,

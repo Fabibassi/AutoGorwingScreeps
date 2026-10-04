@@ -66,13 +66,30 @@ function countRoles(creepsMem: unknown): Record<string, number> {
   return counts;
 }
 
+function energyFrom(o: Record<string, unknown>): number {
+  if (typeof o.store === "object" && o.store) {
+    return (o.store as Record<string, number>).energy ?? 0;
+  }
+  return typeof o.energy === "number" ? o.energy : 0;
+}
+
 function summarizeObjects(objects: unknown[]): {
   creeps: Record<string, number>;
   myCreeps: number;
   spawns: Array<{ name?: string; energy?: number; energyCapacity?: number }>;
   sources: number;
-  controller?: { level?: number; progress?: number; progressTotal?: number };
+  controller?: {
+    level?: number;
+    progress?: number;
+    progressTotal?: number;
+    ticksToDowngrade?: number;
+  };
   constructionSites: number;
+  extensionEnergy: number;
+  storageEnergy: number;
+  containerEnergy: number;
+  droppedEnergy: number;
+  approxEnergyAvailable: number;
 } {
   const creeps: Record<string, number> = {};
   let myCreeps = 0;
@@ -80,8 +97,18 @@ function summarizeObjects(objects: unknown[]): {
     [];
   let sources = 0;
   let constructionSites = 0;
+  let extensionEnergy = 0;
+  let storageEnergy = 0;
+  let containerEnergy = 0;
+  let droppedEnergy = 0;
+  let spawnEnergy = 0;
   let controller:
-    | { level?: number; progress?: number; progressTotal?: number }
+    | {
+        level?: number;
+        progress?: number;
+        progressTotal?: number;
+        ticksToDowngrade?: number;
+      }
     | undefined;
 
   for (const raw of objects) {
@@ -95,17 +122,27 @@ function summarizeObjects(objects: unknown[]): {
       const role = name.split("-")[0] || "creep";
       creeps[role] = (creeps[role] ?? 0) + 1;
     } else if (type === "spawn") {
+      const energy = energyFrom(o);
+      spawnEnergy += energy;
       spawns.push({
         name: typeof o.name === "string" ? o.name : undefined,
-        energy: typeof o.store === "object" && o.store
-          ? ((o.store as Record<string, number>).energy ??
-            (o as { energy?: number }).energy)
-          : (o as { energy?: number }).energy,
+        energy,
         energyCapacity:
           typeof o.storeCapacityResource === "object" && o.storeCapacityResource
             ? (o.storeCapacityResource as Record<string, number>).energy
             : (o as { energyCapacity?: number }).energyCapacity,
       });
+    } else if (type === "extension") {
+      extensionEnergy += energyFrom(o);
+    } else if (type === "storage") {
+      storageEnergy += energyFrom(o);
+    } else if (type === "container") {
+      containerEnergy += energyFrom(o);
+    } else if (type === "energy" || type === "tombstone" || type === "ruin") {
+      droppedEnergy += energyFrom(o);
+      if (typeof o.resourceType === "string" && o.resourceType === "energy") {
+        droppedEnergy += typeof o.amount === "number" ? o.amount : 0;
+      }
     } else if (type === "source") {
       sources++;
     } else if (type === "controller") {
@@ -113,13 +150,26 @@ function summarizeObjects(objects: unknown[]): {
         level: o.level as number | undefined,
         progress: o.progress as number | undefined,
         progressTotal: o.progressTotal as number | undefined,
+        ticksToDowngrade: o.ticksToDowngrade as number | undefined,
       };
     } else if (type === "constructionSite") {
       constructionSites++;
     }
   }
 
-  return { creeps, myCreeps, spawns, sources, controller, constructionSites };
+  return {
+    creeps,
+    myCreeps,
+    spawns,
+    sources,
+    controller,
+    constructionSites,
+    extensionEnergy,
+    storageEnergy,
+    containerEnergy,
+    droppedEnergy,
+    approxEnergyAvailable: spawnEnergy + extensionEnergy,
+  };
 }
 
 export async function main(): Promise<void> {
