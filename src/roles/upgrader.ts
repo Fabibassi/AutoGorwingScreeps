@@ -1,3 +1,5 @@
+import { isIncomeStalled } from "../telemetry";
+
 export function runUpgrader(creep: Creep): void {
   if (creep.store[RESOURCE_ENERGY] === 0) {
     const controller = creep.room.controller;
@@ -25,7 +27,12 @@ export function runUpgrader(creep: Creep): void {
 
     const storage = creep.room.storage;
     const income = Memory.ags?.metrics.energyIncomePerTick ?? 0;
-    if (storage && storage.store[RESOURCE_ENERGY] > 0 && income <= 0) {
+    const baseline = Memory.ags?.baseline?.energyIncomePerTick;
+    if (
+      storage &&
+      storage.store[RESOURCE_ENERGY] > 0 &&
+      isIncomeStalled(income, baseline)
+    ) {
       if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
         creep.moveTo(storage);
       }

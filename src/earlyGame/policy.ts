@@ -1,3 +1,5 @@
+import { isIncomeStalled } from "../telemetry";
+
 /**
  * Early-game policy derived from common Screeps guides:
  * - RCL 1: lean bootstrap, no infrastructure spend
@@ -62,6 +64,7 @@ export function useDedicatedMiners(
 
 export interface EconomyContext {
   energyIncomePerTick?: number;
+  baselineIncome?: number;
   spawnFillPct?: number;
 }
 
@@ -82,7 +85,8 @@ export function shouldFallbackToMobileHarvest(
   ctx?: EconomyContext,
 ): boolean {
   if (!dedicatedMiners || !ctx) return false;
-  return (ctx.energyIncomePerTick ?? 0) <= 0;
+  const income = ctx.energyIncomePerTick ?? 0;
+  return isIncomeStalled(income, ctx.baselineIncome);
 }
 
 /** Whether spawn/quota logic should use the static miner pipeline this tick. */

@@ -23,6 +23,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     spawn.store.getUsedCapacity(RESOURCE_ENERGY) / spawnCapacity;
   const economy = {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
+    baselineIncome: Memory.ags?.baseline?.energyIncomePerTick,
     spawnFillPct,
   };
   const infrastructureDedicated = useDedicatedMiners(

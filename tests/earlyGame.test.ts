@@ -106,6 +106,15 @@ describe("desiredCreeps", () => {
     ).toBe(false);
   });
 
+  test("falls back when income collapsed vs baseline (RCL4 rollback #34)", () => {
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 1.44,
+        baselineIncome: 5,
+      }),
+    ).toBe(true);
+  });
+
   test("rcl2 dedicated mining drops bootstrap harvester when income recovers", () => {
     expect(
       desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 4 }),
