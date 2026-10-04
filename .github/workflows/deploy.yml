@@ -1,3 +1,6 @@
+# Push to main deploys when the push is not made with GITHUB_TOKEN.
+# Automerge merges use GITHUB_TOKEN and skip push triggers — Close issues on
+# merge dispatches this workflow so those merges still reach Screeps.
 name: Deploy Screeps
 on:
   push:

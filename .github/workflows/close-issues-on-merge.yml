@@ -1,4 +1,6 @@
 # Close linked GitHub issues when a PR merges (any merge path).
+# Also dispatches Deploy: merges via GITHUB_TOKEN (Automerge) do not fire
+# push-triggered workflows, so recovery PRs otherwise never reach Screeps.
 name: Close issues on merge
 on:
   pull_request_target:
@@ -11,6 +13,7 @@ jobs:
       contents: read
       pull-requests: read
       issues: write
+      actions: write
     steps:
       - name: Checkout base branch scripts
         uses: actions/checkout@v4
@@ -24,3 +27,12 @@ jobs:
           .github/scripts/close-linked-issues.sh \
             "${{ github.event.pull_request.number }}" \
             "${{ github.repository }}"
+
+      - name: Deploy main to Screeps
+        if: github.event.pull_request.base.ref == 'main'
+        env:
+          GH_TOKEN: ${{ secrets.AGS_GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching Deploy Screeps for main (merge of PR #${{ github.event.pull_request.number }})"
+          gh workflow run "Deploy Screeps" --repo "${{ github.repository }}" --ref main
