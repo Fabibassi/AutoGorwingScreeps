@@ -5,6 +5,7 @@ import {
   desiredCreeps,
   EARLY_GAME_THRESHOLDS,
   extensionQuota,
+  finalizeSpawnQuotas,
   isSoftLocked,
   shouldBuildContainers,
   shouldBuildRoads,
@@ -213,6 +214,19 @@ describe("constructionPriority", () => {
     expect(queue[0]).toBe("storage");
   });
 
+  test("defers storage at RCL 4 until source and controller containers exist", () => {
+    const queue = constructionPriority(4, {
+      sourceContainerCount: 0,
+      sourceCount: 2,
+      hasControllerContainer: false,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: extensionQuota(4),
+    });
+    expect(queue.includes("storage")).toBe(false);
+    expect(queue.filter((s) => s === "container").length).toBeGreaterThan(0);
+  });
+
   test("roads last when allowed", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
@@ -223,6 +237,37 @@ describe("constructionPriority", () => {
       extensionCount: extensionQuota(2),
     });
     expect(queue.at(-1)).toBe("road");
+  });
+});
+
+describe("finalizeSpawnQuotas", () => {
+  test("RCL4 mobile mode with zero income drops builder and adds emergency hauler", () => {
+    const base = desiredCreeps(4, 2, 0, true, { energyIncomePerTick: 0 });
+    expect(base.builder).toBe(1);
+    const adjusted = finalizeSpawnQuotas(
+      base,
+      { harvester: 0, miner: 0, hauler: 0, upgrader: 0, builder: 0 },
+      4,
+      { energyIncomePerTick: 0 },
+    );
+    expect(adjusted.builder).toBe(0);
+    expect(adjusted.upgrader).toBe(0);
+    expect(adjusted.hauler).toBe(1);
+    expect(adjusted.harvester).toBe(3);
+  });
+
+  test("healthy economy leaves dedicated-miner quotas unchanged", () => {
+    const base = desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 5 });
+    const counts = {
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 2,
+      builder: 0,
+    };
+    expect(finalizeSpawnQuotas(base, counts, 2, { energyIncomePerTick: 5 })).toEqual(
+      base,
+    );
   });
 });
 

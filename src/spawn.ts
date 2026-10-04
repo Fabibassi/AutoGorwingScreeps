@@ -1,6 +1,7 @@
 import {
   bodyForRole,
   desiredCreeps,
+  finalizeSpawnQuotas,
   hasNoEconomyCreeps,
   shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
@@ -61,17 +62,22 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
   }
 
-  const want = desiredCreeps(
-    rcl,
-    sourceCount,
-    containersAtSources,
-    hasConstructionSites,
-    economy,
-  );
   const counts = countCreepsByRole();
   reassignForEconomySurvival(room, counts);
   // Recount after possible role reassignment so quotas/spawn order stay consistent.
   const liveCounts = countCreepsByRole();
+  const want = finalizeSpawnQuotas(
+    desiredCreeps(
+      rcl,
+      sourceCount,
+      containersAtSources,
+      hasConstructionSites,
+      economy,
+    ),
+    liveCounts,
+    rcl,
+    economy,
+  );
   const energyAvailable = room.energyAvailable;
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
@@ -80,6 +86,12 @@ export function runSpawn(spawn: StructureSpawn): void {
   );
 
   for (const role of spawnOrder) {
+    if (
+      hasNoEconomyCreeps(liveCounts) &&
+      (role === "builder" || role === "upgrader")
+    ) {
+      continue;
+    }
     if (liveCounts[role] >= want[role]) continue;
     const body = bodyForRole(role, energyAvailable);
     if (body.length === 0) continue;

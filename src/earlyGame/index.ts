@@ -12,6 +12,7 @@ export {
   EXTENSIONS_BY_RCL,
   effectiveDedicatedMiners,
   extensionQuota,
+  finalizeSpawnQuotas,
   hasNoEconomyCreeps,
   isSoftLocked,
   needsBootstrapHarvester,

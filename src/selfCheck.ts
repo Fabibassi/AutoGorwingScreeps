@@ -1,6 +1,7 @@
 import {
   desiredCreeps,
   effectiveDedicatedMiners,
+  finalizeSpawnQuotas,
   hasNoEconomyCreeps,
   isSoftLocked,
   type CreepQuotas,
@@ -152,16 +153,23 @@ export function buildHealthCheck(
   const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const spawnFillPct =
     (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / spawnCapacity;
-  const want = desiredCreeps(
+  const economy = {
+    energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
+    baselineIncome: ags?.baseline?.energyIncomePerTick,
+    spawnFillPct,
+  };
+  const counts = countCreepsByRole();
+  const want = finalizeSpawnQuotas(
+    desiredCreeps(
+      rcl,
+      sourceCount,
+      containersAtSources,
+      hasConstructionSites,
+      economy,
+    ),
+    counts,
     rcl,
-    sourceCount,
-    containersAtSources,
-    hasConstructionSites,
-    {
-      energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
-      baselineIncome: ags?.baseline?.energyIncomePerTick,
-      spawnFillPct,
-    },
+    economy,
   );
 
   return computeHealthCheck({
@@ -171,7 +179,7 @@ export function buildHealthCheck(
     containersAtSources,
     hasControllerContainer: hasControllerContainer(room),
     constructionSites,
-    counts: countCreepsByRole(),
+    counts,
     want,
     spawnEnergy: spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0,
     spawnCapacity: spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 0,

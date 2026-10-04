@@ -213,6 +213,39 @@ export function desiredCreeps(
   return quotas;
 }
 
+/**
+ * Survival adjustments after base quotas: never spawn builders/upgraders into an
+ * empty economy; allow a cheap hauler (100e) to drain storage/containers when
+ * harvesters (150e) cannot spawn yet (#37).
+ */
+export function finalizeSpawnQuotas(
+  quotas: CreepQuotas,
+  counts: CreepQuotas,
+  rcl: number,
+  economy?: EconomyContext,
+): CreepQuotas {
+  if (rcl <= 1) return quotas;
+
+  const noEconomy = hasNoEconomyCreeps(counts);
+  const income = economy?.energyIncomePerTick ?? 0;
+  const collapsed =
+    income <= 0 || isIncomeStalled(income, economy?.baselineIncome);
+
+  if (!noEconomy && !collapsed) return quotas;
+
+  const next = { ...quotas };
+  next.builder = 0;
+
+  if (noEconomy) {
+    next.upgrader = 0;
+    next.hauler = Math.max(next.hauler, 1);
+  } else if (collapsed) {
+    next.upgrader = Math.min(next.upgrader, 1);
+  }
+
+  return next;
+}
+
 /** Ordered build priorities for early rooms (extensions before containers/storage). */
 export function constructionPriority(
   rcl: number,
@@ -251,7 +284,12 @@ export function constructionPriority(
   }
 
   if (shouldBuildStorage(rcl) && !opts.hasStorage) {
-    queue.push("storage");
+    const miningInfrastructureReady =
+      opts.sourceContainerCount >= opts.sourceCount &&
+      opts.hasControllerContainer;
+    if (miningInfrastructureReady) {
+      queue.push("storage");
+    }
   }
 
   if (opts.roadSitesAllowed) {
