@@ -74,6 +74,7 @@ export function buildHealthCheck(
     hasConstructionSites,
     {
       energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
+      baselineIncome: ags?.baseline?.energyIncomePerTick,
       spawnFillPct,
     },
   );
@@ -95,6 +96,7 @@ export function buildHealthCheck(
       sourceCount,
       {
         energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
+        baselineIncome: ags?.baseline?.energyIncomePerTick,
         spawnFillPct,
       },
     ),

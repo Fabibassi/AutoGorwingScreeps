@@ -1,7 +1,10 @@
+import { isIncomeStalled } from "../telemetry";
+
 type HaulTarget = StructureSpawn | StructureExtension | StructureContainer | StructureStorage;
 
 export interface StorageHaulContext {
   energyIncomePerTick: number;
+  baselineIncome?: number;
   spawnFillPct: number;
   extensionsNeedingEnergy: number;
   storageExists: boolean;
@@ -13,16 +16,18 @@ export function shouldDepositInStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists) return false;
   if (ctx.spawnFillPct < 0.85) return false;
   if (ctx.extensionsNeedingEnergy > 0) return false;
-  // Spawn/extensions gates suffice; blocking on zero income stranded full haulers
-  // when spawn+extensions were already topped up (RCL4 rollback #32).
+  // Zero income: haulers need overflow target when spawn+extensions are full (#32).
+  if (ctx.energyIncomePerTick <= 0) return true;
+  // Low-but-positive income: keep energy out of storage until mining recovers (#34).
+  if (isIncomeStalled(ctx.energyIncomePerTick, ctx.baselineIncome)) return false;
   return true;
 }
 
 /** Pull from storage when income stalled and spawn energy is unavailable for spawning. */
 export function shouldWithdrawFromStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists || (ctx.storageEnergy ?? 0) <= 0) return false;
-  if (ctx.energyIncomePerTick <= 0 || ctx.spawnFillPct < 0.5) return true;
-  return false;
+  if (ctx.spawnFillPct < 0.85) return true;
+  return isIncomeStalled(ctx.energyIncomePerTick, ctx.baselineIncome);
 }
 
 function haulContext(creep: Creep): StorageHaulContext {
@@ -38,6 +43,7 @@ function haulContext(creep: Creep): StorageHaulContext {
   const storage = creep.room.storage;
   return {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
+    baselineIncome: Memory.ags?.baseline?.energyIncomePerTick,
     spawnFillPct,
     extensionsNeedingEnergy,
     storageExists: storage !== undefined,

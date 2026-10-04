@@ -28,6 +28,16 @@ export function isStagnant(windows: number[], thresholdPct: number): boolean {
   return (max - min) / avg <= thresholdPct;
 }
 
+/** Income at or below rollback threshold vs baseline (includes zero). */
+export function isIncomeStalled(
+  currentIncome: number,
+  baselineIncome?: number,
+): boolean {
+  if (currentIncome <= 0) return true;
+  if (!baselineIncome || baselineIncome <= 0) return false;
+  return currentIncome <= baselineIncome * (1 - ROLLBACK_INCOME_DROP);
+}
+
 export function shouldRollback(
   currentIncome: number,
   baselineIncome: number,
@@ -35,7 +45,7 @@ export function shouldRollback(
 ): boolean {
   if (errorCount >= ROLLBACK_ERROR_COUNT) return true;
   if (baselineIncome <= 0) return false;
-  return currentIncome <= baselineIncome * (1 - ROLLBACK_INCOME_DROP);
+  return isIncomeStalled(currentIncome, baselineIncome);
 }
 
 export function tickTelemetry(opts: {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   average,
+  isIncomeStalled,
   isStagnant,
   recordEnergySample,
   shouldRollback,
@@ -31,6 +32,19 @@ describe("isStagnant", () => {
   });
   test("false when fewer than 4 windows", () => {
     expect(isStagnant([100, 100, 100], 0.05)).toBe(false);
+  });
+});
+
+describe("isIncomeStalled", () => {
+  test("true at zero income", () => {
+    expect(isIncomeStalled(0, 10)).toBe(true);
+  });
+  test("true at rollback threshold vs baseline", () => {
+    expect(isIncomeStalled(1.44, 5)).toBe(true);
+  });
+  test("false when healthy or baseline missing", () => {
+    expect(isIncomeStalled(4, 5)).toBe(false);
+    expect(isIncomeStalled(0.1, undefined)).toBe(false);
   });
 });
 

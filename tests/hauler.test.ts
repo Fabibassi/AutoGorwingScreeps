@@ -53,9 +53,35 @@ describe("storage haul policy", () => {
     expect(
       shouldDepositInStorage({
         energyIncomePerTick: 5,
+        baselineIncome: 5,
         spawnFillPct: 0.9,
         extensionsNeedingEnergy: 0,
         storageExists: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("blocks storage deposits when income collapsed vs baseline (RCL4 #34)", () => {
+    expect(
+      shouldDepositInStorage({
+        energyIncomePerTick: 1.44,
+        baselineIncome: 5,
+        spawnFillPct: 1,
+        extensionsNeedingEnergy: 0,
+        storageExists: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("withdraws from storage when income collapsed but spawn is topped up", () => {
+    expect(
+      shouldWithdrawFromStorage({
+        energyIncomePerTick: 1.44,
+        baselineIncome: 5,
+        spawnFillPct: 0.95,
+        extensionsNeedingEnergy: 0,
+        storageExists: true,
+        storageEnergy: 2000,
       }),
     ).toBe(true);
   });
