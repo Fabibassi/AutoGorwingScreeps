@@ -16,7 +16,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
-      actions: read
+      actions: write
       checks: read
       statuses: read
     steps:
@@ -31,12 +31,29 @@ jobs:
           N="${{ github.event.pull_request.number }}"
           SHA="${{ github.event.pull_request.head.sha }}"
           REPO="${{ github.repository }}"
+          BASE_REF="${{ github.event.pull_request.base.ref }}"
+
+          # GITHUB_TOKEN merges do not fire push / pull_request closed workflows.
+          # Deploy must be dispatched from this job once the PR is on main.
+          deploy_if_merged_to_main() {
+            PR_STATE="$(gh pr view "$N" --repo "$REPO" --json state,mergedAt)"
+            if ! echo "$PR_STATE" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
+              return 0
+            fi
+            if [ "$BASE_REF" != "main" ]; then
+              echo "Merged into $BASE_REF — skipping Deploy Screeps."
+              return 0
+            fi
+            echo "Dispatching Deploy Screeps for main (PR #$N merged via Automerge)."
+            gh workflow run "Deploy Screeps" --repo "$REPO" --ref main
+          }
 
           close_linked_if_merged() {
             PR_STATE="$(gh pr view "$N" --repo "$REPO" --json state,mergedAt)"
             if echo "$PR_STATE" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
               chmod +x .github/scripts/close-linked-issues.sh
               .github/scripts/close-linked-issues.sh "$N" "$REPO"
+              deploy_if_merged_to_main
             else
               echo "PR #$N not merged yet — issue close deferred to close-issues-on-merge workflow."
             fi
@@ -120,21 +137,42 @@ jobs:
             exit 0
           fi
 
+          # Merge immediately (CI already green). Prefer --squash over --auto so this
+          # job can close issues + dispatch Deploy before exiting; --auto alone can
+          # finish after the workflow and leave Screeps undeployed under GITHUB_TOKEN.
           set +e
-          MERGE_OUT="$(gh pr merge "$N" --repo "$REPO" --auto --squash 2>&1)"
+          MERGE_OUT="$(gh pr merge "$N" --repo "$REPO" --squash --delete-branch 2>&1)"
           MERGE_RC=$?
           set -e
           echo "$MERGE_OUT"
           if [ "$MERGE_RC" -eq 0 ]; then
-            echo "Auto-merge enabled for PR #$N"
-            # --auto may only queue merge; close only if already merged, else closed-workflow covers it.
+            echo "Merged PR #$N"
             close_linked_if_merged
             exit 0
           fi
-          if echo "$MERGE_OUT" | grep -qiE 'Merge already in progress|already merged|Pull request is already merged|already enabled|auto.?merge.*(already|enabled)'; then
-            echo "Merge/auto-merge already in progress or done — treating as success."
+          if echo "$MERGE_OUT" | grep -qiE 'Merge already in progress|already merged|Pull request is already merged'; then
+            echo "Merge already in progress or done — treating as success."
             close_linked_if_merged
             exit 0
           fi
-          echo "gh pr merge failed with exit $MERGE_RC"
+          # Fallback: queue auto-merge if immediate merge is blocked (e.g. required reviews).
+          set +e
+          AUTO_OUT="$(gh pr merge "$N" --repo "$REPO" --auto --squash 2>&1)"
+          AUTO_RC=$?
+          set -e
+          echo "$AUTO_OUT"
+          if [ "$AUTO_RC" -eq 0 ] || echo "$AUTO_OUT" | grep -qiE 'already enabled|auto.?merge.*(already|enabled)|already merged'; then
+            echo "Auto-merge enabled for PR #$N — waiting briefly for merge to complete."
+            for i in $(seq 1 30); do
+              PR_JSON="$(gh pr view "$N" --repo "$REPO" --json state,mergedAt)"
+              if echo "$PR_JSON" | jq -e '.state == "MERGED" or (.mergedAt != null)' >/dev/null; then
+                close_linked_if_merged
+                exit 0
+              fi
+              sleep 10
+            done
+            echo "Auto-merge queued but not completed within wait window; Deploy may need manual dispatch."
+            exit 0
+          fi
+          echo "gh pr merge failed with exit $MERGE_RC (auto fallback $AUTO_RC)"
           exit "$MERGE_RC"
