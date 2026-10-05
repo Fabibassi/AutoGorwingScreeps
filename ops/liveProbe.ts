@@ -85,6 +85,8 @@ function summarizeObjects(objects: unknown[]): {
     ticksToDowngrade?: number;
   };
   constructionSites: number;
+  sites: Array<{ structureType: string; progress: number; progressTotal: number; x: number; y: number }>;
+  extensionCount: number;
   extensionEnergy: number;
   storageEnergy: number;
   containerEnergy: number;
@@ -100,6 +102,8 @@ function summarizeObjects(objects: unknown[]): {
     [];
   let sources = 0;
   let constructionSites = 0;
+  const sites: Array<{ structureType: string; progress: number; progressTotal: number; x: number; y: number }> = [];
+  let extensionCount = 0;
   let extensionEnergy = 0;
   let storageEnergy = 0;
   let containerEnergy = 0;
@@ -139,6 +143,7 @@ function summarizeObjects(objects: unknown[]): {
         y: typeof o.y === "number" ? o.y : undefined,
       });
     } else if (type === "extension") {
+      extensionCount++;
       extensionEnergy += energyFrom(o);
     } else if (type === "storage") {
       storageEnergy += energyFrom(o);
@@ -167,6 +172,13 @@ function summarizeObjects(objects: unknown[]): {
       };
     } else if (type === "constructionSite") {
       constructionSites++;
+      sites.push({
+        structureType: String(o.structureType ?? "?"),
+        progress: typeof o.progress === "number" ? o.progress : 0,
+        progressTotal: typeof o.progressTotal === "number" ? o.progressTotal : 0,
+        x: typeof o.x === "number" ? o.x : -1,
+        y: typeof o.y === "number" ? o.y : -1,
+      });
     }
   }
 
@@ -190,6 +202,8 @@ function summarizeObjects(objects: unknown[]): {
     sources,
     controller,
     constructionSites,
+    sites,
+    extensionCount,
     extensionEnergy,
     storageEnergy,
     containerEnergy,

@@ -80,7 +80,7 @@ describe("desiredCreeps", () => {
       miner: 0,
       hauler: 2,
       upgrader: 1,
-      builder: 1,
+      builder: 2,
     });
   });
 

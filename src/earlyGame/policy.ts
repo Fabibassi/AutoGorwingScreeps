@@ -237,7 +237,7 @@ export function desiredCreeps(
       // Static mining always had source containers; haulers unlock energy for spawn.
       hauler: sources,
       upgrader: 1,
-      builder: infraBuilder ? 1 : 0,
+      builder: infraBuilder ? 2 : 0,
     };
   }
 
@@ -252,7 +252,8 @@ export function desiredCreeps(
       // (emergency CARRY-only may already own the first slot).
       hauler: depressed ? (energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy ? 2 : 1) : 0,
       upgrader: depressed ? 1 : 2,
-      builder: infraBuilder || (hasConstructionSites && !depressed) ? 1 : 0,
+      // Two builders finish source containers much faster under source contention.
+      builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
     };
   }
 
@@ -261,7 +262,7 @@ export function desiredCreeps(
     miner: sources,
     hauler: sources,
     upgrader: depressed ? 1 : 2,
-    builder: infraBuilder || (hasConstructionSites && !depressed) ? 1 : 0,
+    builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {
