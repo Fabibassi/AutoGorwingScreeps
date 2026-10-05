@@ -2,6 +2,7 @@ import {
   bodyForRole,
   desiredCreeps,
   hasNoEconomyCreeps,
+  needsInfrastructureBuilder,
   shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
   useDedicatedMiners,
@@ -131,11 +132,18 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (recycleCarryLessWorker(spawn)) return;
   }
 
+  const infrastructurePush = needsInfrastructureBuilder(
+    rcl,
+    containersAtSources,
+    sourceCount,
+    hasConstructionSites,
+  );
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
     liveCounts,
     energyAvailable,
+    { infrastructurePush },
   );
 
   for (const role of spawnOrder) {

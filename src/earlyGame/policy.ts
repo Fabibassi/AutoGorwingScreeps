@@ -173,33 +173,50 @@ export function hasNoEconomyCreeps(counts: Pick<CreepQuotas, "harvester" | "mine
   return (counts.harvester ?? 0) + (counts.miner ?? 0) === 0;
 }
 
+/** Move builder ahead of upgrader so container sites get WORK bodies first. */
+function prioritizeInfrastructureBuilder(
+  order: Array<keyof CreepQuotas>,
+): Array<keyof CreepQuotas> {
+  const withoutBuilder = order.filter((role) => role !== "builder");
+  const upgraderIdx = withoutBuilder.indexOf("upgrader");
+  if (upgraderIdx === -1) return [...withoutBuilder, "builder"];
+  const next = withoutBuilder.slice();
+  next.splice(upgraderIdx, 0, "builder");
+  return next;
+}
+
 /** Spawn harvester first when static mining stalled — hauler-first starves recovery. */
 export function spawnPriorityOrder(
   dedicatedMiners: boolean,
   ctx?: EconomyContext,
   counts?: Pick<CreepQuotas, "harvester" | "miner">,
   energyAvailable?: number,
+  opts?: { infrastructurePush?: boolean },
 ): Array<keyof CreepQuotas> {
+  let order: Array<keyof CreepQuotas>;
   // Soft-lock: energy trapped in extensions — hauler (100) consolidates into spawn for harvester (150).
   if (
     counts &&
     energyAvailable != null &&
     isSoftLocked(energyAvailable, counts)
   ) {
-    return ["hauler", "harvester", "miner", "upgrader", "builder"];
-  }
-  // Empty economy: always bootstrap a harvester before haulers/builders.
-  if (counts && hasNoEconomyCreeps(counts)) {
-    return ["harvester", "hauler", "miner", "upgrader", "builder"];
-  }
-  if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
+    order = ["hauler", "harvester", "miner", "upgrader", "builder"];
+  } else if (counts && hasNoEconomyCreeps(counts)) {
+    // Empty economy: always bootstrap a harvester before haulers/builders.
+    order = ["harvester", "hauler", "miner", "upgrader", "builder"];
+  } else if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
     // Hauler-first: containers may hold all room energy; hauler body costs 100 vs 150.
-    return ["hauler", "harvester", "upgrader", "builder"];
+    order = ["hauler", "harvester", "upgrader", "builder"];
+  } else if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
+    order = ["harvester", "hauler", "miner", "upgrader", "builder"];
+  } else {
+    order = DEFAULT_SPAWN_ORDER;
   }
-  if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
-    return ["harvester", "hauler", "miner", "upgrader", "builder"];
+
+  if (opts?.infrastructurePush) {
+    return prioritizeInfrastructureBuilder(order);
   }
-  return DEFAULT_SPAWN_ORDER;
+  return order;
 }
 
 export function desiredCreeps(

@@ -210,6 +210,14 @@ describe("spawnPriorityOrder", () => {
       ),
     ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
   });
+
+  test("builder before upgrader when source-container infrastructure push", () => {
+    expect(
+      spawnPriorityOrder(false, { energyIncomePerTick: 2.7, spawnFillPct: 0.27 }, undefined, undefined, {
+        infrastructurePush: true,
+      }),
+    ).toEqual(["hauler", "miner", "harvester", "builder", "upgrader"]);
+  });
 });
 
 describe("constructionPriority", () => {

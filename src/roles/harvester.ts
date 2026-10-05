@@ -3,31 +3,48 @@ import {
   findSourceContainerSites,
 } from "../room/queries";
 
-/** Prefer finishing source containers over controller when spawn is not starving. */
+/** Remote source-container work — only when spawn has a thin buffer. */
 export function shouldBuildSourceContainers(
   spawnFillPct: number,
   containersAtSources: number,
   sourceCount: number,
 ): boolean {
   if (containersAtSources >= Math.max(1, sourceCount)) return false;
-  // Thin spawn buffer (~60/300): spend the rest next to sources to unlock miners.
+  // Thin spawn buffer (~60/300): walk to a distant site instead of the spawn trip.
   return spawnFillPct >= 0.2;
 }
 
-function buildSourceContainerSite(creep: Creep): boolean {
-  const nearSite = creep.pos.findInRange(FIND_CONSTRUCTION_SITES, 3, {
-    filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-  })[0];
-  const site =
-    nearSite ??
-    (() => {
-      const sourceSites = findSourceContainerSites(creep.room);
-      if (sourceSites.length === 0) return null;
-      return (
-        creep.pos.findClosestByPath(sourceSites) ??
-        creep.pos.findClosestByRange(sourceSites)
-      );
-    })();
+function closestSourceContainerSite(
+  creep: Creep,
+  sites: ConstructionSite[],
+): ConstructionSite | null {
+  if (sites.length === 0) return null;
+  return (
+    creep.pos.findClosestByPath(sites) ??
+    creep.pos.findClosestByRange(sites) ??
+    null
+  );
+}
+
+/** Spend carried energy on a source-container site within range 3. */
+function buildLocalSourceContainerSite(creep: Creep): boolean {
+  const local = findSourceContainerSites(creep.room).filter(
+    (s) => creep.pos.getRangeTo(s) <= 3,
+  );
+  const site = closestSourceContainerSite(creep, local);
+  if (!site) return false;
+  if (creep.build(site) === ERR_NOT_IN_RANGE) {
+    creep.moveTo(site, { visualizePathStyle: { stroke: "#ffffff" } });
+  }
+  return true;
+}
+
+/** Path to any remaining source-container site (may cross the room). */
+function buildRemoteSourceContainerSite(creep: Creep): boolean {
+  const site = closestSourceContainerSite(
+    creep,
+    findSourceContainerSites(creep.room),
+  );
   if (!site) return false;
   if (creep.build(site) === ERR_NOT_IN_RANGE) {
     creep.moveTo(site, { visualizePathStyle: { stroke: "#ffffff" } });
@@ -72,10 +89,15 @@ export function runHarvester(creep: Creep): number {
   const capacitySpawn = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const fill =
     (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / capacitySpawn;
-  const preferBuild = shouldBuildSourceContainers(fill, atSources, sources);
+  const preferRemoteBuild = shouldBuildSourceContainers(fill, atSources, sources);
 
-  // Full at/near a source: finish the adjacent container before the spawn trip.
-  if (preferBuild && buildSourceContainerSite(creep)) {
+  // Always finish a local source-container site before any spawn trip.
+  // Walking away at ~20% fill was stalling sites near 0–200/5000.
+  if (atSources < sources && buildLocalSourceContainerSite(creep)) {
+    return 0;
+  }
+
+  if (preferRemoteBuild && buildRemoteSourceContainerSite(creep)) {
     return 0;
   }
 
@@ -86,8 +108,8 @@ export function runHarvester(creep: Creep): number {
     return 0;
   }
 
-  // Spawn full: build containers before upgrading.
-  if (atSources < sources && buildSourceContainerSite(creep)) {
+  // Spawn full: finish remaining source containers before upgrading.
+  if (atSources < sources && buildRemoteSourceContainerSite(creep)) {
     return 0;
   }
 
