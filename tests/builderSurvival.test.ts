@@ -478,7 +478,7 @@ describe("reclaimStrandedEmergencyHauler", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("does not cancel when a living creep matches spawning.name", () => {
+  test("waits when living sticky creep but spawn cannot afford a miner yet", () => {
     const cancel = vi.fn(() => OK);
     const suicide = vi.fn();
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
@@ -490,11 +490,29 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "hauler-1", remainingTime: 0, cancel },
-      room: { name: "W21N35" },
+      room: { name: "W21N35", energyAvailable: 100 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
     expect(suicide).not.toHaveBeenCalled();
+  });
+
+  test("unlock-cancels sticky living hauler when noEconomy and energy >= 150", () => {
+    const cancel = vi.fn(() => OK);
+    const suicide = vi.fn();
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      time: 100,
+      creeps: {
+        "hauler-1": { suicide, ticksToLive: 1400, memory: { role: "hauler" } },
+      },
+    };
+    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
+    const spawn = {
+      spawning: { name: "hauler-1", remainingTime: 0, cancel },
+      room: { name: "W21N35", energyAvailable: 200 },
+    };
+    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
+    expect(cancel).toHaveBeenCalled();
   });
 
   test("cancels empty stuck spawn (remainingTime 0, no creep)", () => {
@@ -506,7 +524,7 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "ghost-1", remainingTime: 0, cancel },
-      room: { name: "W21N35" },
+      room: { name: "W21N35", energyAvailable: 300 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
     expect(cancel).toHaveBeenCalled();
@@ -521,7 +539,7 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "miner-1", remainingTime: 5, cancel },
-      room: { name: "W21N35" },
+      room: { name: "W21N35", energyAvailable: 300 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();

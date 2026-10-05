@@ -273,9 +273,9 @@ export function recycleExcessHaulers(
  *
  * remainingTime > 0: live spawn — never cancel (aborts the creep).
  * remainingTime === 0 + no creep: ghost — cancel immediately.
- * remainingTime === 0 + living creep: NEVER cancel — Spawning.cancel() deletes
- * the newborn even after birth (live soft-lock loop). Wait for the engine to
- * clear the flag; the living hauler can still refill spawn from adjacent storage.
+ * remainingTime === 0 + living creep + healthy economy: leave alone (cancel deletes).
+ * remainingTime === 0 + living creep + noEconomy + enough energy: cancel to free
+ * spawn so the next tick can hatch a miner/harvester (sacrifice the stuck name).
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
@@ -292,25 +292,58 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   }
 
   const existing = Game.creeps[spawning.name];
+  if (!existing) {
+    if (ags) {
+      ags.zombieDebug = {
+        tick: Game.time,
+        spawningName: spawning.name,
+        remainingTime: 0,
+        hasExact: false,
+        action: "cancel-ghost",
+      };
+      if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+    }
+    return (
+      (spawning as { cancel?: () => ScreepsReturnCode }).cancel?.() === OK
+    );
+  }
+
+  const counts = countCreepsByRole();
+  const noEconomy = hasNoEconomyCreeps(counts);
+  const canAffordMiner = spawn.room.energyAvailable >= 150;
+  if (noEconomy && canAffordMiner) {
+    if (ags) {
+      ags.zombieDebug = {
+        tick: Game.time,
+        spawningName: spawning.name,
+        remainingTime: 0,
+        ttl: existing.ticksToLive,
+        hasExact: true,
+        action: "unlock-cancel-for-miner",
+      };
+      if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+    }
+    (
+      spawning as { cancel?: () => ScreepsReturnCode }
+    ).cancel?.();
+    // cancel deletes the namesake; ensure gone if cancel was a no-op.
+    if (Game.creeps[spawning.name]) {
+      Game.creeps[spawning.name].suicide();
+    }
+    return true;
+  }
+
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: 0,
-      ttl: existing?.ticksToLive,
-      hasExact: existing != null,
-      action: existing ? "wait-living" : "cancel-ghost",
+      ttl: existing.ticksToLive,
+      hasExact: true,
+      action: "wait-living",
     };
   }
-
-  // Living creep: leave alone. cancel() aborts/deletes it (observed live).
-  if (existing) return false;
-
-  if (ags?.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
-  const code = (
-    spawning as { cancel?: () => ScreepsReturnCode }
-  ).cancel?.();
-  return code === OK;
+  return false;
 }
 
 /** True when storage/container/drop with energy sits in range 1 of spawn. */
