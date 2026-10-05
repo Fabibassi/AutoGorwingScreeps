@@ -420,6 +420,7 @@ describe("clearZombieSpawn", () => {
     const suicide = vi.fn();
     const creep = {
       suicide,
+      ticksToLive: 400,
       room: { name: "W21N35" },
       memory: { role: "hauler" },
     };
@@ -434,11 +435,34 @@ describe("clearZombieSpawn", () => {
     expect(suicide).toHaveBeenCalled();
   });
 
-  test("ignores active spawns that still have remainingTime", () => {
+  test("suicides long-lived creep still named in spawn.spawning", () => {
+    const suicide = vi.fn();
+    const creep = {
+      suicide,
+      ticksToLive: 800,
+      room: { name: "W21N35" },
+      memory: { role: "hauler" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "hauler-old": creep },
+    };
+    const spawn = {
+      spawning: { name: "hauler-old", remainingTime: 12 },
+      room: { name: "W21N35" },
+    };
+    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
+    expect(suicide).toHaveBeenCalled();
+  });
+
+  test("ignores a brand-new creep that is still birthing", () => {
     const suicide = vi.fn();
     (globalThis as { Game?: unknown }).Game = {
       creeps: {
-        "hauler-1": { suicide, memory: { role: "hauler" } },
+        "hauler-1": {
+          suicide,
+          ticksToLive: 1500,
+          memory: { role: "hauler" },
+        },
       },
     };
     const spawn = {

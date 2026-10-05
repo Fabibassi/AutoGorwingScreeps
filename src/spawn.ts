@@ -197,16 +197,19 @@ export function recycleExcessHaulers(
 }
 
 /**
- * Screeps can leave spawn.spawning stuck at remainingTime 0 with a name that
- * already exists — spawn stays ERR_BUSY forever and the colony cannot recover.
- * Suiciding the live creep frees the name so the spawn queue can clear.
+ * Screeps can leave spawn.spawning stuck pointing at a creep that already lives.
+ * That keeps spawnCreep at ERR_BUSY forever. Suiciding the live creep frees the
+ * name so the spawn queue can clear and miners can respawn.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
   if (!spawning) return false;
-  if (spawning.remainingTime > 0) return false;
   const existing = Game.creeps[spawning.name];
   if (!existing) return false;
+  // Freshly spawning creeps start near 1500 TTL; anything lower has been alive.
+  const ttl = existing.ticksToLive ?? 1500;
+  const stuck = spawning.remainingTime <= 0 || ttl < 1490;
+  if (!stuck) return false;
   existing.suicide();
   return true;
 }
@@ -327,7 +330,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (role === "builder" && !economyFloorMet) continue;
     const body = bodyForRole(role, energyAvailable, { haulerMaxCost });
     if (body.length === 0) continue;
-    const name = `${role}-${Game.time}`;
+    const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
       // Prefer finished container sources so early miners do not sit on bare drops.
