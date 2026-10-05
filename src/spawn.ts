@@ -196,16 +196,14 @@ export function recycleExcessHaulers(
   return false;
 }
 
-/** Ticks to wait after remainingTime hits 0 before canceling a sticky spawn. */
-const ZOMBIE_SPAWN_GRACE_TICKS = 5;
-
 /**
  * Screeps can leave spawn.spawning stuck at remainingTime 0 (ERR_BUSY forever).
  *
  * remainingTime > 0: live spawn — never cancel (aborts the creep).
  * remainingTime === 0 + no creep: ghost — cancel immediately.
- * remainingTime === 0 + creep exists: birth tick looks identical to sticky;
- * wait ZOMBIE_SPAWN_GRACE_TICKS, then cancel ONLY (never suicide).
+ * remainingTime === 0 + living creep: NEVER cancel — Spawning.cancel() deletes
+ * the newborn even after birth (live soft-lock loop). Wait for the engine to
+ * clear the flag; the living hauler can still refill spawn from adjacent storage.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
@@ -222,49 +220,25 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   }
 
   const existing = Game.creeps[spawning.name];
-  const cancel = () =>
-    (spawning as { cancel?: () => ScreepsReturnCode }).cancel?.();
-
-  // Empty stuck name — safe to clear immediately.
-  if (!existing) {
-    if (ags) {
-      ags.zombieDebug = {
-        tick: Game.time,
-        spawningName: spawning.name,
-        remainingTime: 0,
-        hasExact: false,
-        action: "cancel-ghost",
-      };
-      if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
-    }
-    return cancel() === OK;
-  }
-
-  // Creep already exists: birth tick OR sticky flag. Grace before cancel.
-  const seen = (ags?.zombieSpawnSeen ?? {}) as Record<string, number>;
-  const firstSeen = seen[spawning.name];
-  if (firstSeen == null) {
-    if (ags) {
-      ags.zombieSpawnSeen = { ...seen, [spawning.name]: Game.time };
-    }
-    return false;
-  }
-  if (Game.time - firstSeen < ZOMBIE_SPAWN_GRACE_TICKS) return false;
-
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: 0,
-      ttl: existing.ticksToLive,
-      firstSeen,
-      hasExact: true,
-      action: "cancel-sticky",
+      ttl: existing?.ticksToLive,
+      hasExact: existing != null,
+      action: existing ? "wait-living" : "cancel-ghost",
     };
-    if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
   }
-  // Clear sticky flag only — do NOT suicide the living hauler/miner.
-  return cancel() === OK;
+
+  // Living creep: leave alone. cancel() aborts/deletes it (observed live).
+  if (existing) return false;
+
+  if (ags?.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+  const code = (
+    spawning as { cancel?: () => ScreepsReturnCode }
+  ).cancel?.();
+  return code === OK;
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
@@ -336,7 +310,8 @@ export function runSpawn(spawn: StructureSpawn): void {
   }
   const liveCounts = countCreepsByRole();
 
-  if (spawn.spawning && spawn.spawning.remainingTime > 0) {
+  // Any spawn.spawning (active OR sticky with live creep) → do not spawnCreep.
+  if (spawn.spawning) {
     if (Memory.ags) {
       Memory.ags.lastSpawnFail = {
         tick: Game.time,
