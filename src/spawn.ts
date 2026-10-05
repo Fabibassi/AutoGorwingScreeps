@@ -48,7 +48,7 @@ export function directionsToward(
   return [primary, prev, next];
 }
 
-/** Immobile emergency hauler with no adjacent energy — recycle to free sticky spawn. */
+/** Immobile emergency hauler with no adjacent energy — recycle/suicide to free sticky spawn. */
 export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
@@ -56,7 +56,6 @@ export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
     if (creep.memory.role !== "hauler") continue;
     if (creep.getActiveBodyparts(MOVE) > 0) continue;
     if ((creep.store[RESOURCE_ENERGY] ?? 0) > 0) continue;
-    if (!creep.pos.isNearTo(spawn) && !creep.pos.isEqualTo(spawn.pos)) continue;
 
     const storage = creep.room.storage;
     const nearStorage =
@@ -79,7 +78,12 @@ export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
       }).length > 0;
     if (nearDrop) continue;
 
-    return spawn.recycleCreep(creep) === OK;
+    // Wrong tile: recycle if next to spawn (refund), otherwise suicide to unblock.
+    if (creep.pos.isNearTo(spawn) || creep.pos.isEqualTo(spawn.pos)) {
+      return spawn.recycleCreep(creep) === OK;
+    }
+    creep.suicide();
+    return true;
   }
   return false;
 }
