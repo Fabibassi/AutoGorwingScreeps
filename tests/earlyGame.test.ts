@@ -274,8 +274,20 @@ describe("spawnPriorityOrder", () => {
         true,
         { energyIncomePerTick: 0, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
+        50,
       ),
     ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
+  });
+
+  test("harvester first when empty crew but spawn can afford a worker", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        { energyIncomePerTick: 0, spawnFillPct: 1, energyAvailable: 300 },
+        { harvester: 0, miner: 0 },
+        300,
+      ),
+    ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
   });
 
   test("harvester first when economy creeps are zero but income positive", () => {

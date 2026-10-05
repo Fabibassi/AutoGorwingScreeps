@@ -468,9 +468,12 @@ export function runSpawn(spawn: StructureSpawn): void {
     energyAvailable,
     { infrastructurePush, buildersBelowQuota, economyFloorMet },
   );
-  // Leave room for a miner body when mining is wiped (fat haulers ate 300+).
+  // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
   const haulerMaxCost =
-    liveCounts.miner === 0 && infrastructureDedicated ? 100 : undefined;
+    hasNoEconomyCreeps(liveCounts) ||
+    (liveCounts.miner === 0 && infrastructureDedicated)
+      ? 100
+      : undefined;
 
   for (const role of spawnOrder) {
     if (liveCounts[role] >= want[role]) continue;

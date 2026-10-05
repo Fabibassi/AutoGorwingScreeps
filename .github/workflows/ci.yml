@@ -18,3 +18,5 @@ jobs:
       - run: npm run build
       - name: Soft-lock mockup sim
         run: npx tsx ops/sim/softLock.ts --instance ci-softlock --port 22199 --ticks 80
+      - name: Boot mockup sim
+        run: npx tsx ops/sim/boot.ts --instance ci-boot --port 22198 --ticks 80

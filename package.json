@@ -15,6 +15,7 @@
     "metrics:pull": "tsx ops/metricsPull.ts",
     "agent:evolve": "tsx ops/evolveAgent.ts",
     "sim:softlock": "npm run build && tsx ops/sim/softLock.ts",
+    "sim:boot": "npm run build && tsx ops/sim/boot.ts",
     "sim:farm": "npm run build && tsx ops/sim/farm.ts"
   },
   "devDependencies": {

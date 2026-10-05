@@ -111,8 +111,10 @@ Deterministische Szenarien mit **screeps-server-mockup** (Tick-für-Tick, parall
 Live-World bleibt Canary — Soft-Lock & Early-Game hier üben.
 
 ```powershell
-npm run sim:softlock              # 1 Instanz, Soft-Lock-Szenario
-npm run sim:farm -- --workers 4   # 4 parallele Instanzen (eigene Ports/DBs)
+npm run sim:softlock              # Soft-Lock (Storage voll, Spawn leer)
+npm run sim:boot                  # Empty-Room Boot (RCL2, Spawn voll)
+npm run sim:farm -- --workers 4   # 4× Soft-Lock parallel
+npm run sim:farm -- --scenario boot --workers 4 --ticks 80
 npm run sim:farm -- --workers 8 --ticks 60
 ```
 

@@ -235,10 +235,13 @@ export function spawnPriorityOrder(
   ) {
     order = ["hauler", "harvester", "miner", "upgrader", "builder"];
   } else if (counts && hasNoEconomyCreeps(counts)) {
-    // Zero income + empty crew: drain banked storage with hauler@100 before
-    // waiting for harvester@200. Positive income: bootstrap harvest first.
+    // Soft bank (spawn < 200): hauler@100 drains storage/containers first.
+    // Full spawn (≥200): harvest immediately — a fat hauler wastes the boot budget.
+    const canAffordWorker =
+      (energyAvailable ?? ctx?.energyAvailable ?? 0) >=
+      EARLY_GAME_THRESHOLDS.minBootstrapEnergy;
     order =
-      (ctx?.energyIncomePerTick ?? 0) <= 0
+      (ctx?.energyIncomePerTick ?? 0) <= 0 && !canAffordWorker
         ? ["hauler", "harvester", "miner", "upgrader", "builder"]
         : ["harvester", "miner", "hauler", "upgrader", "builder"];
   } else if (counts && dedicatedMiners && (counts.miner ?? 0) === 0) {

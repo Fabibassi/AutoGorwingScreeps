@@ -1,6 +1,8 @@
 /**
- * Run N soft-lock sims in parallel (separate mockup ports/dirs).
- * Usage: npx tsx ops/sim/farm.ts --workers 4 --ticks 40
+ * Run N sims in parallel (separate mockup ports/dirs).
+ * Usage:
+ *   npx tsx ops/sim/farm.ts --workers 4 --ticks 40
+ *   npx tsx ops/sim/farm.ts --scenario boot --workers 4
  */
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -8,27 +10,39 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
+const SCENARIOS: Record<string, string> = {
+  softlock: "ops/sim/softLock.ts",
+  boot: "ops/sim/boot.ts",
+};
+
 function parseArgs(argv: string[]) {
   let workers = 4;
   let ticks = 40;
   let basePort = 22100;
+  let scenario = "softlock";
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--workers" && argv[i + 1]) workers = Number(argv[++i]);
     else if (a === "--ticks" && argv[i + 1]) ticks = Number(argv[++i]);
     else if (a === "--base-port" && argv[i + 1]) basePort = Number(argv[++i]);
+    else if (a === "--scenario" && argv[i + 1]) scenario = argv[++i];
   }
-  return { workers, ticks, basePort };
+  return { workers, ticks, basePort, scenario };
 }
 
-function runOne(instance: string, port: number, ticks: number): Promise<number> {
+function runOne(
+  script: string,
+  instance: string,
+  port: number,
+  ticks: number,
+): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
       [
         "--import",
         "tsx",
-        path.join(ROOT, "ops/sim/softLock.ts"),
+        path.join(ROOT, script),
         "--instance",
         instance,
         "--port",
@@ -57,12 +71,19 @@ function runOne(instance: string, port: number, ticks: number): Promise<number> 
 }
 
 async function main() {
-  const { workers, ticks, basePort } = parseArgs(process.argv.slice(2));
+  const { workers, ticks, basePort, scenario } = parseArgs(process.argv.slice(2));
+  const script = SCENARIOS[scenario];
+  if (!script) {
+    console.error(
+      `[farm] unknown scenario=${scenario}; known: ${Object.keys(SCENARIOS).join(", ")}`,
+    );
+    process.exit(2);
+  }
   console.log(
-    `[farm] workers=${workers} ticks=${ticks} basePort=${basePort} (machine guide: 8–16 mockup workers OK on 20-thread/64GB)`,
+    `[farm] scenario=${scenario} workers=${workers} ticks=${ticks} basePort=${basePort}`,
   );
   const jobs = Array.from({ length: workers }, (_, i) =>
-    runOne(`softlock-${i}`, basePort + i, ticks),
+    runOne(script, `${scenario}-${i}`, basePort + i, ticks),
   );
   const codes = await Promise.all(jobs);
   const failed = codes.filter((c) => c !== 0).length;
