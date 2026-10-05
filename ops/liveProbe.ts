@@ -103,6 +103,9 @@ function summarizeObjects(objects: unknown[]): {
   /** Largest energy piles with distance to first spawn (soft-lock triage). */
   topDrops: Array<{ amount: number; x: number; y: number; distToSpawn: number | null }>;
   energyNearSpawn: number;
+  /** Adjacent spawn tiles free for newborn creeps (max 8). */
+  freeSpawnExits: number;
+  spawnAdjacentBlocked: Array<{ x: number; y: number; by: string }>;
 } {
   const creeps: Record<string, number> = {};
   const creepDetails: Array<{
@@ -230,6 +233,67 @@ function summarizeObjects(objects: unknown[]): {
     .filter((d) => d.distToSpawn != null && d.distToSpawn <= 2)
     .reduce((s, d) => s + d.amount, 0);
 
+  const BLOCKING = new Set([
+    "spawn",
+    "extension",
+    "storage",
+    "tower",
+    "link",
+    "lab",
+    "terminal",
+    "factory",
+    "nuker",
+    "observer",
+    "powerSpawn",
+    "wall",
+    "rampart",
+    "constructedWall",
+  ]);
+  const spawnAdjacentBlocked: Array<{ x: number; y: number; by: string }> = [];
+  let freeSpawnExits = 0;
+  if (spawnPos?.x != null && spawnPos.y != null) {
+    const sx = spawnPos.x;
+    const sy = spawnPos.y;
+    const deltas = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+      [1, 1],
+      [1, -1],
+      [-1, 1],
+      [-1, -1],
+    ];
+    for (const [dx, dy] of deltas) {
+      const x = sx + dx;
+      const y = sy + dy;
+      const blockers = objects.filter((raw) => {
+        if (raw == null || typeof raw !== "object") return false;
+        const o = raw as Record<string, unknown>;
+        if (o.x !== x || o.y !== y) return false;
+        const t = String(o.type ?? "");
+        if (t === "constructionSite") {
+          const st = String(o.structureType ?? "");
+          return st !== "road" && st !== "container";
+        }
+        return BLOCKING.has(t);
+      });
+      if (blockers.length === 0) {
+        freeSpawnExits++;
+      } else {
+        const o = blockers[0] as Record<string, unknown>;
+        spawnAdjacentBlocked.push({
+          x,
+          y,
+          by:
+            o.type === "constructionSite"
+              ? `site:${String(o.structureType)}`
+              : String(o.type),
+        });
+      }
+    }
+  }
+
   return {
     creeps,
     creepDetails,
@@ -247,6 +311,8 @@ function summarizeObjects(objects: unknown[]): {
     approxEnergyAvailable: spawnEnergy + extensionEnergy,
     topDrops: withDist.slice(0, 8),
     energyNearSpawn,
+    freeSpawnExits,
+    spawnAdjacentBlocked,
   };
 }
 

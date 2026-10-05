@@ -111,19 +111,19 @@ Deterministische Szenarien mit **screeps-server-mockup** (Tick-für-Tick, parall
 Live-World bleibt Canary — Soft-Lock & Early-Game hier üben.
 
 ```powershell
-npm run sim:softlock              # Soft-Lock (Storage voll, Spawn leer)
-npm run sim:boot                  # Empty-Room Boot (RCL2, Spawn voll)
-npm run sim:farm -- --workers 4   # 4× Soft-Lock parallel
-npm run sim:farm -- --scenario boot --workers 4 --ticks 80
-npm run sim:farm -- --workers 8 --ticks 60
+npm run sim:softlock                        # Soft-Lock (Storage voll, Spawn leer)
+npm run sim:boot                            # Empty-Room Boot (RCL2, Spawn voll)
+npm run sim:farm -- --workers 20 --quiet    # 20 parallele Soft-Lock-Instanzen
+npm run sim:farm -- --scenario boot --workers 20 --concurrency 10 --quiet
 ```
 
 | Hardware (dieser PC) | Empfehlung |
 |----------------------|------------|
-| ~20 Threads / ~64 GB | **8–16** Mockup-Worker parallel |
+| ~20 Threads / ~64 GB | **bis ~20** Mockup-Worker (bei RAM-Druck `--concurrency 10`) |
 | Voller Private Server (Steam/`screeps`) | eher **2–4** gleichzeitig |
 
-Pro Worker: eigener Ordner unter `.sim-servers/` + eigener Port (`--base-port`, Default 22100).
+Pro Worker: eigener Ordner unter `.sim-servers/` + eigener Port (`--base-port`, Default 22100).  
+`--concurrency N` startet max. N Prozesse gleichzeitig (Queue für den Rest). `--quiet` nur One-Liner pro Worker.
 
 World-Deploy bleibt unverändert. RCL8-Escort ist zugunsten der Sim-Farm pausiert.
 

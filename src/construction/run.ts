@@ -16,6 +16,7 @@ import {
   tryPlaceContainer,
   tryPlaceExtension,
   tryPlaceRoadOnPath,
+  tryPlaceStorageNearSpawn,
 } from "./placement";
 
 const MAX_NON_ROAD_SITES = 3;
@@ -116,10 +117,7 @@ export function runConstruction(room: Room): void {
     }
 
     if (structureType === STRUCTURE_STORAGE && room.controller) {
-      const spot = findAdjacentSpot(room, spawn.pos);
-      if (spot && room.createConstructionSite(spot, STRUCTURE_STORAGE) === OK) {
-        return;
-      }
+      if (tryPlaceStorageNearSpawn(room, spawn.pos)) return;
       continue;
     }
 
