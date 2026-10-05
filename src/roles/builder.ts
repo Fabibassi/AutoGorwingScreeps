@@ -10,7 +10,7 @@ export function canWithdrawFromSpawn(
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
   const ratio = spawnEnergy / spawnCapacity;
-  // Finish source containers even when spawn is only half full — otherwise sites stall forever.
+  // Finish source containers even when spawn is only partly full.
   if (opts?.infrastructurePush) return ratio >= 0.4;
   return ratio >= 0.85;
 }
@@ -28,7 +28,17 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
 }
 
 export function runBuilder(creep: Creep): number {
-  if (creep.store[RESOURCE_ENERGY] === 0) {
+  if (creep.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+    // Self-feed: WORK builders harvest when logistics cannot spare spawn energy.
+    const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+    if (source) {
+      const code = creep.harvest(source);
+      if (code === ERR_NOT_IN_RANGE) {
+        creep.moveTo(source, { visualizePathStyle: { stroke: "#ffffff" } });
+      }
+      if (code === OK || code === ERR_NOT_IN_RANGE) return 0;
+    }
+
     const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
       filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= 20,
     });
