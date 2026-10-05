@@ -36,6 +36,18 @@ export function preferLogisticsRefill(
   return containersAtSources >= Math.max(1, sourceCount);
 }
 
+/** Closest store with energy — avoids walking to far source containers while spawn/storage sit full. */
+export function pickClosestLogisticsEnergy(
+  candidates: Array<{ id: string; energy: number; range: number }>,
+): string | null {
+  let best: { id: string; range: number } | null = null;
+  for (const c of candidates) {
+    if (c.energy <= 0) continue;
+    if (!best || c.range < best.range) best = { id: c.id, range: c.range };
+  }
+  return best?.id ?? null;
+}
+
 function findBuildSite(creep: Creep): ConstructionSite | null {
   const sourceCount = creep.room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(creep.room);
@@ -65,57 +77,75 @@ function refillFromLogistics(creep: Creep): boolean {
     return true;
   }
 
-  const container = creep.pos.findClosestByPath(FIND_STRUCTURES, {
+  type StoreStruct = StructureContainer | StructureStorage | StructureSpawn;
+  const byId = new Map<string, StoreStruct>();
+  const ranked: Array<{ id: string; energy: number; range: number }> = [];
+
+  const containers = creep.room.find(FIND_STRUCTURES, {
     filter: (s): s is StructureContainer =>
       s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0,
   });
-  if (container) {
-    if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(container);
-    }
-    return true;
+  for (const c of containers) {
+    byId.set(c.id, c);
+    ranked.push({
+      id: c.id,
+      energy: c.store[RESOURCE_ENERGY],
+      range: creep.pos.getRangeTo(c),
+    });
   }
 
   const storage = creep.room.storage;
   if (storage && storage.store[RESOURCE_ENERGY] > 0) {
-    if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(storage);
-    }
-    return true;
+    byId.set(storage.id, storage);
+    ranked.push({
+      id: storage.id,
+      energy: storage.store[RESOURCE_ENERGY],
+      range: creep.pos.getRangeTo(storage),
+    });
   }
 
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
-  if (!spawn) return false;
+  if (spawn) {
+    const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+    const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+    let economyCreeps = 0;
+    let builders = 0;
+    for (const name in Game.creeps) {
+      const role = Game.creeps[name].memory.role;
+      if (role === "harvester" || role === "miner") economyCreeps++;
+      if (role === "builder") builders++;
+    }
+    const sourceCount = creep.room.find(FIND_SOURCES).length;
+    const containersAtSources = countSourceContainers(creep.room);
+    const hasSites = creep.room.find(FIND_CONSTRUCTION_SITES).length > 0;
+    const infrastructurePush =
+      containersAtSources < sourceCount && hasSites;
+    // Extension push: allow spawn siphon at infra thresholds so 3k sites move.
+    const extensionPush =
+      !infrastructurePush &&
+      hasSites &&
+      preferLogisticsRefill(containersAtSources, sourceCount);
+    if (
+      canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
+        infrastructurePush: infrastructurePush || extensionPush,
+        buildersBelowQuota: infrastructurePush && builders < 2,
+      })
+    ) {
+      byId.set(spawn.id, spawn);
+      ranked.push({
+        id: spawn.id,
+        energy,
+        range: creep.pos.getRangeTo(spawn),
+      });
+    }
+  }
 
-  const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
-  const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
-  let economyCreeps = 0;
-  let builders = 0;
-  for (const name in Game.creeps) {
-    const role = Game.creeps[name].memory.role;
-    if (role === "harvester" || role === "miner") economyCreeps++;
-    if (role === "builder") builders++;
-  }
-  const sourceCount = creep.room.find(FIND_SOURCES).length;
-  const containersAtSources = countSourceContainers(creep.room);
-  const hasSites = creep.room.find(FIND_CONSTRUCTION_SITES).length > 0;
-  const infrastructurePush =
-    containersAtSources < sourceCount && hasSites;
-  // Extension push: allow spawn siphon at infra thresholds so 3k sites move.
-  const extensionPush =
-    !infrastructurePush &&
-    hasSites &&
-    preferLogisticsRefill(containersAtSources, sourceCount);
-  if (
-    !canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
-      infrastructurePush: infrastructurePush || extensionPush,
-      buildersBelowQuota: infrastructurePush && builders < 2,
-    })
-  ) {
-    return false;
-  }
-  if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-    creep.moveTo(spawn);
+  const bestId = pickClosestLogisticsEnergy(ranked);
+  if (!bestId) return false;
+  const target = byId.get(bestId);
+  if (!target) return false;
+  if (creep.withdraw(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+    creep.moveTo(target);
   }
   return true;
 }

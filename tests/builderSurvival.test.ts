@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   canWithdrawFromSpawn,
+  pickClosestLogisticsEnergy,
   preferLogisticsRefill,
 } from "../src/roles/builder";
 import { hasNoEconomyCreeps } from "../src/earlyGame";
@@ -15,6 +16,34 @@ describe("preferLogisticsRefill", () => {
     expect(preferLogisticsRefill(2, 2)).toBe(true);
     expect(preferLogisticsRefill(1, 2)).toBe(false);
     expect(preferLogisticsRefill(0, 2)).toBe(false);
+  });
+});
+
+describe("pickClosestLogisticsEnergy", () => {
+  test("prefers nearby spawn/storage over a distant source container", () => {
+    // Extension sites sit on the spawn — walking to source containers starves builds.
+    expect(
+      pickClosestLogisticsEnergy([
+        { id: "container-far", energy: 500, range: 20 },
+        { id: "storage", energy: 1650, range: 12 },
+        { id: "spawn", energy: 300, range: 1 },
+      ]),
+    ).toBe("spawn");
+    expect(
+      pickClosestLogisticsEnergy([
+        { id: "container-far", energy: 500, range: 20 },
+        { id: "storage", energy: 1650, range: 3 },
+      ]),
+    ).toBe("storage");
+  });
+
+  test("skips empty stores and returns null when nothing has energy", () => {
+    expect(
+      pickClosestLogisticsEnergy([
+        { id: "spawn", energy: 0, range: 1 },
+        { id: "storage", energy: 0, range: 2 },
+      ]),
+    ).toBeNull();
   });
 });
 
