@@ -40,6 +40,10 @@ export function buildHaulerBody(energyAvailable: number): BodyPartConstant[] {
   if (body.length === 0 && energyAvailable >= pairCost) {
     return ["carry", "move"];
   }
+  // Soft-lock emergency: stationary CARRY @ 50 — only useful if energy lies in range 1.
+  if (body.length === 0 && energyAvailable >= PART_COST.carry) {
+    return ["carry"];
+  }
   return body;
 }
 

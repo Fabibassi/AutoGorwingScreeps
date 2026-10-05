@@ -318,13 +318,19 @@ describe("bodyForRole", () => {
 
   test("miner and hauler return empty when energy is insufficient", () => {
     expect(bodyForRole("miner", 100)).toEqual([]);
-    expect(bodyForRole("hauler", 50)).toEqual([]);
+    expect(bodyForRole("hauler", 49)).toEqual([]);
   });
 
   test("hauler bootstrap body spawns at 100 energy when harvester needs 200", () => {
     expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
     expect(bodyForRole("harvester", 100)).toEqual([]);
     expect(bodyForRole("harvester", 200)).toEqual(["work", "carry", "move"]);
+  });
+
+  test("hauler emergency stationary CARRY when below MOVE+CARRY cost", () => {
+    expect(bodyForRole("hauler", 50)).toEqual(["carry"]);
+    expect(bodyForRole("hauler", 69)).toEqual(["carry"]);
+    expect(bodyForRole("hauler", 49)).toEqual([]);
   });
 });
 

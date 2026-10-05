@@ -129,6 +129,10 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= minDrop,
   });
   if (dropped.length > 0) {
+    // Stationary emergency haulers (CARRY-only) cannot path — use range search.
+    if (creep.getActiveBodyparts(MOVE) === 0) {
+      return creep.pos.findInRange(dropped, 1)[0] ?? null;
+    }
     return creep.pos.findClosestByPath(dropped);
   }
 

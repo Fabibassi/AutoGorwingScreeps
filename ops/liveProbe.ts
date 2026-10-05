@@ -76,7 +76,7 @@ function energyFrom(o: Record<string, unknown>): number {
 function summarizeObjects(objects: unknown[]): {
   creeps: Record<string, number>;
   myCreeps: number;
-  spawns: Array<{ name?: string; energy?: number; energyCapacity?: number }>;
+  spawns: Array<{ name?: string; energy?: number; energyCapacity?: number; x?: number; y?: number }>;
   sources: number;
   controller?: {
     level?: number;
@@ -90,10 +90,13 @@ function summarizeObjects(objects: unknown[]): {
   containerEnergy: number;
   droppedEnergy: number;
   approxEnergyAvailable: number;
+  /** Largest energy piles with distance to first spawn (soft-lock triage). */
+  topDrops: Array<{ amount: number; x: number; y: number; distToSpawn: number | null }>;
+  energyNearSpawn: number;
 } {
   const creeps: Record<string, number> = {};
   let myCreeps = 0;
-  const spawns: Array<{ name?: string; energy?: number; energyCapacity?: number }> =
+  const spawns: Array<{ name?: string; energy?: number; energyCapacity?: number; x?: number; y?: number }> =
     [];
   let sources = 0;
   let constructionSites = 0;
@@ -102,6 +105,7 @@ function summarizeObjects(objects: unknown[]): {
   let containerEnergy = 0;
   let droppedEnergy = 0;
   let spawnEnergy = 0;
+  const dropPiles: Array<{ amount: number; x: number; y: number }> = [];
   let controller:
     | {
         level?: number;
@@ -131,6 +135,8 @@ function summarizeObjects(objects: unknown[]): {
           typeof o.storeCapacityResource === "object" && o.storeCapacityResource
             ? (o.storeCapacityResource as Record<string, number>).energy
             : (o as { energyCapacity?: number }).energyCapacity,
+        x: typeof o.x === "number" ? o.x : undefined,
+        y: typeof o.y === "number" ? o.y : undefined,
       });
     } else if (type === "extension") {
       extensionEnergy += energyFrom(o);
@@ -139,9 +145,16 @@ function summarizeObjects(objects: unknown[]): {
     } else if (type === "container") {
       containerEnergy += energyFrom(o);
     } else if (type === "energy" || type === "tombstone" || type === "ruin") {
-      droppedEnergy += energyFrom(o);
+      let amt = energyFrom(o);
       if (typeof o.resourceType === "string" && o.resourceType === "energy") {
-        droppedEnergy += typeof o.amount === "number" ? o.amount : 0;
+        amt += typeof o.amount === "number" ? o.amount : 0;
+      }
+      if (typeof o.amount === "number" && type === "energy") {
+        amt = Math.max(amt, o.amount);
+      }
+      droppedEnergy += amt;
+      if (amt > 0 && typeof o.x === "number" && typeof o.y === "number") {
+        dropPiles.push({ amount: amt, x: o.x, y: o.y });
       }
     } else if (type === "source") {
       sources++;
@@ -157,6 +170,19 @@ function summarizeObjects(objects: unknown[]): {
     }
   }
 
+  const spawnPos = spawns.find((s) => s.x != null && s.y != null);
+  const withDist = dropPiles.map((d) => ({
+    ...d,
+    distToSpawn:
+      spawnPos?.x != null && spawnPos.y != null
+        ? Math.max(Math.abs(d.x - spawnPos.x), Math.abs(d.y - spawnPos.y))
+        : null,
+  }));
+  withDist.sort((a, b) => b.amount - a.amount);
+  const energyNearSpawn = withDist
+    .filter((d) => d.distToSpawn != null && d.distToSpawn <= 2)
+    .reduce((s, d) => s + d.amount, 0);
+
   return {
     creeps,
     myCreeps,
@@ -169,6 +195,8 @@ function summarizeObjects(objects: unknown[]): {
     containerEnergy,
     droppedEnergy,
     approxEnergyAvailable: spawnEnergy + extensionEnergy,
+    topDrops: withDist.slice(0, 8),
+    energyNearSpawn,
   };
 }
 
