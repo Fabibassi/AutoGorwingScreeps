@@ -430,13 +430,10 @@ describe("directionsToward", () => {
 });
 
 describe("reclaimStrandedEmergencyHauler", () => {
-  test("recycles immobile empty hauler not near storage", () => {
+  test("recycles immobile empty hauler beside spawn not near storage", () => {
     vi.stubGlobal("MOVE", "move");
     vi.stubGlobal("CARRY", "carry");
     vi.stubGlobal("RESOURCE_ENERGY", "energy");
-    vi.stubGlobal("FIND_STRUCTURES", 107);
-    vi.stubGlobal("FIND_DROPPED_RESOURCES", 106);
-    vi.stubGlobal("STRUCTURE_CONTAINER", "container");
     vi.stubGlobal("OK", 0);
     const recycleCreep = vi.fn(() => OK);
     const haulerPos = {

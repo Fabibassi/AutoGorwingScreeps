@@ -235,9 +235,12 @@ export function spawnPriorityOrder(
   ) {
     order = ["hauler", "harvester", "miner", "upgrader", "builder"];
   } else if (counts && hasNoEconomyCreeps(counts)) {
-    // Empty economy: bootstrap harvest, then miner before a fat hauler can
-    // spend the whole energyAvailable bank and block miner respawn.
-    order = ["harvester", "miner", "hauler", "upgrader", "builder"];
+    // Zero income + empty crew: drain banked storage with hauler@100 before
+    // waiting for harvester@200. Positive income: bootstrap harvest first.
+    order =
+      (ctx?.energyIncomePerTick ?? 0) <= 0
+        ? ["hauler", "harvester", "miner", "upgrader", "builder"]
+        : ["harvester", "miner", "hauler", "upgrader", "builder"];
   } else if (counts && dedicatedMiners && (counts.miner ?? 0) === 0) {
     // Miners wiped but a hauler/harvester remains — refill sources first.
     order = ["miner", "hauler", "harvester", "upgrader", "builder"];
@@ -320,17 +323,19 @@ export function desiredCreeps(
     return {
       harvester: sources + 1,
       miner: 0,
-      // Soft-lock: want>0 so hauler actually spawns; at >=100 prefer a 2nd mobile hauler
-      // (emergency CARRY-only may already own the first slot).
-      // During source-container push, skip haulers — no containers/drops to move yet;
-      // spawn energy must fund the second infra builder instead.
-      hauler: infraBuilder
-        ? 0
-        : depressed
-          ? energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy
-            ? 2
-            : 1
-          : 0,
+      // Soft-lock / empty income: always want a hauler to drain storage/containers
+      // into spawn — even during infra push (otherwise sites starve forever).
+      hauler:
+        (economy?.energyIncomePerTick ?? 1) <= 0 &&
+        (economy?.energyAvailable ?? 300) < 200
+          ? 1
+          : infraBuilder
+            ? 0
+            : depressed
+              ? energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy
+                ? 2
+                : 1
+              : 0,
       upgrader: infraBuilder ? 0 : depressed ? 1 : 2,
       // Two builders finish source containers much faster under source contention.
       builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,

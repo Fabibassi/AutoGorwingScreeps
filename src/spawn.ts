@@ -48,7 +48,7 @@ export function directionsToward(
   return [primary, prev, next];
 }
 
-/** Immobile emergency hauler with no adjacent energy — recycle/suicide to free sticky spawn. */
+/** Immobile emergency hauler with no adjacent energy — recycle only (no suicide). */
 export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
@@ -56,6 +56,8 @@ export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
     if (creep.memory.role !== "hauler") continue;
     if (creep.getActiveBodyparts(MOVE) > 0) continue;
     if ((creep.store[RESOURCE_ENERGY] ?? 0) > 0) continue;
+    // Only reclaim if next to spawn so energy returns to the bank.
+    if (!creep.pos.isNearTo(spawn) && !creep.pos.isEqualTo(spawn.pos)) continue;
 
     const storage = creep.room.storage;
     const nearStorage =
@@ -64,26 +66,7 @@ export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
       creep.pos.isNearTo(storage);
     if (nearStorage) continue;
 
-    const nearContainer =
-      creep.pos.findInRange(FIND_STRUCTURES, 1, {
-        filter: (s): s is StructureContainer =>
-          s.structureType === STRUCTURE_CONTAINER &&
-          (s.store[RESOURCE_ENERGY] ?? 0) > 0,
-      }).length > 0;
-    if (nearContainer) continue;
-
-    const nearDrop =
-      creep.pos.findInRange(FIND_DROPPED_RESOURCES, 1, {
-        filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 0,
-      }).length > 0;
-    if (nearDrop) continue;
-
-    // Wrong tile: recycle if next to spawn (refund), otherwise suicide to unblock.
-    if (creep.pos.isNearTo(spawn) || creep.pos.isEqualTo(spawn.pos)) {
-      return spawn.recycleCreep(creep) === OK;
-    }
-    creep.suicide();
-    return true;
+    return spawn.recycleCreep(creep) === OK;
   }
   return false;
 }
@@ -484,16 +467,12 @@ export function runSpawn(spawn: StructureSpawn): void {
   // Leave room for a miner body when mining is wiped (fat haulers ate 300+).
   const haulerMaxCost =
     liveCounts.miner === 0 && infrastructureDedicated ? 100 : undefined;
-  const allowStationaryHauler = hasRecoverableEnergyBeside(spawn);
 
   for (const role of spawnOrder) {
     if (liveCounts[role] >= want[role]) continue;
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
-    const body = bodyForRole(role, energyAvailable, {
-      haulerMaxCost,
-      allowStationaryHauler,
-    });
+    const body = bodyForRole(role, energyAvailable, { haulerMaxCost });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };
@@ -510,18 +489,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       const free = sources.find((s) => !assigned.has(s.id));
       if (free) memory.sourceId = free.id;
     }
-    const opts: SpawnOptions = { memory };
-    // Soft-lock CARRY-only: force spawn tile toward storage so withdraw works.
-    if (
-      role === "hauler" &&
-      !body.includes(MOVE) &&
-      room.storage &&
-      (room.storage.store[RESOURCE_ENERGY] ?? 0) > 0
-    ) {
-      const dirs = directionsToward(spawn.pos, room.storage.pos);
-      if (dirs.length > 0) opts.directions = dirs;
-    }
-    const result = spawn.spawnCreep(body, name, opts);
+    const result = spawn.spawnCreep(body, name, { memory });
     if (result !== OK && Memory.ags) {
       Memory.ags.lastSpawnFail = {
         tick: Game.time,

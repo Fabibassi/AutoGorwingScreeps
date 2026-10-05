@@ -223,29 +223,36 @@ export async function runSoftLockScenario(opts: {
       if (i < 3 || i % 10 === 0) {
         console.log(`[sim|${opts.instance}] t${i + 1}`, final);
       }
-      // Success: spawn refilled or economy creeps present
-      if (
-        final.spawnEnergy >= 100 ||
-        (final.roles.miner ?? 0) + (final.roles.harvester ?? 0) > 0
-      ) {
+      // Recovered: mobile hauler moved energy OR economy workers exist.
+      const storageDrained = final.storageEnergy < 2000;
+      const economyUp =
+        (final.roles.miner ?? 0) + (final.roles.harvester ?? 0) > 0;
+      const haulerWorking =
+        (final.roles.hauler ?? 0) > 0 &&
+        (final.spawnEnergy > 50 || storageDrained);
+      if (economyUp || (storageDrained && final.spawnEnergy >= 100) || haulerWorking) {
         return {
           ok: true,
           ticksRun: i + 1,
           final,
-          reason: "spawn refill or economy creeps present",
+          reason: economyUp
+            ? "economy creeps present"
+            : storageDrained
+              ? "storage drained into spawn"
+              : "hauler active",
         };
       }
     }
 
     return {
-      ok: final.spawnEnergy >= 100 || final.creeps > 0,
+      ok: false,
       ticksRun: opts.ticks,
       final,
       reason:
         final.creeps === 0
           ? "still 0 creeps after ticks"
-          : final.spawnEnergy < 100
-            ? "creeps present but spawn still < 100"
+          : final.storageEnergy >= 2000
+            ? "creeps present but storage not drained"
             : "partial recovery",
     };
   } finally {

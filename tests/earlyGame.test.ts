@@ -68,7 +68,7 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl4 zero income wants infra builders not haulers/upgraders for container sites", () => {
+  test("rcl4 zero income wants hauler to break soft-lock even during infra push", () => {
     expect(
       desiredCreeps(4, 2, 0, true, {
         energyIncomePerTick: 0,
@@ -78,7 +78,7 @@ describe("desiredCreeps", () => {
     ).toEqual({
       harvester: 3,
       miner: 0,
-      hauler: 0,
+      hauler: 1,
       upgrader: 0,
       builder: 2,
     });
@@ -268,11 +268,21 @@ describe("spawnPriorityOrder", () => {
     ]);
   });
 
-  test("harvester first when economy creeps are zero even if hauler-first would apply", () => {
+  test("hauler first when economy creeps are zero and income is dead", () => {
     expect(
       spawnPriorityOrder(
         true,
         { energyIncomePerTick: 0, spawnFillPct: 0.01 },
+        { harvester: 0, miner: 0 },
+      ),
+    ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
+  });
+
+  test("harvester first when economy creeps are zero but income positive", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0.8, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
       ),
     ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
@@ -454,12 +464,10 @@ describe("bodyForRole", () => {
     expect(bodyForRole("miner", 216)).toEqual(["work", "move"]);
   });
 
-  test("hauler stationary CARRY only when explicitly allowed", () => {
+  test("hauler never spawns CARRY-only below MOVE+CARRY cost", () => {
     expect(bodyForRole("hauler", 50)).toEqual([]);
     expect(bodyForRole("hauler", 69)).toEqual([]);
-    expect(bodyForRole("hauler", 50, { allowStationaryHauler: true })).toEqual([
-      "carry",
-    ]);
+    expect(bodyForRole("hauler", 99)).toEqual([]);
     expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
   });
 });
