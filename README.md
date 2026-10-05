@@ -116,9 +116,11 @@ npm run sim:boot                            # Empty-Room Boot (RCL2, Spawn voll)
 npm run sim:farm -- --workers 20 --quiet    # 20 parallele Soft-Lock-Instanzen
 npm run sim:farm -- --scenario boot --workers 20 --concurrency 10 --quiet
 npm run sim:learn                           # Run → Score → History (.sim-learn/)
+npm run sim:watch                           # Live-Dashboard (2. Terminal neben Learn/Farm)
 ```
 
-Nach jedem Learn-Round: `.sim-learn/latest.json` + `history.jsonl` (`nextFocus`, Fail-Notizen).
+Nach jedem Learn-Round: `.sim-learn/latest.json` + `history.jsonl` (`nextFocus`, Fail-Notizen).  
+Live: Worker schreiben Tick-Snapshots nach `.sim-learn/live/` — `sim:watch` zeigt Tabelle (Creeps, Spawn, Storage, Roles).
 
 | Hardware (dieser PC) | Empfehlung |
 |----------------------|------------|

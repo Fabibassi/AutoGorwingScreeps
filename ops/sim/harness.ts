@@ -1,10 +1,41 @@
 /**
  * Shared mockup helpers for parallel sim scenarios.
  */
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { loadDistModules, simServerDir } from "./loadModules";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const LIVE_DIR = path.join(ROOT, ".sim-learn", "live");
+
+export type LiveStatus = {
+  instance: string;
+  tick: number;
+  ticksCap: number;
+  creeps: number;
+  spawnEnergy: number;
+  storageEnergy: number;
+  roles: Record<string, number>;
+  done?: boolean;
+  ok?: boolean;
+  reason?: string;
+  updatedAt: string;
+};
+
+/** Write per-instance snapshot for `npm run sim:watch`. */
+export function writeLiveStatus(status: LiveStatus): void {
+  try {
+    mkdirSync(LIVE_DIR, { recursive: true });
+    writeFileSync(
+      path.join(LIVE_DIR, `${status.instance}.json`),
+      JSON.stringify(status),
+    );
+  } catch {
+    /* ignore watch I/O errors */
+  }
+}
 
 const require = createRequire(import.meta.url);
 const { ScreepsServer, TerrainMatrix } = require("screeps-server-mockup") as {
@@ -196,28 +227,46 @@ export async function runTicks(
 ): Promise<SimResult> {
   await server.start();
   await server.tick();
-  console.log(`[sim|${instance}] t0`, await readRoomSummary(server));
-
   let final = await readRoomSummary(server);
+  const publish = (extra?: Partial<LiveStatus>) => {
+    writeLiveStatus({
+      instance,
+      tick: final.gameTime,
+      ticksCap: ticks,
+      creeps: final.creeps,
+      spawnEnergy: final.spawnEnergy,
+      storageEnergy: final.storageEnergy,
+      roles: final.roles,
+      updatedAt: new Date().toISOString(),
+      ...extra,
+    });
+  };
+  console.log(`[sim|${instance}] t0`, final);
+  publish();
+
   for (let i = 0; i < ticks; i++) {
     await server.tick();
     final = await readRoomSummary(server);
-    if (i < 3 || i % 10 === 0) {
+    if (i < 3 || i % 5 === 0) {
       console.log(`[sim|${instance}] t${i + 1}`, final);
+      publish();
     }
     const reason = check(final, i);
     if (reason) {
+      publish({ done: true, ok: true, reason });
       return { ok: true, ticksRun: i + 1, final, reason };
     }
   }
+  const failReason =
+    final.creeps === 0
+      ? "still 0 creeps after ticks"
+      : "success criteria not met";
+  publish({ done: true, ok: false, reason: failReason });
   return {
     ok: false,
     ticksRun: ticks,
     final,
-    reason:
-      final.creeps === 0
-        ? "still 0 creeps after ticks"
-        : "success criteria not met",
+    reason: failReason,
   };
 }
 
