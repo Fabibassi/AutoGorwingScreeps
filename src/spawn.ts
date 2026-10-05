@@ -292,9 +292,13 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   }
 
   const counts = countCreepsByRole();
-  const noEconomy = hasNoEconomyCreeps(counts);
-  const canAffordMiner = spawn.room.energyAvailable >= 150;
-  if (noEconomy && canAffordMiner) {
+  const energy = spawn.room.energyAvailable;
+  // Sticky blocks ALL spawns. Unlock when we need economy logistics:
+  // no miners/harvesters, or a miner without any hauler to move energy.
+  const needUnlock =
+    (hasNoEconomyCreeps(counts) && energy >= 150) ||
+    (counts.hauler === 0 && energy >= 100);
+  if (needUnlock) {
     if (ags) {
       ags.zombieDebug = {
         tick: Game.time,
@@ -302,7 +306,7 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
         remainingTime: 0,
         ttl: existing.ticksToLive,
         hasExact: true,
-        action: "unlock-cancel-for-miner",
+        action: "unlock-cancel-for-crew",
       };
       if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
     }

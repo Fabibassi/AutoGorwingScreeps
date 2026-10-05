@@ -512,6 +512,24 @@ describe("clearZombieSpawn", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
+  test("unlock-cancels sticky miner when no hauler and energy >= 100", () => {
+    const cancel = vi.fn(() => OK);
+    const suicide = vi.fn();
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      time: 100,
+      creeps: {
+        "miner-1": { suicide, ticksToLive: 1400, memory: { role: "miner" } },
+      },
+    };
+    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
+    const spawn = {
+      spawning: { name: "miner-1", remainingTime: 0, cancel },
+      room: { name: "W21N35", energyAvailable: 120 },
+    };
+    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
+    expect(cancel).toHaveBeenCalled();
+  });
+
   test("cancels empty stuck spawn (remainingTime 0, no creep)", () => {
     const cancel = vi.fn(() => OK);
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
