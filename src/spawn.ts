@@ -201,17 +201,41 @@ export function recycleExcessHaulers(
  * That keeps spawnCreep at ERR_BUSY forever. Suiciding the live creep frees the
  * name so the spawn queue can clear and miners can respawn.
  */
+/**
+ * Screeps can leave spawn.spawning stuck pointing at a creep that already lives
+ * (ERR_BUSY forever). Prefer Spawning.cancel(); fall back to suicide.
+ */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
   if (!spawning) return false;
   const existing = Game.creeps[spawning.name];
-  if (!existing) return false;
-  // Freshly spawning creeps start near 1500 TTL; anything lower has been alive.
-  const ttl = existing.ticksToLive ?? 1500;
-  const stuck = spawning.remainingTime <= 0 || ttl < 1490;
+  const ttl = existing?.ticksToLive ?? 1500;
+  const stuck =
+    spawning.remainingTime <= 0 || (existing != null && ttl < 1490);
   if (!stuck) return false;
-  existing.suicide();
-  return true;
+
+  const ags = typeof Memory !== "undefined" ? Memory.ags : undefined;
+  if (ags) {
+    ags.zombieDebug = {
+      tick: Game.time,
+      spawningName: spawning.name,
+      remainingTime: spawning.remainingTime,
+      ttl: existing?.ticksToLive,
+      hasExact: existing != null,
+    };
+  }
+
+  // Official API: cancel the stuck spawning process.
+  const cancel = (
+    spawning as { cancel?: () => ScreepsReturnCode }
+  ).cancel?.();
+  if (cancel === OK) return true;
+
+  if (existing) {
+    existing.suicide();
+    return true;
+  }
+  return false;
 }
 
 export function runSpawn(spawn: StructureSpawn): void {

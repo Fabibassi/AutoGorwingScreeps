@@ -56,6 +56,8 @@ export interface AgsMemory {
     energyAvailable: number;
     bodyParts: number;
   };
+  /** Zombie-spawn recovery diagnostics. */
+  zombieDebug?: Record<string, unknown>;
 }
 
 declare global {

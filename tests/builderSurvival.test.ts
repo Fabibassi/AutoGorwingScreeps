@@ -416,38 +416,42 @@ describe("recycleExcessHaulers", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("suicides a live creep whose name is stuck in spawn.spawning at remainingTime 0", () => {
+  test("cancels stuck spawn when Spawning.cancel is available", () => {
+    const cancel = vi.fn(() => OK);
     const suicide = vi.fn();
-    const creep = {
-      suicide,
-      ticksToLive: 400,
-      room: { name: "W21N35" },
-      memory: { role: "hauler" },
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      creeps: {
+        "hauler-1": {
+          suicide,
+          ticksToLive: 400,
+          memory: { role: "hauler" },
+        },
+      },
     };
-    (globalThis as { Game?: unknown }).Game = {
-      creeps: { "hauler-1": creep },
-    };
+    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
-      spawning: { name: "hauler-1", remainingTime: 0 },
+      spawning: { name: "hauler-1", remainingTime: 0, cancel },
       room: { name: "W21N35" },
     };
     expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
-    expect(suicide).toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalled();
+    expect(suicide).not.toHaveBeenCalled();
   });
 
-  test("suicides long-lived creep still named in spawn.spawning", () => {
+  test("suicides when cancel is unavailable", () => {
     const suicide = vi.fn();
-    const creep = {
-      suicide,
-      ticksToLive: 800,
-      room: { name: "W21N35" },
-      memory: { role: "hauler" },
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      creeps: {
+        "hauler-1": {
+          suicide,
+          ticksToLive: 400,
+          memory: { role: "hauler" },
+        },
+      },
     };
-    (globalThis as { Game?: unknown }).Game = {
-      creeps: { "hauler-old": creep },
-    };
+    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
-      spawning: { name: "hauler-old", remainingTime: 12 },
+      spawning: { name: "hauler-1", remainingTime: 0 },
       room: { name: "W21N35" },
     };
     expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);

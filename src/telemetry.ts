@@ -116,5 +116,6 @@ export function tickTelemetry(opts: {
     // Preserve ops diagnostics across ticks (tickTelemetry rebuilds the object).
     health: prev.health,
     lastSpawnFail: prev.lastSpawnFail,
+    zombieDebug: prev.zombieDebug,
   };
 }
