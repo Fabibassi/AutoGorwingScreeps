@@ -75,6 +75,14 @@ function energyFrom(o: Record<string, unknown>): number {
 
 function summarizeObjects(objects: unknown[]): {
   creeps: Record<string, number>;
+  creepDetails: Array<{
+    name: string;
+    role: string;
+    body: string[];
+    storeEnergy: number;
+    hasCarry: boolean;
+    hasWork: boolean;
+  }>;
   myCreeps: number;
   spawns: Array<{ name?: string; energy?: number; energyCapacity?: number; x?: number; y?: number }>;
   sources: number;
@@ -97,6 +105,14 @@ function summarizeObjects(objects: unknown[]): {
   energyNearSpawn: number;
 } {
   const creeps: Record<string, number> = {};
+  const creepDetails: Array<{
+    name: string;
+    role: string;
+    body: string[];
+    storeEnergy: number;
+    hasCarry: boolean;
+    hasWork: boolean;
+  }> = [];
   let myCreeps = 0;
   const spawns: Array<{ name?: string; energy?: number; energyCapacity?: number; x?: number; y?: number }> =
     [];
@@ -129,6 +145,25 @@ function summarizeObjects(objects: unknown[]): {
       const name = String(o.name ?? "");
       const role = name.split("-")[0] || "creep";
       creeps[role] = (creeps[role] ?? 0) + 1;
+      const body = Array.isArray(o.body)
+        ? (o.body as Array<{ type?: string } | string>).map((p) =>
+            typeof p === "string" ? p : String(p?.type ?? "?"),
+          )
+        : [];
+      const storeEnergy =
+        typeof o.store === "object" && o.store
+          ? ((o.store as Record<string, number>).energy ?? 0)
+          : typeof o.energy === "number"
+            ? o.energy
+            : 0;
+      creepDetails.push({
+        name,
+        role,
+        body,
+        storeEnergy,
+        hasCarry: body.includes("carry"),
+        hasWork: body.includes("work"),
+      });
     } else if (type === "spawn") {
       const energy = energyFrom(o);
       spawnEnergy += energy;
@@ -197,6 +232,7 @@ function summarizeObjects(objects: unknown[]): {
 
   return {
     creeps,
+    creepDetails,
     myCreeps,
     spawns,
     sources,

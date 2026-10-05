@@ -49,6 +49,32 @@ export function recycleCarryLessBootstrap(spawn: StructureSpawn): boolean {
   return false;
 }
 
+/**
+ * WORK+MOVE legacy creeps cannot transfer/build/upgrade. When we can afford a
+ * real WORK+CARRY+MOVE worker, recycle one so spawn quotas can replace it.
+ */
+export function recycleCarryLessWorker(spawn: StructureSpawn): boolean {
+  if (spawn.spawning) return false;
+  if (spawn.room.energyAvailable < 200) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.getActiveBodyparts(CARRY) > 0) continue;
+    if (creep.getActiveBodyparts(WORK) === 0) continue;
+    const role = creep.memory.role;
+    if (role !== "harvester" && role !== "builder" && role !== "upgrader") {
+      continue;
+    }
+    if (creep.pos.isNearTo(spawn)) {
+      return spawn.recycleCreep(creep) === OK;
+    }
+    creep.moveTo(spawn);
+    return true;
+  }
+  return false;
+}
+
 export function runSpawn(spawn: StructureSpawn): void {
   if (spawn.spawning) return;
 
@@ -99,6 +125,10 @@ export function runSpawn(spawn: StructureSpawn): void {
   );
   if (!hasCarry && energyAvailable < 100) {
     if (recycleCarryLessBootstrap(spawn)) return;
+  }
+  // Replace legacy WORK+MOVE workers so building/upgrading can resume.
+  if (energyAvailable >= 200) {
+    if (recycleCarryLessWorker(spawn)) return;
   }
 
   const spawnOrder = spawnPriorityOrder(
