@@ -20,6 +20,8 @@
     "sim:surround": "npm run build && tsx ops/sim/surround.ts",
     "sim:miners": "npm run build && tsx ops/sim/miners.ts",
     "sim:containers": "npm run build && tsx ops/sim/containers.ts",
+    "sim:climb": "npm run build && tsx ops/sim/rclClimb.ts",
+    "sim:master": "tsx ops/sim/masterAgent.ts",
     "sim:farm": "npm run build && tsx ops/sim/farm.ts",
     "sim:farm20": "npm run build && tsx ops/sim/farm.ts --workers 8 --quiet",
     "sim:learn": "tsx ops/sim/learnLoop.ts --workers 8",

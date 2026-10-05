@@ -117,7 +117,8 @@ npm run sim:farm -- --workers 8 --quiet     # Sweet-Spot laut Bench (~max jobs/s
 npm run sim:farm -- --scenario boot --workers 8 --quiet
 npm run sim:learn                           # Run → Score (Default 8 Worker)
 npm run sim:watch                           # Live-Dashboard (2. Terminal neben Learn/Farm)
-npm run sim:bench                           # Worker-Sweep Throughput-Benchmark
+npm run sim:climb                           # RCL1→8 Fast-Forward (Economy muss halten)
+npm run sim:master                          # Master: Sims→Fix→bis RCL8-Suite grün
 ```
 
 Nach jedem Learn-Round: `.sim-learn/latest.json` + `history.jsonl` (`nextFocus`, Fail-Notizen).  
