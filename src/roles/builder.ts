@@ -1,16 +1,44 @@
+import { countSourceContainers } from "../room/queries";
+
 /** Builders must not drain spawn energy needed to respawn harvesters/miners. */
 export function canWithdrawFromSpawn(
   spawnEnergy: number,
   spawnCapacity: number,
   hasEconomyCreeps: boolean,
+  opts?: { infrastructurePush?: boolean },
 ): boolean {
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
-  return spawnEnergy / spawnCapacity >= 0.85;
+  const ratio = spawnEnergy / spawnCapacity;
+  // Finish source containers even when spawn is only half full — otherwise sites stall forever.
+  if (opts?.infrastructurePush) return ratio >= 0.45;
+  return ratio >= 0.85;
+}
+
+function findBuildSite(creep: Creep): ConstructionSite | null {
+  const sourceCount = creep.room.find(FIND_SOURCES).length;
+  const containersAtSources = countSourceContainers(creep.room);
+  if (containersAtSources < sourceCount) {
+    const containerSite = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES, {
+      filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+    });
+    if (containerSite) return containerSite;
+  }
+  return creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
 }
 
 export function runBuilder(creep: Creep): number {
   if (creep.store[RESOURCE_ENERGY] === 0) {
+    const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
+      filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= 20,
+    });
+    if (dropped) {
+      if (creep.pickup(dropped) === ERR_NOT_IN_RANGE) {
+        creep.moveTo(dropped);
+      }
+      return 0;
+    }
+
     const container = creep.pos.findClosestByPath(FIND_STRUCTURES, {
       filter: (s): s is StructureContainer =>
         s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0,
@@ -31,7 +59,15 @@ export function runBuilder(creep: Creep): number {
         const role = Game.creeps[name].memory.role;
         if (role === "harvester" || role === "miner") economyCreeps++;
       }
-      if (canWithdrawFromSpawn(energy, capacity, economyCreeps > 0)) {
+      const sourceCount = creep.room.find(FIND_SOURCES).length;
+      const infrastructurePush =
+        countSourceContainers(creep.room) < sourceCount &&
+        creep.room.find(FIND_CONSTRUCTION_SITES).length > 0;
+      if (
+        canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
+          infrastructurePush,
+        })
+      ) {
         if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
           creep.moveTo(spawn);
         }
@@ -40,7 +76,7 @@ export function runBuilder(creep: Creep): number {
     return 0;
   }
 
-  const site = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
+  const site = findBuildSite(creep);
   if (site) {
     if (creep.build(site) === ERR_NOT_IN_RANGE) {
       creep.moveTo(site);
