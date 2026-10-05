@@ -76,6 +76,34 @@ export function recycleCarryLessWorker(spawn: StructureSpawn): boolean {
   return false;
 }
 
+/**
+ * Source-container push wants hauler=0 / builder=2. Leftover haulers reclaim no
+ * energy (no containers yet) and keep spawn below the second builder body cost.
+ */
+export function recycleExcessHaulers(
+  spawn: StructureSpawn,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+  infrastructurePush: boolean,
+): boolean {
+  if (spawn.spawning) return false;
+  if (!infrastructurePush) return false;
+  if (counts.builder >= want.builder) return false;
+  if (counts.hauler <= want.hauler) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.memory.role !== "hauler") continue;
+    if (creep.pos.isNearTo(spawn)) {
+      return spawn.recycleCreep(creep) === OK;
+    }
+    creep.moveTo(spawn);
+    return true;
+  }
+  return false;
+}
+
 export function runSpawn(spawn: StructureSpawn): void {
   if (spawn.spawning) return;
 
@@ -138,6 +166,9 @@ export function runSpawn(spawn: StructureSpawn): void {
     sourceCount,
     hasConstructionSites,
   );
+  if (recycleExcessHaulers(spawn, want, liveCounts, infrastructurePush)) {
+    return;
+  }
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,

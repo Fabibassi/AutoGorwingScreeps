@@ -1,7 +1,10 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { canWithdrawFromSpawn } from "../src/roles/builder";
 import { hasNoEconomyCreeps } from "../src/earlyGame";
-import { reassignForEconomySurvival } from "../src/spawn";
+import {
+  reassignForEconomySurvival,
+  recycleExcessHaulers,
+} from "../src/spawn";
 
 describe("canWithdrawFromSpawn", () => {
   test("blocks spawn drain when economy creeps are gone", () => {
@@ -16,13 +19,13 @@ describe("canWithdrawFromSpawn", () => {
     expect(canWithdrawFromSpawn(270, 300, true)).toBe(true);
   });
 
-  test("infrastructure push allows spawn withdraw at ~40% to finish containers", () => {
+  test("infrastructure push allows spawn withdraw at ~35% to finish containers", () => {
     expect(canWithdrawFromSpawn(100, 300, true)).toBe(false);
     expect(
-      canWithdrawFromSpawn(120, 300, true, { infrastructurePush: true }),
+      canWithdrawFromSpawn(105, 300, true, { infrastructurePush: true }),
     ).toBe(true);
     expect(
-      canWithdrawFromSpawn(100, 300, true, { infrastructurePush: true }),
+      canWithdrawFromSpawn(104, 300, true, { infrastructurePush: true }),
     ).toBe(false);
   });
 });
@@ -53,5 +56,84 @@ describe("reassignForEconomySurvival", () => {
       },
     );
     expect(builder.memory.role).toBe("harvester");
+  });
+});
+
+describe("recycleExcessHaulers", () => {
+  test("recycles a surplus hauler during infrastructure push when builders are short", () => {
+    vi.stubGlobal("OK", 0);
+    const spawnPos = { x: 10, y: 10 };
+    const hauler = {
+      room: { name: "W21N35" },
+      memory: { role: "hauler" },
+      pos: {
+        isNearTo: (s: { pos: { x: number; y: number } }) =>
+          s.pos.x === spawnPos.x && s.pos.y === spawnPos.y,
+        x: 10,
+        y: 10,
+      },
+      moveTo: () => OK,
+    };
+    let recycled = false;
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: spawnPos,
+      recycleCreep: (c: unknown) => {
+        recycled = c === hauler;
+        return OK;
+      },
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "hauler-1": hauler } };
+    const ok = recycleExcessHaulers(
+      spawn as unknown as StructureSpawn,
+      {
+        harvester: 3,
+        miner: 0,
+        hauler: 0,
+        upgrader: 0,
+        builder: 2,
+      },
+      {
+        harvester: 3,
+        miner: 0,
+        hauler: 2,
+        upgrader: 0,
+        builder: 1,
+      },
+      true,
+    );
+    expect(ok).toBe(true);
+    expect(recycled).toBe(true);
+  });
+
+  test("skips recycle when haulers are within quota", () => {
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: { x: 10, y: 10 },
+      recycleCreep: () => OK,
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: {} };
+    expect(
+      recycleExcessHaulers(
+        spawn as unknown as StructureSpawn,
+        {
+          harvester: 3,
+          miner: 0,
+          hauler: 2,
+          upgrader: 0,
+          builder: 2,
+        },
+        {
+          harvester: 3,
+          miner: 0,
+          hauler: 2,
+          upgrader: 0,
+          builder: 1,
+        },
+        true,
+      ),
+    ).toBe(false);
   });
 });
