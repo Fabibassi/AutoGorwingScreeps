@@ -196,7 +196,24 @@ export function recycleExcessHaulers(
   return false;
 }
 
+/**
+ * Screeps can leave spawn.spawning stuck at remainingTime 0 with a name that
+ * already exists — spawn stays ERR_BUSY forever and the colony cannot recover.
+ * Suiciding the live creep frees the name so the spawn queue can clear.
+ */
+export function clearZombieSpawn(spawn: StructureSpawn): boolean {
+  const spawning = spawn.spawning;
+  if (!spawning) return false;
+  if (spawning.remainingTime > 0) return false;
+  const existing = Game.creeps[spawning.name];
+  if (!existing) return false;
+  existing.suicide();
+  return true;
+}
+
 export function runSpawn(spawn: StructureSpawn): void {
+  clearZombieSpawn(spawn);
+
   const room = spawn.room;
   const rcl = room.controller?.level ?? 1;
   const sourceCount = room.find(FIND_SOURCES).length;

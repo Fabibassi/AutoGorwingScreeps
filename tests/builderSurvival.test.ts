@@ -7,6 +7,7 @@ import {
 } from "../src/roles/builder";
 import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
+  clearZombieSpawn,
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
   reassignSpareHarvesterToMiner,
@@ -411,5 +412,40 @@ describe("recycleExcessHaulers", () => {
         true,
       ),
     ).toBe(false);
+  });
+});
+
+describe("clearZombieSpawn", () => {
+  test("suicides a live creep whose name is stuck in spawn.spawning at remainingTime 0", () => {
+    const suicide = vi.fn();
+    const creep = {
+      suicide,
+      room: { name: "W21N35" },
+      memory: { role: "hauler" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "hauler-1": creep },
+    };
+    const spawn = {
+      spawning: { name: "hauler-1", remainingTime: 0 },
+      room: { name: "W21N35" },
+    };
+    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
+    expect(suicide).toHaveBeenCalled();
+  });
+
+  test("ignores active spawns that still have remainingTime", () => {
+    const suicide = vi.fn();
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: {
+        "hauler-1": { suicide, memory: { role: "hauler" } },
+      },
+    };
+    const spawn = {
+      spawning: { name: "hauler-1", remainingTime: 3 },
+      room: { name: "W21N35" },
+    };
+    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
+    expect(suicide).not.toHaveBeenCalled();
   });
 });
