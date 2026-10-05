@@ -27,8 +27,12 @@ export function runConstruction(room: Room): void {
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
   const nonRoadSites = existingSites.filter((s) => s.structureType !== STRUCTURE_ROAD);
   const sourceCount = room.find(FIND_SOURCES).length;
-  const sourceContainerCount = countSourceContainers(room, { includeSites: true });
-  const needSourceContainers = sourceContainerCount < sourceCount;
+  // Finished only — sites must not count as "done" or we delete them for extensions.
+  const finishedSourceContainers = countSourceContainers(room);
+  const sourceContainersAndSites = countSourceContainers(room, {
+    includeSites: true,
+  });
+  const needSourceContainers = finishedSourceContainers < sourceCount;
   const extensionBuilt = countStructures(room, STRUCTURE_EXTENSION);
   const extensionSites = existingSites.filter(
     (s) => s.structureType === STRUCTURE_EXTENSION,
@@ -36,7 +40,7 @@ export function runConstruction(room: Room): void {
   const extensionCount = extensionBuilt + extensionSites;
   const needExtensions = extensionCount < extensionQuota(rcl);
 
-  // At the 3-site cap: prefer source containers over extension spam (RCL4 soft-lock).
+  // At the 3-site cap: never sacrifice source-container sites.
   if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
     if (needSourceContainers) {
       const extensionSite = nonRoadSites.find(
@@ -46,7 +50,9 @@ export function runConstruction(room: Room): void {
       else return;
     } else if (needExtensions) {
       const sacrificial = nonRoadSites.find(
-        (s) => s.structureType !== STRUCTURE_EXTENSION,
+        (s) =>
+          s.structureType !== STRUCTURE_EXTENSION &&
+          s.structureType !== STRUCTURE_CONTAINER,
       );
       if (sacrificial) sacrificial.remove();
       else return;
@@ -60,16 +66,20 @@ export function runConstruction(room: Room): void {
   const roadSitesAllowed = shouldBuildRoads(
     rcl,
     spawnEnergy,
-    nonRoadSites.length > 0 || needExtensions,
+    nonRoadSites.length > 0 || needSourceContainers || needExtensions,
   );
 
   const queue = constructionPriority(rcl, {
-    sourceContainerCount,
+    // Include sites so we do not place a 3rd duplicate container site.
+    sourceContainerCount: sourceContainersAndSites,
     sourceCount,
     hasControllerContainer: controllerContainer,
     hasStorage,
     roadSitesAllowed,
-    extensionCount,
+    // Do not queue extensions until source containers are finished.
+    extensionCount: needSourceContainers
+      ? extensionQuota(rcl)
+      : extensionCount,
   });
 
   for (const structureType of queue) {
