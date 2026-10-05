@@ -15,6 +15,7 @@ const SCENARIOS: Record<string, string> = {
   softlock: "ops/sim/softLock.ts",
   boot: "ops/sim/boot.ts",
   economy: "ops/sim/economy.ts",
+  surround: "ops/sim/surround.ts",
 };
 
 function parseArgs(argv: string[]) {

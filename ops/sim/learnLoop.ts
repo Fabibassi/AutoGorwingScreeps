@@ -25,7 +25,12 @@ const HISTORY = path.join(LEARN_DIR, "history.jsonl");
 const LATEST = path.join(LEARN_DIR, "latest.json");
 
 /** Ordered curriculum — harder later. */
-const DEFAULT_CURRICULUM = ["softlock", "boot", "economy"] as const;
+const DEFAULT_CURRICULUM = [
+  "softlock",
+  "boot",
+  "economy",
+  "surround",
+] as const;
 
 type ScenarioResult = {
   scenario: string;
