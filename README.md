@@ -125,7 +125,7 @@ Live: Worker schreiben Tick-Snapshots nach `.sim-learn/live/` — `sim:watch` ze
 
 | Hardware (dieser PC) | Empfehlung |
 |----------------------|------------|
-| ~20 Threads / ~64 GB | **bis ~20** Mockup-Worker (bei RAM-Druck `--concurrency 10`) |
+| ~20 Threads / ~64 GB | **8 Worker** Sweet-Spot (Bench); bis 16 ok, darüber kaum schneller |
 | Voller Private Server (Steam/`screeps`) | eher **2–4** gleichzeitig |
 
 Pro Worker: eigener Ordner unter `.sim-servers/` + eigener Port (`--base-port`, Default 22100).  

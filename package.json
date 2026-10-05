@@ -17,6 +17,8 @@
     "sim:softlock": "npm run build && tsx ops/sim/softLock.ts",
     "sim:boot": "npm run build && tsx ops/sim/boot.ts",
     "sim:economy": "npm run build && tsx ops/sim/economy.ts",
+    "sim:surround": "npm run build && tsx ops/sim/surround.ts",
+    "sim:miners": "npm run build && tsx ops/sim/miners.ts",
     "sim:farm": "npm run build && tsx ops/sim/farm.ts",
     "sim:farm20": "npm run build && tsx ops/sim/farm.ts --workers 8 --quiet",
     "sim:learn": "tsx ops/sim/learnLoop.ts --workers 8",

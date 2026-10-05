@@ -30,6 +30,7 @@ const DEFAULT_CURRICULUM = [
   "boot",
   "economy",
   "surround",
+  "miners",
 ] as const;
 
 type ScenarioResult = {
@@ -162,11 +163,13 @@ function evaluate(report: Omit<RoundReport, "nextFocus" | "notes" | "consecutive
     nextFocus = `fix failing scenario(s): ${failed.map((f) => f.scenario).join(", ")}`;
   } else if (consecutiveGreen >= 3) {
     nextFocus =
-      "Streak≥3 — harden: longer economy ticks, spawn-surround regression, or miner/container unlock scenario.";
-    notes.push("Curriculum stable; extend with harder sims or raise ticks.");
+      "Streak≥3 — next harden: longer multi-phase runs (containers built from scratch) or RCL progression sim.";
+    notes.push(
+      "Curriculum stable (softlock/boot/economy/surround/miners); extend further.",
+    );
   } else {
     nextFocus =
-      "Re-run softlock+boot+economy to build confidence streak before harder scenarios.";
+      "Re-run full curriculum to build confidence streak before harder scenarios.";
   }
 
   return { consecutiveGreen, nextFocus, notes };

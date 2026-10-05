@@ -20,3 +20,9 @@ jobs:
         run: npx tsx ops/sim/softLock.ts --instance ci-softlock --port 22199 --ticks 80
       - name: Boot mockup sim
         run: npx tsx ops/sim/boot.ts --instance ci-boot --port 22198 --ticks 80
+      - name: Economy mockup sim
+        run: npx tsx ops/sim/economy.ts --instance ci-economy --port 22197 --ticks 120
+      - name: Surround spawn-exit sim
+        run: npx tsx ops/sim/surround.ts --instance ci-surround --port 22196 --ticks 80
+      - name: Miners container-unlock sim
+        run: npx tsx ops/sim/miners.ts --instance ci-miners --port 22195 --ticks 120
