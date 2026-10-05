@@ -261,7 +261,7 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
       hasExact: true,
       action: "cancel-sticky",
     };
-    delete ags.zombieSpawnSeen[spawning.name];
+    if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
   }
   // Clear sticky flag only — do NOT suicide the living hauler/miner.
   return cancel() === OK;
