@@ -8,6 +8,8 @@ import {
 import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
   clearZombieSpawn,
+  directionsToward,
+  reclaimStrandedEmergencyHauler,
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
   reassignSpareHarvesterToMiner,
@@ -412,6 +414,66 @@ describe("recycleExcessHaulers", () => {
         true,
       ),
     ).toBe(false);
+  });
+});
+
+describe("directionsToward", () => {
+  test("points right when storage is east of spawn", () => {
+    expect(directionsToward({ x: 31, y: 8 }, { x: 32, y: 8 })).toEqual([
+      3, 2, 4,
+    ]);
+  });
+
+  test("empty when same tile", () => {
+    expect(directionsToward({ x: 5, y: 5 }, { x: 5, y: 5 })).toEqual([]);
+  });
+});
+
+describe("reclaimStrandedEmergencyHauler", () => {
+  test("recycles immobile empty hauler not near storage", () => {
+    vi.stubGlobal("MOVE", "move");
+    vi.stubGlobal("CARRY", "carry");
+    vi.stubGlobal("RESOURCE_ENERGY", "energy");
+    vi.stubGlobal("FIND_STRUCTURES", 107);
+    vi.stubGlobal("FIND_DROPPED_RESOURCES", 106);
+    vi.stubGlobal("STRUCTURE_CONTAINER", "container");
+    vi.stubGlobal("OK", 0);
+    const recycleCreep = vi.fn(() => OK);
+    const haulerPos = {
+      x: 30,
+      y: 8,
+      isNearTo: (t: { pos?: { x: number; y: number }; x?: number }) => {
+        const p = "pos" in t && t.pos ? t.pos : (t as { x: number; y: number });
+        return Math.max(Math.abs(30 - p.x), Math.abs(8 - p.y)) <= 1;
+      },
+      isEqualTo: () => false,
+      findInRange: () => [],
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: {
+        h1: {
+          name: "h1",
+          room: {
+            name: "W21N35",
+            storage: { store: { energy: 2000 }, pos: { x: 32, y: 8 } },
+          },
+          memory: { role: "hauler" },
+          store: { energy: 0 },
+          pos: haulerPos,
+          getActiveBodyparts: (p: string) =>
+            p === "move" ? 0 : p === "carry" ? 1 : 0,
+        },
+      },
+    };
+    const spawn = {
+      room: { name: "W21N35" },
+      pos: { x: 31, y: 8 },
+      recycleCreep,
+    };
+    expect(
+      reclaimStrandedEmergencyHauler(spawn as unknown as StructureSpawn),
+    ).toBe(true);
+    expect(recycleCreep).toHaveBeenCalled();
   });
 });
 

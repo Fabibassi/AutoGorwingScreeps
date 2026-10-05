@@ -16,6 +16,74 @@ import {
 
 export { desiredCreeps, type CreepQuotas };
 
+/**
+ * Prefer spawn tiles toward `to` so stationary CARRY haulers land adjacent to
+ * storage (soft-lock recovery). Returns primary + two neighboring directions.
+ */
+export function directionsToward(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): DirectionConstant[] {
+  const dx = Math.sign(to.x - from.x) as -1 | 0 | 1;
+  const dy = Math.sign(to.y - from.y) as -1 | 0 | 1;
+  if (dx === 0 && dy === 0) return [];
+
+  // Screeps: TOP=1 … TOP_LEFT=8
+  const table: Record<string, DirectionConstant> = {
+    "0,-1": 1 as DirectionConstant,
+    "1,-1": 2 as DirectionConstant,
+    "1,0": 3 as DirectionConstant,
+    "1,1": 4 as DirectionConstant,
+    "0,1": 5 as DirectionConstant,
+    "-1,1": 6 as DirectionConstant,
+    "-1,0": 7 as DirectionConstant,
+    "-1,-1": 8 as DirectionConstant,
+  };
+  const primary = table[`${dx},${dy}`];
+  if (primary == null) return [];
+
+  // Neighbors on the direction ring (1..8).
+  const prev = (((primary - 2 + 8) % 8) + 1) as DirectionConstant;
+  const next = ((primary % 8) + 1) as DirectionConstant;
+  return [primary, prev, next];
+}
+
+/** Immobile emergency hauler with no adjacent energy — recycle to free sticky spawn. */
+export function reclaimStrandedEmergencyHauler(spawn: StructureSpawn): boolean {
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.memory.role !== "hauler") continue;
+    if (creep.getActiveBodyparts(MOVE) > 0) continue;
+    if ((creep.store[RESOURCE_ENERGY] ?? 0) > 0) continue;
+    if (!creep.pos.isNearTo(spawn) && !creep.pos.isEqualTo(spawn.pos)) continue;
+
+    const storage = creep.room.storage;
+    const nearStorage =
+      storage != null &&
+      (storage.store[RESOURCE_ENERGY] ?? 0) > 0 &&
+      creep.pos.isNearTo(storage);
+    if (nearStorage) continue;
+
+    const nearContainer =
+      creep.pos.findInRange(FIND_STRUCTURES, 1, {
+        filter: (s): s is StructureContainer =>
+          s.structureType === STRUCTURE_CONTAINER &&
+          (s.store[RESOURCE_ENERGY] ?? 0) > 0,
+      }).length > 0;
+    if (nearContainer) continue;
+
+    const nearDrop =
+      creep.pos.findInRange(FIND_DROPPED_RESOURCES, 1, {
+        filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 0,
+      }).length > 0;
+    if (nearDrop) continue;
+
+    return spawn.recycleCreep(creep) === OK;
+  }
+  return false;
+}
+
 /** Reassign idle non-economy creeps to harvester when mining capacity is zero. */
 export function reassignForEconomySurvival(
   room: Room,
@@ -243,6 +311,8 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
 
 export function runSpawn(spawn: StructureSpawn): void {
   clearZombieSpawn(spawn);
+  // Free sticky spawn + reclaim energy from CARRY-only haulers on the wrong tile.
+  if (reclaimStrandedEmergencyHauler(spawn)) return;
 
   const room = spawn.room;
   const rcl = room.controller?.level ?? 1;
@@ -373,7 +443,18 @@ export function runSpawn(spawn: StructureSpawn): void {
       const free = sources.find((s) => !assigned.has(s.id));
       if (free) memory.sourceId = free.id;
     }
-    const result = spawn.spawnCreep(body, name, { memory });
+    const opts: SpawnOptions = { memory };
+    // Soft-lock CARRY-only: force spawn tile toward storage so withdraw works.
+    if (
+      role === "hauler" &&
+      !body.includes(MOVE) &&
+      room.storage &&
+      (room.storage.store[RESOURCE_ENERGY] ?? 0) > 0
+    ) {
+      const dirs = directionsToward(spawn.pos, room.storage.pos);
+      if (dirs.length > 0) opts.directions = dirs;
+    }
+    const result = spawn.spawnCreep(body, name, opts);
     if (result !== OK && Memory.ags) {
       Memory.ags.lastSpawnFail = {
         tick: Game.time,
