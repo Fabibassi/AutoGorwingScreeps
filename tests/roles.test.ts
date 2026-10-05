@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { runMiner } from "../src/roles/miner";
-import { runHarvester, shouldBuildSourceContainers } from "../src/roles/harvester";
+import {
+  needsSpawnBankForInfraBuilder,
+  runHarvester,
+  shouldBuildSourceContainers,
+} from "../src/roles/harvester";
 import { registeredRoles, runCreep } from "../src/roles";
 
 describe("shouldBuildSourceContainers", () => {
@@ -8,6 +12,24 @@ describe("shouldBuildSourceContainers", () => {
     expect(shouldBuildSourceContainers(0.2, 0, 2)).toBe(true);
     expect(shouldBuildSourceContainers(0.19, 0, 2)).toBe(false);
     expect(shouldBuildSourceContainers(0.9, 2, 2)).toBe(false);
+  });
+
+  test("builders short: bank ~200/300 before remote container trips", () => {
+    expect(
+      shouldBuildSourceContainers(0.2, 0, 2, { buildersShort: true }),
+    ).toBe(false);
+    expect(
+      shouldBuildSourceContainers(200 / 300, 0, 2, { buildersShort: true }),
+    ).toBe(true);
+  });
+});
+
+describe("needsSpawnBankForInfraBuilder", () => {
+  test("banks spawn below 200 while builders are short", () => {
+    expect(needsSpawnBankForInfraBuilder(63, 1)).toBe(true);
+    expect(needsSpawnBankForInfraBuilder(199, 1)).toBe(true);
+    expect(needsSpawnBankForInfraBuilder(200, 1)).toBe(false);
+    expect(needsSpawnBankForInfraBuilder(0, 2)).toBe(false);
   });
 });
 
@@ -43,6 +65,13 @@ describe("runHarvester source-container push", () => {
     };
     const build = vi.fn(() => 0);
     const harvest = vi.fn(() => 0);
+    const spawn = {
+      store: {
+        getUsedCapacity: () => 250,
+        getCapacity: () => 300,
+        getFreeCapacity: () => 50,
+      },
+    };
     const creep = {
       store: {
         energy: 45,
@@ -64,19 +93,101 @@ describe("runHarvester source-container push", () => {
       moveTo: vi.fn(),
       getActiveBodyparts: () => 1,
       room: {
+        name: "W1N1",
         find: (constType: number) => {
           if (constType === FIND_SOURCES || constType === FIND_SOURCES_ACTIVE) {
             return [source];
           }
-          if (constType === FIND_MY_SPAWNS) return [];
+          if (constType === FIND_MY_SPAWNS) return [spawn];
           return [];
         },
       },
     } as unknown as Creep;
+    vi.stubGlobal("Game", {
+      creeps: {
+        "builder-1": {
+          room: { name: "W1N1" },
+          memory: { role: "builder" },
+        },
+        "builder-2": {
+          room: { name: "W1N1" },
+          memory: { role: "builder" },
+        },
+      },
+    });
 
     expect(runHarvester(creep)).toBe(0);
     expect(build).toHaveBeenCalledWith(site);
     expect(harvest).not.toHaveBeenCalled();
+  });
+
+  test("banks spawn instead of local build while second infra builder is missing", () => {
+    const site = {
+      id: "site1",
+      structureType: "container",
+      pos: { x: 10, y: 11, roomName: "W1N1" },
+    };
+    const source = {
+      id: "s1",
+      pos: {
+        x: 10,
+        y: 10,
+        roomName: "W1N1",
+        findInRange: (type: number) =>
+          type === FIND_CONSTRUCTION_SITES ? [site] : [],
+      },
+    };
+    const build = vi.fn(() => 0);
+    const harvest = vi.fn(() => 0);
+    const transfer = vi.fn(() => 0);
+    const spawn = {
+      store: {
+        getUsedCapacity: () => 63,
+        getCapacity: () => 300,
+        getFreeCapacity: () => 237,
+      },
+    };
+    const creep = {
+      store: {
+        energy: 50,
+        getCapacity: () => 50,
+        getFreeCapacity: () => 0,
+      },
+      pos: {
+        getRangeTo: () => 1,
+        findClosestByPath: (target: unknown) =>
+          Array.isArray(target) ? target[0] : target,
+        findClosestByRange: (target: unknown) =>
+          Array.isArray(target) ? target[0] : target,
+      },
+      build,
+      harvest,
+      transfer,
+      moveTo: vi.fn(),
+      getActiveBodyparts: () => 1,
+      room: {
+        name: "W1N1",
+        find: (constType: number) => {
+          if (constType === FIND_SOURCES || constType === FIND_SOURCES_ACTIVE) {
+            return [source];
+          }
+          if (constType === FIND_MY_SPAWNS) return [spawn];
+          return [];
+        },
+      },
+    } as unknown as Creep;
+    vi.stubGlobal("Game", {
+      creeps: {
+        "builder-1": {
+          room: { name: "W1N1" },
+          memory: { role: "builder" },
+        },
+      },
+    });
+
+    expect(runHarvester(creep)).toBe(0);
+    expect(build).not.toHaveBeenCalled();
+    expect(transfer).toHaveBeenCalledWith(spawn, "energy");
   });
 });
 
