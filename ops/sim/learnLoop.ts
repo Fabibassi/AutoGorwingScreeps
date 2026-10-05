@@ -59,7 +59,7 @@ type RoundReport = {
 
 function parseArgs(argv: string[]) {
   let workers = 8;
-  let ticks = 80;
+  let ticks = 120;
   let concurrency = 0;
   let rounds = 1;
   let curriculum = [...DEFAULT_CURRICULUM];
@@ -163,9 +163,9 @@ function evaluate(report: Omit<RoundReport, "nextFocus" | "notes" | "consecutive
     nextFocus = `fix failing scenario(s): ${failed.map((f) => f.scenario).join(", ")}`;
   } else if (consecutiveGreen >= 3) {
     nextFocus =
-      "Streak≥3 — next harden: longer multi-phase runs (containers built from scratch) or RCL progression sim.";
+      "Streak≥3 — next harden: fix containers-from-scratch (builders place but sites stay 0) or RCL progression sim.";
     notes.push(
-      "Curriculum stable (softlock/boot/economy/surround/miners); extend further.",
+      "Curriculum stable (softlock/boot/economy/surround/miners). Optional: npm run sim:farm -- --scenario containers",
     );
   } else {
     nextFocus =

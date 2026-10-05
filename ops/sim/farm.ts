@@ -17,6 +17,7 @@ const SCENARIOS: Record<string, string> = {
   economy: "ops/sim/economy.ts",
   surround: "ops/sim/surround.ts",
   miners: "ops/sim/miners.ts",
+  containers: "ops/sim/containers.ts",
 };
 
 function parseArgs(argv: string[]) {
