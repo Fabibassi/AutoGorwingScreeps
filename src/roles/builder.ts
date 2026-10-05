@@ -11,7 +11,7 @@ export function canWithdrawFromSpawn(
   if (spawnCapacity <= 0) return false;
   const ratio = spawnEnergy / spawnCapacity;
   // Finish source containers even when spawn is only half full — otherwise sites stall forever.
-  if (opts?.infrastructurePush) return ratio >= 0.45;
+  if (opts?.infrastructurePush) return ratio >= 0.4;
   return ratio >= 0.85;
 }
 
