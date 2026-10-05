@@ -102,7 +102,7 @@ describe("desiredCreeps", () => {
         energyAvailable: 37,
       }),
     ).toEqual({
-      harvester: 2,
+      harvester: 1,
       miner: 1,
       hauler: 1,
       upgrader: 0,

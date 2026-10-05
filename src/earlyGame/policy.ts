@@ -294,7 +294,8 @@ export function desiredCreeps(
     if (readyContainers > 0) {
       const uncovered = Math.max(0, sources - readyContainers);
       return {
-        harvester: uncovered > 0 ? uncovered + 1 : 0,
+        // During container push, skip the spare H — convert capacity into builder #2.
+        harvester: uncovered <= 0 ? 0 : infraBuilder ? uncovered : uncovered + 1,
         miner: readyContainers,
         hauler: readyContainers,
         upgrader: infraBuilder ? 0 : depressed ? 1 : 2,

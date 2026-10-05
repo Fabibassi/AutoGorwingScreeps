@@ -146,6 +146,38 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
     ).toBe(false);
     expect(harvester.memory.role).toBe("harvester");
   });
+
+  test("converts spare harvester when a miner already covers a container source", () => {
+    const harvester = {
+      room: { name: "W21N35" },
+      memory: { role: "harvester", sourceId: "s1" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "harvester-1": harvester },
+    };
+    const ok = reassignSpareHarvesterToInfraBuilder(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 1,
+        miner: 1,
+        hauler: 1,
+        upgrader: 0,
+        builder: 2,
+      },
+      {
+        harvester: 2,
+        miner: 1,
+        hauler: 1,
+        upgrader: 0,
+        builder: 1,
+      },
+      true,
+      2,
+      1,
+    );
+    expect(ok).toBe(true);
+    expect(harvester.memory.role).toBe("builder");
+  });
 });
 
 describe("recycleExcessHaulers", () => {

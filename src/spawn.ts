@@ -45,11 +45,14 @@ export function reassignSpareHarvesterToInfraBuilder(
   counts: CreepQuotas,
   infrastructurePush: boolean,
   sourceCount: number,
+  containersAtSources = 0,
 ): boolean {
   if (!infrastructurePush) return false;
   if (counts.builder >= want.builder) return false;
-  // Keep at least one mobile harvester per source.
-  if (counts.harvester <= sourceCount) return false;
+  // Keep mobile harvesters only for sources still missing a container
+  // (container-ready sources are covered by miners).
+  const harvestFloor = Math.max(0, sourceCount - containersAtSources);
+  if (counts.harvester <= harvestFloor) return false;
 
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
@@ -189,6 +192,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     countCreepsByRole(),
     infrastructurePush,
     sourceCount,
+    containersAtSources,
   );
   // Recount after possible role reassignment so quotas/spawn order stay consistent.
   const liveCounts = countCreepsByRole();
