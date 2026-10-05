@@ -117,5 +117,6 @@ export function tickTelemetry(opts: {
     health: prev.health,
     lastSpawnFail: prev.lastSpawnFail,
     zombieDebug: prev.zombieDebug,
+    zombieSpawnSeen: prev.zombieSpawnSeen,
   };
 }

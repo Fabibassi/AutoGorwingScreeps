@@ -202,27 +202,36 @@ export function recycleExcessHaulers(
  * name so the spawn queue can clear and miners can respawn.
  */
 /**
- * Screeps can leave spawn.spawning stuck pointing at an *aged* creep name
- * (ERR_BUSY forever). Do NOT treat newborns (TTL near 1500) as zombies.
- * Always suicide the aged creep — cancel() alone has been observed to return OK
- * without clearing the busy state.
+ * Screeps can leave spawn.spawning stuck pointing at a live creep name (ERR_BUSY).
+ * Newborns share the birth tick with remainingTime 0 — wait a few ticks before
+ * treating the name as a zombie, then cancel+suicide.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
   if (!spawning) return false;
   const existing = Game.creeps[spawning.name];
   if (!existing) return false;
-  const ttl = existing.ticksToLive ?? 1500;
-  // Fresh creeps start at CREEP_LIFE_TIME (1500). Only aged creeps are zombies.
-  if (ttl >= 1490) return false;
 
   const ags = typeof Memory !== "undefined" ? Memory.ags : undefined;
+  const seen = (ags?.zombieSpawnSeen ?? {}) as Record<string, number>;
+  const firstSeen = seen[spawning.name];
+  if (firstSeen == null) {
+    if (ags) {
+      ags.zombieSpawnSeen = { ...seen, [spawning.name]: Game.time };
+    }
+    return false;
+  }
+  // Grace: allow the birth tick + a few more before declaring a zombie.
+  if (Game.time - firstSeen < 10) return false;
+
+  const ttl = existing.ticksToLive;
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: spawning.remainingTime,
       ttl,
+      firstSeen,
       hasExact: true,
     };
   }
@@ -231,10 +240,16 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
     spawning as { cancel?: () => ScreepsReturnCode }
   ).cancel?.();
   existing.suicide();
+  if (ags?.zombieSpawnSeen) {
+    delete ags.zombieSpawnSeen[spawning.name];
+  }
   return true;
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
+  if (!spawn.spawning && typeof Memory !== "undefined" && Memory.ags) {
+    Memory.ags.zombieSpawnSeen = {};
+  }
   clearZombieSpawn(spawn);
 
   const room = spawn.room;

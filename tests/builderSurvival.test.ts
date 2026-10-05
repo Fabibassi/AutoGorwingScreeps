@@ -416,67 +416,42 @@ describe("recycleExcessHaulers", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("suicides aged creep even when cancel returns OK", () => {
-    const cancel = vi.fn(() => OK);
+  test("waits a grace period before suiciding a live spawning name", () => {
     const suicide = vi.fn();
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      time: 100,
       creeps: {
-        "hauler-1": {
-          suicide,
-          ticksToLive: 400,
-          memory: { role: "hauler" },
-        },
+        "hauler-1": { suicide, ticksToLive: 400, memory: { role: "hauler" } },
       },
     };
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
-      spawning: { name: "hauler-1", remainingTime: 0, cancel },
-      room: { name: "W21N35" },
-    };
-    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
-    expect(cancel).toHaveBeenCalled();
-    expect(suicide).toHaveBeenCalled();
-  });
-
-  test("does not kill a newborn on the birth tick (remainingTime 0, TTL 1500)", () => {
-    const suicide = vi.fn();
-    const cancel = vi.fn(() => OK);
-    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
-      creeps: {
-        "miner-1": {
-          suicide,
-          ticksToLive: 1500,
-          memory: { role: "miner" },
-        },
-      },
-    };
-    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
-    const spawn = {
-      spawning: { name: "miner-1", remainingTime: 0, cancel },
+      spawning: { name: "hauler-1", remainingTime: 0 },
       room: { name: "W21N35" },
     };
     expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
-    expect(cancel).not.toHaveBeenCalled();
     expect(suicide).not.toHaveBeenCalled();
-  });
-
-  test("suicides aged creep when cancel is unavailable", () => {
-    const suicide = vi.fn();
-    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
-      creeps: {
-        "hauler-1": {
-          suicide,
-          ticksToLive: 400,
-          memory: { role: "hauler" },
-        },
-      },
-    };
-    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
-    const spawn = {
-      spawning: { name: "hauler-1", remainingTime: 12 },
-      room: { name: "W21N35" },
-    };
+    (Game as { time: number }).time = 120;
     expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
     expect(suicide).toHaveBeenCalled();
+  });
+
+  test("does not kill within the first 10 ticks of seeing the name", () => {
+    const suicide = vi.fn();
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      time: 50,
+      creeps: {
+        "miner-1": { suicide, ticksToLive: 1500, memory: { role: "miner" } },
+      },
+    };
+    (globalThis as { Memory?: unknown }).Memory = {
+      ags: { zombieSpawnSeen: { "miner-1": 45 } },
+    };
+    const spawn = {
+      spawning: { name: "miner-1", remainingTime: 0 },
+      room: { name: "W21N35" },
+    };
+    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
+    expect(suicide).not.toHaveBeenCalled();
   });
 });

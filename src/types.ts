@@ -58,6 +58,8 @@ export interface AgsMemory {
   };
   /** Zombie-spawn recovery diagnostics. */
   zombieDebug?: Record<string, unknown>;
+  /** spawn.spawning.name → first tick we saw it still alive (zombie grace). */
+  zombieSpawnSeen?: Record<string, number>;
 }
 
 declare global {
