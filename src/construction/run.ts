@@ -12,7 +12,6 @@ import {
   sourceMissingContainer,
 } from "../room/queries";
 import {
-  findAdjacentSpot,
   tryPlaceContainer,
   tryPlaceExtension,
   tryPlaceRoadOnPath,
