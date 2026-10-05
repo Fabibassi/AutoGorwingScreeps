@@ -48,6 +48,14 @@ export interface AgsMemory {
   lastErrors: number;
   /** Periodic colony health snapshot (see selfCheck.ts). */
   health?: AgsHealthCheck;
+  /** Last failed spawnCreep (ops triage when miners will not respawn). */
+  lastSpawnFail?: {
+    tick: number;
+    role: string;
+    result: number;
+    energyAvailable: number;
+    bodyParts: number;
+  };
 }
 
 declare global {

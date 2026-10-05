@@ -238,7 +238,7 @@ export function runSpawn(spawn: StructureSpawn): void {
   // Rebalance even while spawn is busy — otherwise dead miners leave builders
   // stuck until the current spawnCreep finishes.
   reassignForEconomySurvival(room, counts);
-  for (;;) {
+  for (let n = 0; n < 10; n++) {
     const mid = countCreepsByRole();
     if (!reassignSpareHarvesterToMiner(room, want, mid)) break;
   }
@@ -256,7 +256,8 @@ export function runSpawn(spawn: StructureSpawn): void {
     sourceCount,
     containersAtSources,
   );
-  for (;;) {
+  // Convert all surplus upgraders in one tick during extension push.
+  for (let n = 0; n < 10; n++) {
     const mid = countCreepsByRole();
     if (!reassignUpgraderToExtensionBuilder(room, want, mid)) break;
   }
@@ -313,7 +314,17 @@ export function runSpawn(spawn: StructureSpawn): void {
       const free = sources.find((s) => !assigned.has(s.id));
       if (free) memory.sourceId = free.id;
     }
-    if (spawn.spawnCreep(body, name, { memory }) === OK) {
+    const result = spawn.spawnCreep(body, name, { memory });
+    if (result !== OK && Memory.ags) {
+      Memory.ags.lastSpawnFail = {
+        tick: Game.time,
+        role,
+        result,
+        energyAvailable,
+        bodyParts: body.length,
+      };
+    }
+    if (result === OK) {
       return;
     }
   }

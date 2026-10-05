@@ -30,7 +30,12 @@ export function loop(): void {
     }
 
     for (const name in Game.spawns) {
-      runSpawn(Game.spawns[name]);
+      try {
+        runSpawn(Game.spawns[name]);
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`spawn ${name} error`, e);
+      }
     }
 
     for (const name in Game.creeps) {

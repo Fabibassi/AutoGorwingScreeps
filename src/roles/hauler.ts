@@ -81,9 +81,13 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
       s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
   });
 
-  // Critically empty spawn: refill spawn before topping extensions so energyAvailable
-  // recovers even when pathing around extension sites is awkward.
-  if (spawnFillPct < 0.5 && spawnFree > 0) {
+  // Critically empty spawn OR no miners left: refill spawn before extensions so
+  // energyAvailable can fund a miner body (extensions-first left spawn stuck at ~58%).
+  const miningCreeps = Object.keys(Game.creeps).filter((n) => {
+    const role = Game.creeps[n].memory.role;
+    return role === "miner" || role === "harvester";
+  }).length;
+  if ((spawnFillPct < 0.5 || miningCreeps === 0) && spawnFree > 0) {
     return spawn;
   }
 
