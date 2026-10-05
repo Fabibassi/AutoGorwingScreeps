@@ -59,6 +59,41 @@ export function reassignUpgraderToExtensionBuilder(
 }
 
 /**
+ * Restore missing static miners from surplus harvesters (e.g. after a false
+ * income-collapse demotion while spawn was full).
+ */
+export function reassignSpareHarvesterToMiner(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+): boolean {
+  if (counts.miner >= want.miner) return false;
+  if (counts.harvester <= want.harvester) return false;
+
+  const sources = findSourcesWithContainers(room);
+  const assigned = new Set<string>();
+  for (const n in Game.creeps) {
+    const c = Game.creeps[n];
+    if (c.room.name !== room.name) continue;
+    if (c.memory.role === "miner" && c.memory.sourceId) {
+      assigned.add(c.memory.sourceId);
+    }
+  }
+  const free = sources.find((s) => !assigned.has(s.id));
+  if (!free) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "harvester") continue;
+    creep.memory.role = "miner";
+    creep.memory.sourceId = free.id;
+    return true;
+  }
+  return false;
+}
+
+/**
  * Instantly restore a missing infra builder from a spare harvester.
  * Waiting for a fresh 200-energy spawn stalls container finish when B dies.
  */
@@ -203,6 +238,11 @@ export function runSpawn(spawn: StructureSpawn): void {
   );
   const counts = countCreepsByRole();
   reassignForEconomySurvival(room, counts);
+  // Undo false demotions before infra reassignment consumes the spare H.
+  for (;;) {
+    const mid = countCreepsByRole();
+    if (!reassignSpareHarvesterToMiner(room, want, mid)) break;
+  }
   const infrastructurePush = needsInfrastructureBuilder(
     rcl,
     containersAtSources,

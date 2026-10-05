@@ -8,6 +8,7 @@ import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
+  reassignSpareHarvesterToMiner,
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
 } from "../src/spawn";
@@ -249,6 +250,51 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
     );
     expect(ok).toBe(true);
     expect(harvester.memory.role).toBe("builder");
+  });
+});
+
+describe("reassignSpareHarvesterToMiner", () => {
+  test("converts surplus harvester into miner for an uncovered container source", () => {
+    vi.stubGlobal("FIND_SOURCES", 105);
+    vi.stubGlobal("FIND_STRUCTURES", 107);
+    vi.stubGlobal("STRUCTURE_CONTAINER", "container");
+    const freeSource = {
+      id: "source-2",
+      pos: {
+        findInRange: () => [{ structureType: STRUCTURE_CONTAINER }],
+      },
+    };
+    const coveredSource = {
+      id: "source-1",
+      pos: {
+        findInRange: () => [{ structureType: STRUCTURE_CONTAINER }],
+      },
+    };
+    const harvester = {
+      room: { name: "W21N35" },
+      memory: { role: "harvester" as string, sourceId: undefined as string | undefined },
+    };
+    const miner = {
+      room: { name: "W21N35" },
+      memory: { role: "miner", sourceId: "source-1" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "miner-1": miner, "harvester-1": harvester },
+    };
+    const room = {
+      name: "W21N35",
+      find: (constType: number) =>
+        constType === FIND_SOURCES ? [coveredSource, freeSource] : [],
+    } as unknown as Room;
+
+    const ok = reassignSpareHarvesterToMiner(
+      room,
+      { harvester: 0, miner: 2, hauler: 2, upgrader: 0, builder: 1 },
+      { harvester: 1, miner: 1, hauler: 2, upgrader: 0, builder: 1 },
+    );
+    expect(ok).toBe(true);
+    expect(harvester.memory.role).toBe("miner");
+    expect(harvester.memory.sourceId).toBe("source-2");
   });
 });
 

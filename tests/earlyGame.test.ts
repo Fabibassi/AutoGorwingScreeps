@@ -160,6 +160,27 @@ describe("desiredCreeps", () => {
     ).toBe(true);
   });
 
+  test("does not demote miners when spawn is healthy despite stalled income metric", () => {
+    // Spawn nearly full + energy in containers makes income look stalled;
+    // converting miners to harvesters then starves the second source.
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 1,
+        baselineIncome: 4,
+        spawnFillPct: 0.86,
+        energyAvailable: 310,
+      }),
+    ).toBe(false);
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 1,
+        baselineIncome: 4,
+        spawnFillPct: 0.86,
+        energyAvailable: 310,
+      }),
+    ).toMatchObject({ miner: 2, harvester: 0, hauler: 2 });
+  });
+
   test("rcl2 dedicated mining drops bootstrap harvester when income recovers", () => {
     expect(
       desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 4 }),
@@ -188,9 +209,10 @@ describe("spawnPriorityOrder", () => {
     ]);
   });
 
-  test("hauler first when income stalled at zero (drain containers before harvesters)", () => {
+  test("keeps miner in order when spawn is healthy despite zero income metric", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 })).toEqual([
       "hauler",
+      "miner",
       "harvester",
       "upgrader",
       "builder",

@@ -134,6 +134,11 @@ export function needsBootstrapHarvester(
   ctx?: EconomyContext,
 ): boolean {
   if (!dedicatedMiners || !ctx) return false;
+  // Same healthy-spawn gate as mobile-harvest fallback: banked container energy
+  // makes income look dead while spawn is already refillable.
+  if ((ctx.spawnFillPct ?? 0) >= 0.35 || (ctx.energyAvailable ?? 0) >= 150) {
+    return false;
+  }
   const income = ctx.energyIncomePerTick ?? 0;
   const fill = ctx.spawnFillPct ?? 1;
   return income <= 0 || fill < 0.2;
@@ -145,6 +150,12 @@ export function shouldFallbackToMobileHarvest(
   ctx?: EconomyContext,
 ): boolean {
   if (!dedicatedMiners || !ctx) return false;
+  // Healthy spawn/extensions: low measured income usually means energy banked in
+  // source containers, not a dead miner pipeline. Demoting miners then leaves a
+  // source idle while the converted body wanders as a mobile harvester.
+  if ((ctx.spawnFillPct ?? 0) >= 0.35 || (ctx.energyAvailable ?? 0) >= 150) {
+    return false;
+  }
   const income = ctx.energyIncomePerTick ?? 0;
   return isIncomeStalled(income, ctx.baselineIncome);
 }
