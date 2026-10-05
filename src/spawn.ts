@@ -31,7 +31,7 @@ export function reassignForEconomySurvival(
     }
     creep.memory.role = "harvester";
     delete creep.memory.sourceId;
-    return;
+    // Convert every idle WORK body — one harvester cannot refill two sources.
   }
 }
 
@@ -197,8 +197,6 @@ export function recycleExcessHaulers(
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
-  if (spawn.spawning) return;
-
   const room = spawn.room;
   const rcl = room.controller?.level ?? 1;
   const sourceCount = room.find(FIND_SOURCES).length;
@@ -237,8 +235,9 @@ export function runSpawn(spawn: StructureSpawn): void {
     economy,
   );
   const counts = countCreepsByRole();
+  // Rebalance even while spawn is busy — otherwise dead miners leave builders
+  // stuck until the current spawnCreep finishes.
   reassignForEconomySurvival(room, counts);
-  // Undo false demotions before infra reassignment consumes the spare H.
   for (;;) {
     const mid = countCreepsByRole();
     if (!reassignSpareHarvesterToMiner(room, want, mid)) break;
@@ -257,13 +256,13 @@ export function runSpawn(spawn: StructureSpawn): void {
     sourceCount,
     containersAtSources,
   );
-  // Convert all surplus upgraders in one tick during extension push.
   for (;;) {
     const mid = countCreepsByRole();
     if (!reassignUpgraderToExtensionBuilder(room, want, mid)) break;
   }
-  // Recount after possible role reassignment so quotas/spawn order stay consistent.
   const liveCounts = countCreepsByRole();
+
+  if (spawn.spawning) return;
 
   const hasCarry = Object.keys(Game.creeps).some(
     (n) => Game.creeps[n].getActiveBodyparts(CARRY) > 0,
@@ -289,10 +288,15 @@ export function runSpawn(spawn: StructureSpawn): void {
     energyAvailable,
     { infrastructurePush, buildersBelowQuota, economyFloorMet },
   );
+  // Leave room for a miner body when mining is wiped (fat haulers ate 300+).
+  const haulerMaxCost =
+    liveCounts.miner === 0 && infrastructureDedicated ? 100 : undefined;
 
   for (const role of spawnOrder) {
     if (liveCounts[role] >= want[role]) continue;
-    const body = bodyForRole(role, energyAvailable);
+    // Never spend on builders while sources have no harvester/miner.
+    if (role === "builder" && !economyFloorMet) continue;
+    const body = bodyForRole(role, energyAvailable, { haulerMaxCost });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}`;
     const memory: CreepMemory = { role };

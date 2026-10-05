@@ -139,6 +139,26 @@ describe("reassignForEconomySurvival", () => {
     );
     expect(builder.memory.role).toBe("harvester");
   });
+
+  test("converts every builder when mining capacity is zero", () => {
+    const a = { room: { name: "W21N35" }, memory: { role: "builder" } };
+    const b = { room: { name: "W21N35" }, memory: { role: "builder" } };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "builder-1": a, "builder-2": b },
+    };
+    reassignForEconomySurvival(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 0,
+        hauler: 1,
+        upgrader: 0,
+        builder: 2,
+      },
+    );
+    expect(a.memory.role).toBe("harvester");
+    expect(b.memory.role).toBe("harvester");
+  });
 });
 
 describe("reassignUpgraderToExtensionBuilder", () => {

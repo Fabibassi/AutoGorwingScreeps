@@ -29,15 +29,22 @@ export function buildMinerBody(energyAvailable: number): BodyPartConstant[] {
   return body;
 }
 
-export function buildHaulerBody(energyAvailable: number): BodyPartConstant[] {
+export function buildHaulerBody(
+  energyAvailable: number,
+  opts?: { maxCost?: number },
+): BodyPartConstant[] {
   const pairCost = PART_COST.carry + PART_COST.move;
+  const budget =
+    opts?.maxCost != null
+      ? Math.min(energyAvailable, opts.maxCost)
+      : energyAvailable;
   const body: BodyPartConstant[] = [];
-  let remaining = energyAvailable;
+  let remaining = budget;
   while (remaining >= pairCost) {
     body.push("carry", "move");
     remaining -= pairCost;
   }
-  if (body.length === 0 && energyAvailable >= pairCost) {
+  if (body.length === 0 && budget >= pairCost) {
     return ["carry", "move"];
   }
   // Soft-lock emergency: stationary CARRY @ 50 — only useful if energy lies in range 1.
@@ -66,12 +73,15 @@ export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
 export function bodyForRole(
   role: keyof CreepQuotas,
   energyAvailable: number,
+  opts?: { haulerMaxCost?: number },
 ): BodyPartConstant[] {
   switch (role) {
     case "miner":
       return buildMinerBody(energyAvailable);
     case "hauler":
-      return buildHaulerBody(energyAvailable);
+      return buildHaulerBody(energyAvailable, {
+        maxCost: opts?.haulerMaxCost,
+      });
     case "builder":
     case "harvester":
     case "upgrader":

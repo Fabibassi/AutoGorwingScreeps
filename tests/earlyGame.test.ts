@@ -199,6 +199,36 @@ describe("desiredCreeps", () => {
 });
 
 describe("spawnPriorityOrder", () => {
+  test("miner before hauler when economy is empty so fat haulers cannot starve miner spawn", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0.8, spawnFillPct: 0.58, energyAvailable: 316 },
+        { harvester: 0, miner: 0 },
+        316,
+      ),
+    ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
+  });
+
+  test("miner before hauler when dedicated mining has zero miners", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 1, spawnFillPct: 0.6, energyAvailable: 300 },
+        { harvester: 0, miner: 0 },
+        300,
+      )[0],
+    ).toBe("harvester");
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 5, spawnFillPct: 0.8 },
+        { harvester: 1, miner: 0 },
+        300,
+      )[0],
+    ).toBe("miner");
+  });
+
   test("hauler first when dedicated mining is healthy", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 5, spawnFillPct: 0.8 })).toEqual([
       "hauler",
@@ -245,7 +275,7 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 0, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
       ),
-    ).toEqual(["harvester", "hauler", "miner", "upgrader", "builder"]);
+    ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
   });
 
   test("hauler first when soft-locked below bootstrap energy (#36)", () => {
@@ -414,6 +444,14 @@ describe("bodyForRole", () => {
     expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
     expect(bodyForRole("harvester", 100)).toEqual([]);
     expect(bodyForRole("harvester", 200)).toEqual(["work", "carry", "move"]);
+  });
+
+  test("hauler caps body cost when mining is wiped so miner can still spawn", () => {
+    expect(bodyForRole("hauler", 316, { haulerMaxCost: 100 })).toEqual([
+      "carry",
+      "move",
+    ]);
+    expect(bodyForRole("miner", 216)).toEqual(["work", "move"]);
   });
 
   test("hauler emergency stationary CARRY when below MOVE+CARRY cost", () => {

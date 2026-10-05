@@ -235,8 +235,12 @@ export function spawnPriorityOrder(
   ) {
     order = ["hauler", "harvester", "miner", "upgrader", "builder"];
   } else if (counts && hasNoEconomyCreeps(counts)) {
-    // Empty economy: always bootstrap a harvester before haulers/builders.
-    order = ["harvester", "hauler", "miner", "upgrader", "builder"];
+    // Empty economy: bootstrap harvest, then miner before a fat hauler can
+    // spend the whole energyAvailable bank and block miner respawn.
+    order = ["harvester", "miner", "hauler", "upgrader", "builder"];
+  } else if (counts && dedicatedMiners && (counts.miner ?? 0) === 0) {
+    // Miners wiped but a hauler/harvester remains — refill sources first.
+    order = ["miner", "hauler", "harvester", "upgrader", "builder"];
   } else if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
     // Hauler-first: containers may hold all room energy; hauler body costs 100 vs 150.
     order = ["hauler", "harvester", "upgrader", "builder"];
