@@ -1,8 +1,41 @@
 import { describe, expect, test } from "vitest";
 import {
+  shouldDeliverNow,
   shouldDepositInStorage,
   shouldWithdrawFromStorage,
 } from "../src/roles/hauler";
+
+describe("shouldDeliverNow", () => {
+  test("waits to fill when spawn and extensions are topped up", () => {
+    expect(
+      shouldDeliverNow(40, 10, { spawnFillPct: 0.9, extensionsNeedingEnergy: 0 }),
+    ).toBe(false);
+  });
+
+  test("delivers full loads always", () => {
+    expect(
+      shouldDeliverNow(50, 0, { spawnFillPct: 1, extensionsNeedingEnergy: 0 }),
+    ).toBe(true);
+  });
+
+  test("delivers partial loads when spawn is hungry", () => {
+    expect(
+      shouldDeliverNow(18, 32, { spawnFillPct: 0.16, extensionsNeedingEnergy: 0 }),
+    ).toBe(true);
+  });
+
+  test("delivers partial loads when extensions need energy", () => {
+    expect(
+      shouldDeliverNow(104, 46, { spawnFillPct: 0.9, extensionsNeedingEnergy: 1 }),
+    ).toBe(true);
+  });
+
+  test("never delivers empty", () => {
+    expect(
+      shouldDeliverNow(0, 50, { spawnFillPct: 0.1, extensionsNeedingEnergy: 1 }),
+    ).toBe(false);
+  });
+});
 
 describe("storage haul policy", () => {
   test("allows storage overflow at zero income when spawn and extensions are full", () => {

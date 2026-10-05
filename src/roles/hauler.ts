@@ -30,6 +30,21 @@ export function shouldWithdrawFromStorage(ctx: StorageHaulContext): boolean {
   return isIncomeStalled(ctx.energyIncomePerTick, ctx.baselineIncome);
 }
 
+/**
+ * Deliver even with a partial load when spawn/extensions need energy.
+ * Waiting for a full CARRY while spawn sits at ~0 left builders draining the bank
+ * and energyAvailable never approaching capacity (RCL4 extension push).
+ */
+export function shouldDeliverNow(
+  carried: number,
+  freeCapacity: number,
+  ctx: Pick<StorageHaulContext, "spawnFillPct" | "extensionsNeedingEnergy">,
+): boolean {
+  if (carried <= 0) return false;
+  if (freeCapacity <= 0) return true;
+  return ctx.spawnFillPct < 0.85 || ctx.extensionsNeedingEnergy > 0;
+}
+
 function haulContext(creep: Creep): StorageHaulContext {
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
   const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
@@ -55,16 +70,31 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
   if (!spawn) return null;
 
+  const spawnFree = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
+  const spawnCap = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 1;
+  const spawnFillPct =
+    (spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / Math.max(1, spawnCap);
+
   const extensions = creep.room.find(FIND_MY_STRUCTURES, {
     filter: (s): s is StructureExtension =>
       s.structureType === STRUCTURE_EXTENSION &&
       s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
   });
-  if (extensions.length > 0) {
-    return creep.pos.findClosestByPath(extensions);
+
+  // Critically empty spawn: refill spawn before topping extensions so energyAvailable
+  // recovers even when pathing around extension sites is awkward.
+  if (spawnFillPct < 0.5 && spawnFree > 0) {
+    return spawn;
   }
 
-  if (spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+  if (extensions.length > 0) {
+    const closest =
+      creep.pos.findClosestByPath(extensions) ??
+      creep.pos.findClosestByRange(extensions);
+    if (closest) return closest;
+  }
+
+  if (spawnFree > 0) {
     return spawn;
   }
 
@@ -145,7 +175,11 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
 }
 
 export function runHauler(creep: Creep): number {
-  if (creep.store.getFreeCapacity() > 0) {
+  const carried = creep.store[RESOURCE_ENERGY] ?? 0;
+  const freeCapacity = creep.store.getFreeCapacity();
+  const ctx = haulContext(creep);
+
+  if (!shouldDeliverNow(carried, freeCapacity, ctx)) {
     const source = findEnergySource(creep);
     if (!source) return 0;
     if (source instanceof Resource) {
