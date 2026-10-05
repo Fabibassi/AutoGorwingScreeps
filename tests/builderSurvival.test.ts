@@ -475,10 +475,9 @@ describe("reclaimStrandedEmergencyHauler", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("waits when living sticky creep but spawn cannot afford a miner yet", () => {
+  test("hands off when a living creep matches spawning.name", () => {
     const cancel = vi.fn(() => OK);
     const suicide = vi.fn();
-    const spawnCreep = vi.fn(() => ERR_BUSY);
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
       time: 100,
       creeps: {
@@ -488,51 +487,15 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "hauler-1", remainingTime: 0, cancel },
-      spawnCreep,
-      pos: { x: 10, y: 10, isNearTo: () => false, findInRange: () => [] },
-      room: {
-        name: "W21N35",
-        energyAvailable: 100,
-        storage: null,
-        find: () => [],
-      },
+      room: { name: "W21N35", energyAvailable: 300 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
     expect(suicide).not.toHaveBeenCalled();
-  });
-
-  test("attempts spawnCreep through sticky when hauler missing", () => {
-    const cancel = vi.fn(() => OK);
-    const spawnCreep = vi.fn(() => OK);
-    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
-      time: 100,
-      creeps: {
-        "miner-1": {
-          ticksToLive: 1400,
-          memory: { role: "miner" },
-        },
-      },
-    };
-    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
-    const spawn = {
-      spawning: { name: "miner-1", remainingTime: 0, cancel },
-      spawnCreep,
-      pos: { x: 10, y: 10, isNearTo: () => false, findInRange: () => [] },
-      room: {
-        name: "W21N35",
-        energyAvailable: 120,
-        storage: null,
-        find: () => [],
-      },
-    };
-    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
-    expect(spawnCreep).toHaveBeenCalled();
-    expect(cancel).not.toHaveBeenCalled();
     expect(
       (Memory as { ags?: { zombieDebug?: { action?: string } } }).ags
         ?.zombieDebug?.action,
-    ).toBe("spawn-through-sticky");
+    ).toBe("hands-off-living");
   });
 
   test("cancels empty stuck spawn (remainingTime 0, no creep)", () => {

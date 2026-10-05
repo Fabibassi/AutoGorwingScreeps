@@ -254,11 +254,11 @@ export function recycleExcessHaulers(
 /**
  * Screeps can leave spawn.spawning stuck at remainingTime 0 (ERR_BUSY forever).
  *
- * remainingTime > 0: live spawn — never cancel (aborts the creep).
- * remainingTime === 0 + no creep: ghost — cancel immediately.
- * remainingTime === 0 + living creep + healthy economy: leave alone (cancel deletes).
- * remainingTime === 0 + living creep + noEconomy + enough energy: cancel to free
- * spawn so the next tick can hatch a miner/harvester (sacrifice the stuck name).
+ * remainingTime > 0: live spawn — leave alone.
+ * remainingTime === 0 + no creep: ghost — cancel.
+ * remainingTime === 0 + living creep: DO NOTHING. Calling cancel() deletes the
+ * creep; calling spawnCreep() returns ERR_BUSY and may keep the sticky flag.
+ * Leave the birth/sticky tick alone so the engine can clear spawning next tick.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
@@ -275,66 +275,23 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   }
 
   const existing = Game.creeps[spawning.name];
-  if (!existing) {
-    if (ags) {
-      ags.zombieDebug = {
-        tick: Game.time,
-        spawningName: spawning.name,
-        remainingTime: 0,
-        hasExact: false,
-        action: "cancel-ghost",
-      };
-      if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
-    }
-    return (
-      (spawning as { cancel?: () => ScreepsReturnCode }).cancel?.() === OK
-    );
-  }
-
-  const counts = countCreepsByRole();
-  const energy = spawn.room.energyAvailable;
-  // Sticky remainingTime 0 may be cosmetic — try spawning the missing logistics
-  // creep before sacrificing anyone. Log the attempt for live diagnosis.
-  const needHauler = counts.hauler === 0 && energy >= 100;
-  const needMiner =
-    hasNoEconomyCreeps(counts) && energy >= 150;
-  if (needHauler || needMiner) {
-    const role = needHauler ? "hauler" : "miner";
-    const body = bodyForRole(role, energy, {
-      haulerMaxCost: 100,
-    });
-    if (body.length > 0) {
-      const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
-      const result = spawn.spawnCreep(body, name, { memory: { role } });
-      if (ags) {
-        ags.zombieDebug = {
-          tick: Game.time,
-          spawningName: spawning.name,
-          remainingTime: 0,
-          ttl: existing.ticksToLive,
-          hasExact: true,
-          action: "spawn-through-sticky",
-          spawnAttempt: result,
-          attemptedRole: role,
-        };
-      }
-      if (result === OK) return true;
-      // Keep spawn-through-sticky diagnostics (do not overwrite with wait-living).
-      return false;
-    }
-  }
-
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: 0,
-      ttl: existing.ticksToLive,
-      hasExact: true,
-      action: "wait-living",
+      ttl: existing?.ticksToLive,
+      hasExact: existing != null,
+      action: existing ? "hands-off-living" : "cancel-ghost",
     };
   }
-  return false;
+
+  if (existing) return false;
+
+  if (ags?.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+  return (
+    (spawning as { cancel?: () => ScreepsReturnCode }).cancel?.() === OK
+  );
 }
 
 /** True when storage/container/drop with energy sits in range 1 of spawn. */
