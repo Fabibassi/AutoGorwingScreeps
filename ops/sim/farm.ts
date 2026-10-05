@@ -14,6 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const SCENARIOS: Record<string, string> = {
   softlock: "ops/sim/softLock.ts",
   boot: "ops/sim/boot.ts",
+  economy: "ops/sim/economy.ts",
 };
 
 function parseArgs(argv: string[]) {

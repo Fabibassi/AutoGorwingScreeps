@@ -115,7 +115,10 @@ npm run sim:softlock                        # Soft-Lock (Storage voll, Spawn lee
 npm run sim:boot                            # Empty-Room Boot (RCL2, Spawn voll)
 npm run sim:farm -- --workers 20 --quiet    # 20 parallele Soft-Lock-Instanzen
 npm run sim:farm -- --scenario boot --workers 20 --concurrency 10 --quiet
+npm run sim:learn                           # Run → Score → History (.sim-learn/)
 ```
+
+Nach jedem Learn-Round: `.sim-learn/latest.json` + `history.jsonl` (`nextFocus`, Fail-Notizen).
 
 | Hardware (dieser PC) | Empfehlung |
 |----------------------|------------|
