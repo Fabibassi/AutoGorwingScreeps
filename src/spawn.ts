@@ -196,34 +196,75 @@ export function recycleExcessHaulers(
   return false;
 }
 
+/** Ticks to wait after remainingTime hits 0 before canceling a sticky spawn. */
+const ZOMBIE_SPAWN_GRACE_TICKS = 5;
+
 /**
- * Screeps can leave spawn.spawning stuck at remainingTime 0 after the creep
- * already exists. That keeps spawnCreep at ERR_BUSY forever.
+ * Screeps can leave spawn.spawning stuck at remainingTime 0 (ERR_BUSY forever).
  *
- * remainingTime > 0: real spawn in progress — never cancel (kills newborns).
- * remainingTime === 0: spawning flag is stale — cancel clears it. The living
- * creep (if any) is already born; cancel must NOT suicide it.
+ * remainingTime > 0: live spawn — never cancel (aborts the creep).
+ * remainingTime === 0 + no creep: ghost — cancel immediately.
+ * remainingTime === 0 + creep exists: birth tick looks identical to sticky;
+ * wait ZOMBIE_SPAWN_GRACE_TICKS, then cancel ONLY (never suicide).
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
-  if (!spawning) return false;
-  if (spawning.remainingTime > 0) return false;
-  const existing = Game.creeps[spawning.name];
   const ags = typeof Memory !== "undefined" ? Memory.ags : undefined;
+
+  if (!spawning) {
+    if (ags) ags.zombieSpawnSeen = {};
+    return false;
+  }
+
+  if (spawning.remainingTime > 0) {
+    if (ags?.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+    return false;
+  }
+
+  const existing = Game.creeps[spawning.name];
+  const cancel = () =>
+    (spawning as { cancel?: () => ScreepsReturnCode }).cancel?.();
+
+  // Empty stuck name — safe to clear immediately.
+  if (!existing) {
+    if (ags) {
+      ags.zombieDebug = {
+        tick: Game.time,
+        spawningName: spawning.name,
+        remainingTime: 0,
+        hasExact: false,
+        action: "cancel-ghost",
+      };
+      if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+    }
+    return cancel() === OK;
+  }
+
+  // Creep already exists: birth tick OR sticky flag. Grace before cancel.
+  const seen = (ags?.zombieSpawnSeen ?? {}) as Record<string, number>;
+  const firstSeen = seen[spawning.name];
+  if (firstSeen == null) {
+    if (ags) {
+      ags.zombieSpawnSeen = { ...seen, [spawning.name]: Game.time };
+    }
+    return false;
+  }
+  if (Game.time - firstSeen < ZOMBIE_SPAWN_GRACE_TICKS) return false;
+
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
-      remainingTime: spawning.remainingTime,
-      ttl: existing?.ticksToLive,
-      hasExact: existing != null,
-      action: "cancel",
+      remainingTime: 0,
+      ttl: existing.ticksToLive,
+      firstSeen,
+      hasExact: true,
+      action: "cancel-sticky",
     };
+    delete ags.zombieSpawnSeen[spawning.name];
   }
-  const code = (
-    spawning as { cancel?: () => ScreepsReturnCode }
-  ).cancel?.();
-  return code === OK;
+  // Clear sticky flag only — do NOT suicide the living hauler/miner.
+  return cancel() === OK;
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
