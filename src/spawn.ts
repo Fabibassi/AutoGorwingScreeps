@@ -309,6 +309,32 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   return code === OK;
 }
 
+/** True when storage/container/drop with energy sits in range 1 of spawn. */
+export function hasRecoverableEnergyBeside(spawn: StructureSpawn): boolean {
+  const storage = spawn.room.storage;
+  if (
+    storage &&
+    (storage.store[RESOURCE_ENERGY] ?? 0) > 0 &&
+    spawn.pos.isNearTo(storage)
+  ) {
+    return true;
+  }
+  if (
+    spawn.pos.findInRange(FIND_STRUCTURES, 1, {
+      filter: (s): s is StructureContainer =>
+        s.structureType === STRUCTURE_CONTAINER &&
+        (s.store[RESOURCE_ENERGY] ?? 0) > 0,
+    }).length > 0
+  ) {
+    return true;
+  }
+  return (
+    spawn.pos.findInRange(FIND_DROPPED_RESOURCES, 1, {
+      filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 0,
+    }).length > 0
+  );
+}
+
 export function runSpawn(spawn: StructureSpawn): void {
   clearZombieSpawn(spawn);
   // Free sticky spawn + reclaim energy from CARRY-only haulers on the wrong tile.
@@ -421,12 +447,16 @@ export function runSpawn(spawn: StructureSpawn): void {
   // Leave room for a miner body when mining is wiped (fat haulers ate 300+).
   const haulerMaxCost =
     liveCounts.miner === 0 && infrastructureDedicated ? 100 : undefined;
+  const allowStationaryHauler = hasRecoverableEnergyBeside(spawn);
 
   for (const role of spawnOrder) {
     if (liveCounts[role] >= want[role]) continue;
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
-    const body = bodyForRole(role, energyAvailable, { haulerMaxCost });
+    const body = bodyForRole(role, energyAvailable, {
+      haulerMaxCost,
+      allowStationaryHauler,
+    });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };

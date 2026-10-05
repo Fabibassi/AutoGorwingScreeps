@@ -454,10 +454,13 @@ describe("bodyForRole", () => {
     expect(bodyForRole("miner", 216)).toEqual(["work", "move"]);
   });
 
-  test("hauler emergency stationary CARRY when below MOVE+CARRY cost", () => {
-    expect(bodyForRole("hauler", 50)).toEqual(["carry"]);
-    expect(bodyForRole("hauler", 69)).toEqual(["carry"]);
-    expect(bodyForRole("hauler", 49)).toEqual([]);
+  test("hauler stationary CARRY only when explicitly allowed", () => {
+    expect(bodyForRole("hauler", 50)).toEqual([]);
+    expect(bodyForRole("hauler", 69)).toEqual([]);
+    expect(bodyForRole("hauler", 50, { allowStationaryHauler: true })).toEqual([
+      "carry",
+    ]);
+    expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
   });
 });
 

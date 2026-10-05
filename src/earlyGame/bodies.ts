@@ -31,7 +31,7 @@ export function buildMinerBody(energyAvailable: number): BodyPartConstant[] {
 
 export function buildHaulerBody(
   energyAvailable: number,
-  opts?: { maxCost?: number },
+  opts?: { maxCost?: number; allowStationary?: boolean },
 ): BodyPartConstant[] {
   const pairCost = PART_COST.carry + PART_COST.move;
   const budget =
@@ -47,8 +47,14 @@ export function buildHaulerBody(
   if (body.length === 0 && budget >= pairCost) {
     return ["carry", "move"];
   }
-  // Soft-lock emergency: stationary CARRY @ 50 — only useful if energy lies in range 1.
-  if (body.length === 0 && energyAvailable >= PART_COST.carry) {
+  // Stationary CARRY @ 50 ONLY when caller confirmed energy in range 1 of spawn.
+  // Without MOVE a hauler cannot walk to storage/containers — spawning one blind
+  // is a soft-lock dead end.
+  if (
+    opts?.allowStationary &&
+    body.length === 0 &&
+    energyAvailable >= PART_COST.carry
+  ) {
     return ["carry"];
   }
   return body;
@@ -73,7 +79,7 @@ export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
 export function bodyForRole(
   role: keyof CreepQuotas,
   energyAvailable: number,
-  opts?: { haulerMaxCost?: number },
+  opts?: { haulerMaxCost?: number; allowStationaryHauler?: boolean },
 ): BodyPartConstant[] {
   switch (role) {
     case "miner":
@@ -81,6 +87,7 @@ export function bodyForRole(
     case "hauler":
       return buildHaulerBody(energyAvailable, {
         maxCost: opts?.haulerMaxCost,
+        allowStationary: opts?.allowStationaryHauler,
       });
     case "builder":
     case "harvester":
