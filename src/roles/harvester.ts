@@ -7,7 +7,7 @@ export function shouldBuildSourceContainers(
   sourceCount: number,
 ): boolean {
   if (containersAtSources >= Math.max(1, sourceCount)) return false;
-  return spawnFillPct >= 0.5;
+  return spawnFillPct >= 0.35;
 }
 
 export function runHarvester(creep: Creep): number {
