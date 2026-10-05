@@ -416,7 +416,7 @@ describe("recycleExcessHaulers", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("cancels when an aged creep is still named in spawn.spawning", () => {
+  test("suicides aged creep even when cancel returns OK", () => {
     const cancel = vi.fn(() => OK);
     const suicide = vi.fn();
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
@@ -435,7 +435,7 @@ describe("clearZombieSpawn", () => {
     };
     expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
     expect(cancel).toHaveBeenCalled();
-    expect(suicide).not.toHaveBeenCalled();
+    expect(suicide).toHaveBeenCalled();
   });
 
   test("does not kill a newborn on the birth tick (remainingTime 0, TTL 1500)", () => {

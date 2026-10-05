@@ -203,8 +203,9 @@ export function recycleExcessHaulers(
  */
 /**
  * Screeps can leave spawn.spawning stuck pointing at an *aged* creep name
- * (ERR_BUSY forever). Do NOT treat newborns (TTL near 1500, remainingTime 0
- * on the birth tick) as zombies — that suicides miners as they hatch.
+ * (ERR_BUSY forever). Do NOT treat newborns (TTL near 1500) as zombies.
+ * Always suicide the aged creep — cancel() alone has been observed to return OK
+ * without clearing the busy state.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
@@ -226,11 +227,9 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
     };
   }
 
-  const cancel = (
+  (
     spawning as { cancel?: () => ScreepsReturnCode }
   ).cancel?.();
-  if (cancel === OK) return true;
-
   existing.suicide();
   return true;
 }
