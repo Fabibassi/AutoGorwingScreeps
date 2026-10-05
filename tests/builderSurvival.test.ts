@@ -28,6 +28,28 @@ describe("canWithdrawFromSpawn", () => {
       canWithdrawFromSpawn(104, 300, true, { infrastructurePush: true }),
     ).toBe(false);
   });
+
+  test("builders below quota reserve a full worker body before spawn withdraw", () => {
+    // 200 bank for 2nd builder — do not drain it back under the spawn cost.
+    expect(
+      canWithdrawFromSpawn(200, 300, true, {
+        infrastructurePush: true,
+        buildersBelowQuota: true,
+      }),
+    ).toBe(false);
+    expect(
+      canWithdrawFromSpawn(249, 300, true, {
+        infrastructurePush: true,
+        buildersBelowQuota: true,
+      }),
+    ).toBe(false);
+    expect(
+      canWithdrawFromSpawn(250, 300, true, {
+        infrastructurePush: true,
+        buildersBelowQuota: true,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("hasNoEconomyCreeps", () => {

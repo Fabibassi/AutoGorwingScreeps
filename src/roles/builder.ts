@@ -2,19 +2,25 @@ import {
   countSourceContainers,
   findSourceContainerSites,
 } from "../room/queries";
+import { INFRA_BUILDER_SPAWN_ENERGY } from "./harvester";
 
 /** Builders must not drain spawn energy needed to respawn harvesters/miners. */
 export function canWithdrawFromSpawn(
   spawnEnergy: number,
   spawnCapacity: number,
   hasEconomyCreeps: boolean,
-  opts?: { infrastructurePush?: boolean },
+  opts?: { infrastructurePush?: boolean; buildersBelowQuota?: boolean },
 ): boolean {
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
   const ratio = spawnEnergy / spawnCapacity;
+  // 2nd infra builder missing: keep a full WORK+CARRY+MOVE body (+1 CARRY slack)
+  // so spawnCreep can claim it before we siphon the bank back under 200.
+  if (opts?.buildersBelowQuota) {
+    return spawnEnergy >= INFRA_BUILDER_SPAWN_ENERGY + 50;
+  }
   // ~35%: allow builders to finish source containers while spawn still banks a
-  // bootstrap harvester (200). 40% left the live room stuck just under the cut.
+  // cheap refill (hauler/partial). Do not use this path while buildersBelowQuota.
   if (opts?.infrastructurePush) return ratio >= 0.35;
   return ratio >= 0.85;
 }
@@ -91,9 +97,11 @@ export function runBuilder(creep: Creep): number {
     const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
     const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
     let economyCreeps = 0;
+    let builders = 0;
     for (const name in Game.creeps) {
       const role = Game.creeps[name].memory.role;
       if (role === "harvester" || role === "miner") economyCreeps++;
+      if (role === "builder") builders++;
     }
     const sourceCount = creep.room.find(FIND_SOURCES).length;
     const infrastructurePush =
@@ -102,6 +110,7 @@ export function runBuilder(creep: Creep): number {
     if (
       canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
         infrastructurePush,
+        buildersBelowQuota: infrastructurePush && builders < 2,
       })
     ) {
       if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {

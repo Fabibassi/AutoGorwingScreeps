@@ -169,12 +169,15 @@ export function runSpawn(spawn: StructureSpawn): void {
   if (recycleExcessHaulers(spawn, want, liveCounts, infrastructurePush)) {
     return;
   }
+  const buildersBelowQuota = liveCounts.builder < want.builder;
+  const economyFloorMet =
+    liveCounts.harvester + liveCounts.miner >= sourceCount;
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
     liveCounts,
     energyAvailable,
-    { infrastructurePush },
+    { infrastructurePush, buildersBelowQuota, economyFloorMet },
   );
 
   for (const role of spawnOrder) {

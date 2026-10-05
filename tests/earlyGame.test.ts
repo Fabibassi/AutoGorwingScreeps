@@ -218,6 +218,22 @@ describe("spawnPriorityOrder", () => {
       }),
     ).toEqual(["hauler", "miner", "harvester", "builder", "upgrader"]);
   });
+
+  test("builder before spare harvester when infra builders short and economy floor met", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        { energyIncomePerTick: 1.7, spawnFillPct: 0.45 },
+        { harvester: 2, miner: 0 },
+        200,
+        {
+          infrastructurePush: true,
+          buildersBelowQuota: true,
+          economyFloorMet: true,
+        },
+      ),
+    ).toEqual(["hauler", "miner", "builder", "harvester", "upgrader"]);
+  });
 });
 
 describe("constructionPriority", () => {

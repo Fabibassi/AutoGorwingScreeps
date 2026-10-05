@@ -177,11 +177,27 @@ export function hasNoEconomyCreeps(counts: Pick<CreepQuotas, "harvester" | "mine
 function prioritizeInfrastructureBuilder(
   order: Array<keyof CreepQuotas>,
 ): Array<keyof CreepQuotas> {
-  const withoutBuilder = order.filter((role) => role !== "builder");
+  const withoutBuilder: Array<keyof CreepQuotas> = order.filter(
+    (role) => role !== "builder",
+  );
   const upgraderIdx = withoutBuilder.indexOf("upgrader");
   if (upgraderIdx === -1) return [...withoutBuilder, "builder"];
   const next = withoutBuilder.slice();
   next.splice(upgraderIdx, 0, "builder");
+  return next;
+}
+
+/** Prefer spending a banked worker body on the missing infra builder. */
+function prioritizeBuilderOverSpareHarvester(
+  order: Array<keyof CreepQuotas>,
+): Array<keyof CreepQuotas> {
+  const withoutBuilder: Array<keyof CreepQuotas> = order.filter(
+    (role) => role !== "builder",
+  );
+  const harvesterIdx = withoutBuilder.indexOf("harvester");
+  if (harvesterIdx === -1) return [...withoutBuilder, "builder"];
+  const next = withoutBuilder.slice();
+  next.splice(harvesterIdx, 0, "builder");
   return next;
 }
 
@@ -191,7 +207,13 @@ export function spawnPriorityOrder(
   ctx?: EconomyContext,
   counts?: Pick<CreepQuotas, "harvester" | "miner">,
   energyAvailable?: number,
-  opts?: { infrastructurePush?: boolean },
+  opts?: {
+    infrastructurePush?: boolean;
+    /** Want more builders than live (source-container push). */
+    buildersBelowQuota?: boolean;
+    /** At least one harvester/miner per source — spare H can wait. */
+    economyFloorMet?: boolean;
+  },
 ): Array<keyof CreepQuotas> {
   let order: Array<keyof CreepQuotas>;
   // Soft-lock: energy trapped in extensions — hauler (100) consolidates into spawn for harvester (150).
@@ -214,7 +236,11 @@ export function spawnPriorityOrder(
   }
 
   if (opts?.infrastructurePush) {
-    return prioritizeInfrastructureBuilder(order);
+    order = prioritizeInfrastructureBuilder(order);
+    // With sources covered, spend the next 200 on builder #2 — not the spare harvester.
+    if (opts.buildersBelowQuota && opts.economyFloorMet) {
+      order = prioritizeBuilderOverSpareHarvester(order);
+    }
   }
   return order;
 }
