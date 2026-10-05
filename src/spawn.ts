@@ -293,31 +293,33 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
 
   const counts = countCreepsByRole();
   const energy = spawn.room.energyAvailable;
-  // Sticky blocks ALL spawns. Unlock when we need economy logistics:
-  // no miners/harvesters, or a miner without any hauler to move energy.
-  const needUnlock =
-    (hasNoEconomyCreeps(counts) && energy >= 150) ||
-    (counts.hauler === 0 && energy >= 100);
-  if (needUnlock) {
-    if (ags) {
-      ags.zombieDebug = {
-        tick: Game.time,
-        spawningName: spawning.name,
-        remainingTime: 0,
-        ttl: existing.ticksToLive,
-        hasExact: true,
-        action: "unlock-cancel-for-crew",
-      };
-      if (ags.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
+  // Sticky remainingTime 0 may be cosmetic — try spawning the missing logistics
+  // creep before sacrificing anyone. Log the attempt for live diagnosis.
+  const needHauler = counts.hauler === 0 && energy >= 100;
+  const needMiner =
+    hasNoEconomyCreeps(counts) && energy >= 150;
+  if (needHauler || needMiner) {
+    const role = needHauler ? "hauler" : "miner";
+    const body = bodyForRole(role, energy, {
+      haulerMaxCost: 100,
+    });
+    if (body.length > 0) {
+      const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
+      const result = spawn.spawnCreep(body, name, { memory: { role } });
+      if (ags) {
+        ags.zombieDebug = {
+          tick: Game.time,
+          spawningName: spawning.name,
+          remainingTime: 0,
+          ttl: existing.ticksToLive,
+          hasExact: true,
+          action: "spawn-through-sticky",
+          spawnAttempt: result,
+          attemptedRole: role,
+        };
+      }
+      if (result === OK) return true;
     }
-    (
-      spawning as { cancel?: () => ScreepsReturnCode }
-    ).cancel?.();
-    // cancel deletes the namesake; ensure gone if cancel was a no-op.
-    if (Game.creeps[spawning.name]) {
-      Game.creeps[spawning.name].suicide();
-    }
-    return true;
   }
 
   if (ags) {
