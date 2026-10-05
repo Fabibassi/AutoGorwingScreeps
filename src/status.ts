@@ -72,6 +72,7 @@ export function buildPlanSnapshot(
   const economy = {
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
     spawnFillPct,
+    energyAvailable: room.energyAvailable,
   };
   const infrastructureDedicated = useDedicatedMiners(
     rcl,

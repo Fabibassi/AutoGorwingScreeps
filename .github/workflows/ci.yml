@@ -16,3 +16,5 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Soft-lock mockup sim
+        run: npx tsx ops/sim/softLock.ts --instance ci-softlock --port 22199 --ticks 80
