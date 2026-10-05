@@ -1,11 +1,22 @@
 import { describe, expect, test, vi } from "vitest";
-import { canWithdrawFromSpawn } from "../src/roles/builder";
+import {
+  canWithdrawFromSpawn,
+  preferLogisticsRefill,
+} from "../src/roles/builder";
 import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
   recycleExcessHaulers,
 } from "../src/spawn";
+
+describe("preferLogisticsRefill", () => {
+  test("uses logistics once every source has a container", () => {
+    expect(preferLogisticsRefill(2, 2)).toBe(true);
+    expect(preferLogisticsRefill(1, 2)).toBe(false);
+    expect(preferLogisticsRefill(0, 2)).toBe(false);
+  });
+});
 
 describe("canWithdrawFromSpawn", () => {
   test("blocks spawn drain when economy creeps are gone", () => {

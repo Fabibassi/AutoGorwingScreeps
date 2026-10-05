@@ -327,7 +327,8 @@ export function desiredCreeps(
     miner: sources,
     hauler: sources,
     upgrader: depressed ? 1 : 2,
-    builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
+    // Two builders finish RCL4 extension sites (3k each) much faster than one.
+    builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 2 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {

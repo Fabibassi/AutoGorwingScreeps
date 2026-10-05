@@ -25,6 +25,17 @@ export function canWithdrawFromSpawn(
   return ratio >= 0.85;
 }
 
+/**
+ * Once source containers exist, self-harvest fights static miners and starves
+ * extension builds. Prefer hauler logistics (containers/storage/spawn) instead.
+ */
+export function preferLogisticsRefill(
+  containersAtSources: number,
+  sourceCount: number,
+): boolean {
+  return containersAtSources >= Math.max(1, sourceCount);
+}
+
 function findBuildSite(creep: Creep): ConstructionSite | null {
   const sourceCount = creep.room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(creep.room);
@@ -41,6 +52,81 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
     creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES) ??
     creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES)
   );
+}
+
+function refillFromLogistics(creep: Creep): boolean {
+  const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
+    filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= 20,
+  });
+  if (dropped) {
+    if (creep.pickup(dropped) === ERR_NOT_IN_RANGE) {
+      creep.moveTo(dropped);
+    }
+    return true;
+  }
+
+  const container = creep.pos.findClosestByPath(FIND_STRUCTURES, {
+    filter: (s): s is StructureContainer =>
+      s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0,
+  });
+  if (container) {
+    if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+      creep.moveTo(container);
+    }
+    return true;
+  }
+
+  const storage = creep.room.storage;
+  if (storage && storage.store[RESOURCE_ENERGY] > 0) {
+    if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+      creep.moveTo(storage);
+    }
+    return true;
+  }
+
+  const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+  if (!spawn) return false;
+
+  const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+  const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
+  let economyCreeps = 0;
+  let builders = 0;
+  for (const name in Game.creeps) {
+    const role = Game.creeps[name].memory.role;
+    if (role === "harvester" || role === "miner") economyCreeps++;
+    if (role === "builder") builders++;
+  }
+  const sourceCount = creep.room.find(FIND_SOURCES).length;
+  const containersAtSources = countSourceContainers(creep.room);
+  const hasSites = creep.room.find(FIND_CONSTRUCTION_SITES).length > 0;
+  const infrastructurePush =
+    containersAtSources < sourceCount && hasSites;
+  // Extension push: allow spawn siphon at infra thresholds so 3k sites move.
+  const extensionPush =
+    !infrastructurePush &&
+    hasSites &&
+    preferLogisticsRefill(containersAtSources, sourceCount);
+  if (
+    !canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
+      infrastructurePush: infrastructurePush || extensionPush,
+      buildersBelowQuota: infrastructurePush && builders < 2,
+    })
+  ) {
+    return false;
+  }
+  if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+    creep.moveTo(spawn);
+  }
+  return true;
+}
+
+function refillFromHarvest(creep: Creep): boolean {
+  const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
+  if (!source) return false;
+  if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
+    creep.moveTo(source, { visualizePathStyle: { stroke: "#ffaa00" } });
+  }
+  return true;
 }
 
 export function runBuilder(creep: Creep): number {
@@ -62,61 +148,19 @@ export function runBuilder(creep: Creep): number {
     return 0;
   }
 
-  // Empty: self-harvest first (WORK body), then drops / containers / spawn.
-  const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-  if (source) {
-    if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(source, { visualizePathStyle: { stroke: "#ffaa00" } });
-    }
+  const sourceCount = creep.room.find(FIND_SOURCES).length;
+  const containersAtSources = countSourceContainers(creep.room);
+  const useLogistics = preferLogisticsRefill(containersAtSources, sourceCount);
+
+  // Dedicated mining online: do not contest source tiles — pull from logistics.
+  if (useLogistics) {
+    if (refillFromLogistics(creep)) return 0;
+    refillFromHarvest(creep);
     return 0;
   }
 
-  const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
-    filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= 20,
-  });
-  if (dropped) {
-    if (creep.pickup(dropped) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(dropped);
-    }
-    return 0;
-  }
-
-  const container = creep.pos.findClosestByPath(FIND_STRUCTURES, {
-    filter: (s): s is StructureContainer =>
-      s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0,
-  });
-  if (container) {
-    if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(container);
-    }
-    return 0;
-  }
-
-  const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
-  if (spawn) {
-    const capacity = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 0;
-    const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
-    let economyCreeps = 0;
-    let builders = 0;
-    for (const name in Game.creeps) {
-      const role = Game.creeps[name].memory.role;
-      if (role === "harvester" || role === "miner") economyCreeps++;
-      if (role === "builder") builders++;
-    }
-    const sourceCount = creep.room.find(FIND_SOURCES).length;
-    const infrastructurePush =
-      countSourceContainers(creep.room) < sourceCount &&
-      creep.room.find(FIND_CONSTRUCTION_SITES).length > 0;
-    if (
-      canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
-        infrastructurePush,
-        buildersBelowQuota: infrastructurePush && builders < 2,
-      })
-    ) {
-      if (creep.withdraw(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(spawn);
-      }
-    }
-  }
+  // Container push: self-harvest is still the fastest refill near sources.
+  if (refillFromHarvest(creep)) return 0;
+  refillFromLogistics(creep);
   return 0;
 }
