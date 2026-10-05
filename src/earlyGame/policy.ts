@@ -267,8 +267,16 @@ export function desiredCreeps(
       miner: 0,
       // Soft-lock: want>0 so hauler actually spawns; at >=100 prefer a 2nd mobile hauler
       // (emergency CARRY-only may already own the first slot).
-      hauler: depressed ? (energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy ? 2 : 1) : 0,
-      upgrader: depressed ? 1 : 2,
+      // During source-container push, skip haulers — no containers/drops to move yet;
+      // spawn energy must fund the second infra builder instead.
+      hauler: infraBuilder
+        ? 0
+        : depressed
+          ? energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy
+            ? 2
+            : 1
+          : 0,
+      upgrader: infraBuilder ? 0 : depressed ? 1 : 2,
       // Two builders finish source containers much faster under source contention.
       builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
     };

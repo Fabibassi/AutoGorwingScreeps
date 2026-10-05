@@ -55,6 +55,9 @@ function buildRemoteSourceContainerSite(creep: Creep): boolean {
 export function runHarvester(creep: Creep): number {
   let harvested = 0;
   const capacity = creep.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+  const sources = creep.room.find(FIND_SOURCES).length;
+  const atSources = countSourceContainers(creep.room);
+  const missingSourceContainers = atSources < Math.max(1, sources);
 
   // WORK+MOVE bootstrap (legacy): drop-mine so a hauler can scoop.
   if (capacity === 0) {
@@ -70,6 +73,16 @@ export function runHarvester(creep: Creep): number {
     return harvested;
   }
 
+  // Spend any carried energy on an adjacent source-container site.
+  // Waiting for a full store left creeps stuck harvesting at ~45/50 forever.
+  if (
+    missingSourceContainers &&
+    creep.store[RESOURCE_ENERGY] > 0 &&
+    buildLocalSourceContainerSite(creep)
+  ) {
+    return 0;
+  }
+
   if (creep.store.getFreeCapacity() > 0) {
     const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
     if (!source) return 0;
@@ -83,19 +96,11 @@ export function runHarvester(creep: Creep): number {
     return harvested;
   }
 
-  const sources = creep.room.find(FIND_SOURCES).length;
-  const atSources = countSourceContainers(creep.room);
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
   const capacitySpawn = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const fill =
     (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / capacitySpawn;
   const preferRemoteBuild = shouldBuildSourceContainers(fill, atSources, sources);
-
-  // Always finish a local source-container site before any spawn trip.
-  // Walking away at ~20% fill was stalling sites near 0–200/5000.
-  if (atSources < sources && buildLocalSourceContainerSite(creep)) {
-    return 0;
-  }
 
   if (preferRemoteBuild && buildRemoteSourceContainerSite(creep)) {
     return 0;
@@ -109,7 +114,7 @@ export function runHarvester(creep: Creep): number {
   }
 
   // Spawn full: finish remaining source containers before upgrading.
-  if (atSources < sources && buildRemoteSourceContainerSite(creep)) {
+  if (missingSourceContainers && buildRemoteSourceContainerSite(creep)) {
     return 0;
   }
 
