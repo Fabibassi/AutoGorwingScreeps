@@ -113,10 +113,11 @@ Live-World bleibt Canary — Soft-Lock & Early-Game hier üben.
 ```powershell
 npm run sim:softlock                        # Soft-Lock (Storage voll, Spawn leer)
 npm run sim:boot                            # Empty-Room Boot (RCL2, Spawn voll)
-npm run sim:farm -- --workers 20 --quiet    # 20 parallele Soft-Lock-Instanzen
-npm run sim:farm -- --scenario boot --workers 20 --concurrency 10 --quiet
-npm run sim:learn                           # Run → Score → History (.sim-learn/)
+npm run sim:farm -- --workers 8 --quiet     # Sweet-Spot laut Bench (~max jobs/s bei guter Eff.)
+npm run sim:farm -- --scenario boot --workers 8 --quiet
+npm run sim:learn                           # Run → Score (Default 8 Worker)
 npm run sim:watch                           # Live-Dashboard (2. Terminal neben Learn/Farm)
+npm run sim:bench                           # Worker-Sweep Throughput-Benchmark
 ```
 
 Nach jedem Learn-Round: `.sim-learn/latest.json` + `history.jsonl` (`nextFocus`, Fail-Notizen).  

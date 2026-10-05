@@ -57,7 +57,7 @@ type RoundReport = {
 };
 
 function parseArgs(argv: string[]) {
-  let workers = 20;
+  let workers = 8;
   let ticks = 80;
   let concurrency = 0;
   let rounds = 1;

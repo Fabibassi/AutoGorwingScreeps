@@ -19,7 +19,7 @@ const SCENARIOS: Record<string, string> = {
 };
 
 function parseArgs(argv: string[]) {
-  let workers = 20;
+  let workers = 8;
   let ticks = 80;
   let basePort = 22100;
   let scenario = "softlock";

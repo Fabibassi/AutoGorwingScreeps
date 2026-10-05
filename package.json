@@ -18,9 +18,10 @@
     "sim:boot": "npm run build && tsx ops/sim/boot.ts",
     "sim:economy": "npm run build && tsx ops/sim/economy.ts",
     "sim:farm": "npm run build && tsx ops/sim/farm.ts",
-    "sim:farm20": "npm run build && tsx ops/sim/farm.ts --workers 20 --quiet",
-    "sim:learn": "tsx ops/sim/learnLoop.ts --workers 20",
-    "sim:watch": "tsx ops/sim/watch.ts"
+    "sim:farm20": "npm run build && tsx ops/sim/farm.ts --workers 8 --quiet",
+    "sim:learn": "tsx ops/sim/learnLoop.ts --workers 8",
+    "sim:watch": "tsx ops/sim/watch.ts",
+    "sim:bench": "tsx ops/sim/bench.ts"
   },
   "devDependencies": {
     "@types/lodash": "^4.17.25",
