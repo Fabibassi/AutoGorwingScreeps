@@ -5,6 +5,19 @@ import {
   shouldBuildWalls,
 } from "../earlyGame";
 import {
+  allowControllerContainer,
+  extensionBootstrapCap,
+  minEnergyForRoads,
+  resolveExperiment,
+} from "../earlyGame/experimentPolicy";
+import {
+  parseRoadPolicy,
+  preferSourceRoads,
+  roadMinRcl,
+  roadsBlockedByContainers,
+  roadsWhileContainersMissing,
+} from "../earlyGame/roadPolicy";
+import {
   countSourceContainers,
   countStructures,
   findSourceContainerSites,
@@ -20,11 +33,31 @@ import {
 
 const MAX_NON_ROAD_SITES = 3;
 
+function tryPlaceSourceRoads(room: Room, spawn: StructureSpawn): boolean {
+  const controller = room.controller;
+  const sources = room.find(FIND_SOURCES);
+  for (const source of sources) {
+    if (tryPlaceRoadOnPath(room, spawn.pos, source.pos)) return true;
+    if (controller && tryPlaceRoadOnPath(room, controller.pos, source.pos)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function tryPlaceControllerRoad(room: Room, spawn: StructureSpawn): boolean {
+  const controller = room.controller;
+  if (!controller) return false;
+  return tryPlaceRoadOnPath(room, spawn.pos, controller.pos);
+}
+
 export function runConstruction(room: Room): void {
   const rcl = room.controller?.level ?? 1;
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   if (!spawn || !room.controller?.my) return;
 
+  const policy = parseRoadPolicy(Memory.ags?.roadPolicy);
+  const exp = resolveExperiment(Memory.ags);
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
   const nonRoadSites = existingSites.filter((s) => s.structureType !== STRUCTURE_ROAD);
   const sourceCount = room.find(FIND_SOURCES).length;
@@ -33,13 +66,24 @@ export function runConstruction(room: Room): void {
   const sourceContainersAndSites = countSourceContainers(room, {
     includeSites: true,
   });
+  const sourceContainerSites = findSourceContainerSites(room).length;
   const needSourceContainers = finishedSourceContainers < sourceCount;
   const extensionBuilt = countStructures(room, STRUCTURE_EXTENSION);
   const extensionSites = existingSites.filter(
     (s) => s.structureType === STRUCTURE_EXTENSION,
   ).length;
   const extensionCount = extensionBuilt + extensionSites;
-  const needExtensions = extensionCount < extensionQuota(rcl);
+  const extCap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
+  const needExtensions = extensionCount < extCap;
+
+  // Extensions starve when dozens of road sites dilute builders — remove roads first.
+  if (needExtensions) {
+    const roadSite = existingSites.find((s) => s.structureType === STRUCTURE_ROAD);
+    if (roadSite) {
+      roadSite.remove();
+      return;
+    }
+  }
 
   // Drop controller/other container sites until every source container is done.
   if (needSourceContainers) {
@@ -77,11 +121,50 @@ export function runConstruction(room: Room): void {
   const controllerContainer = hasControllerContainer(room);
   const hasStorage = countStructures(room, STRUCTURE_STORAGE) > 0;
   const spawnEnergy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
-  const roadSitesAllowed = shouldBuildRoads(
-    rcl,
-    spawnEnergy,
-    nonRoadSites.length > 0 || needSourceContainers || needExtensions,
-  );
+  const roadCount = countStructures(room, STRUCTURE_ROAD);
+  const roadSites = existingSites.filter((s) => s.structureType === STRUCTURE_ROAD)
+    .length;
+  /** Cap unfinished road sites so parallel policies cannot flood the room. */
+  const MAX_ROAD_SITES = 3;
+  const canPlaceMoreRoads = roadSites < MAX_ROAD_SITES;
+  const containersBlockRoads =
+    roadsBlockedByContainers(policy) && needSourceContainers;
+  const roadSitesAllowed =
+    !needExtensions &&
+    canPlaceMoreRoads &&
+    shouldBuildRoads(rcl, spawnEnergy, containersBlockRoads, {
+      minRcl: roadMinRcl(policy),
+      minSpawnEnergy: minEnergyForRoads(exp),
+    });
+
+  // Early / parallel: push at least one source-path road even mid-container-build.
+  if (
+    roadSitesAllowed &&
+    roadsWhileContainersMissing(policy) &&
+    roadCount + roadSites < 1
+  ) {
+    if (preferSourceRoads(policy)) {
+      if (tryPlaceSourceRoads(room, spawn)) return;
+      if (tryPlaceControllerRoad(room, spawn)) return;
+    } else if (tryPlaceControllerRoad(room, spawn)) {
+      return;
+    }
+  }
+
+  // Baseline: guarantee one road after source containers.
+  if (
+    !needSourceContainers &&
+    roadSitesAllowed &&
+    roadCount + roadSites < 1
+  ) {
+    if (preferSourceRoads(policy)) {
+      if (tryPlaceSourceRoads(room, spawn)) return;
+      if (tryPlaceControllerRoad(room, spawn)) return;
+    } else {
+      if (tryPlaceControllerRoad(room, spawn)) return;
+      if (tryPlaceSourceRoads(room, spawn)) return;
+    }
+  }
 
   const queue = constructionPriority(rcl, {
     // Include sites so we do not place a 3rd duplicate container site.
@@ -90,10 +173,14 @@ export function runConstruction(room: Room): void {
     hasControllerContainer: controllerContainer,
     hasStorage,
     roadSitesAllowed,
-    // Do not queue extensions until source containers are finished.
-    extensionCount: needSourceContainers
-      ? extensionQuota(rcl)
-      : extensionCount,
+    // Do not queue extensions until source containers are finished (unless later-mode).
+    extensionCount:
+      needSourceContainers && exp.containerTiming !== "later"
+        ? extCap
+        : extensionCount,
+    extensionBuilt,
+    sourceContainerSites,
+    experiment: exp,
   });
 
   for (const structureType of queue) {
@@ -106,7 +193,7 @@ export function runConstruction(room: Room): void {
       const source = sourceMissingContainer(room);
       if (source && tryPlaceContainer(room, source.pos)) return;
       if (
-        !needSourceContainers &&
+        allowControllerContainer(exp, rcl, needSourceContainers ? 1 : 0) &&
         !controllerContainer &&
         room.controller
       ) {
@@ -121,13 +208,12 @@ export function runConstruction(room: Room): void {
     }
 
     if (structureType === STRUCTURE_ROAD) {
-      const controller = room.controller;
-      if (controller && tryPlaceRoadOnPath(room, spawn.pos, controller.pos)) {
-        return;
-      }
-      const source = room.find(FIND_SOURCES)[0];
-      if (source && tryPlaceRoadOnPath(room, spawn.pos, source.pos)) {
-        return;
+      if (preferSourceRoads(policy)) {
+        if (tryPlaceSourceRoads(room, spawn)) return;
+        if (tryPlaceControllerRoad(room, spawn)) return;
+      } else {
+        if (tryPlaceControllerRoad(room, spawn)) return;
+        if (tryPlaceSourceRoads(room, spawn)) return;
       }
     }
   }
