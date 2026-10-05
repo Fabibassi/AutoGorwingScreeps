@@ -3,6 +3,7 @@ import {
   effectiveDedicatedMiners,
   hasNoEconomyCreeps,
   isSoftLocked,
+  missingSourceContainers,
   type CreepQuotas,
 } from "./earlyGame";
 import {
@@ -35,7 +36,8 @@ export type CriticalSignal =
   | "noEconomyCreeps"
   | "incomeCollapsed"
   | "downgradeRisk"
-  | "noUpgraders";
+  | "noUpgraders"
+  | "missingSourceContainers";
 
 export interface HealthCheckInput {
   tick: number;
@@ -74,6 +76,16 @@ export function computeCriticalSignals(input: HealthCheckInput): CriticalSignal[
     input.rcl >= 2 &&
     (income <= 0 || isIncomeStalled(income, input.baselineIncome));
   if (incomeCollapsed) critical.push("incomeCollapsed");
+
+  if (
+    missingSourceContainers(
+      input.rcl,
+      input.containersAtSources,
+      input.sourceCount,
+    )
+  ) {
+    critical.push("missingSourceContainers");
+  }
 
   const downgradeRisk = isDowngradeRisk(
     input.rcl,

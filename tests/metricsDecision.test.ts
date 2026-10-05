@@ -47,6 +47,35 @@ test("evolve when stagnant and no open evolve issues", () => {
   expect(d?.action).toBe("evolve");
 });
 
+test("evolve on missingSourceContainers before income rollback", () => {
+  const health = {
+    tick: 1000,
+    rcl: 4,
+    creepDeficit: 0,
+    understaffed: [] as string[],
+    containersAtSources: 0,
+    sourceCount: 2,
+    dedicatedMiners: false,
+    spawnFillPct: 0.8,
+    hasControllerContainer: false,
+    constructionSites: 3,
+    noEconomyCreeps: false,
+    downgradeRisk: false,
+    ticksToDowngrade: 40000,
+    critical: ["incomeCollapsed", "missingSourceContainers"],
+  };
+  const d = decideIssue({
+    stagnant: false,
+    rollback: true,
+    metrics,
+    health,
+    openEvolveCount: 0,
+    openRollbackCount: 0,
+  });
+  expect(d?.action).toBe("evolve");
+  expect(d?.title).toContain("missingSourceContainers");
+});
+
 test("evolve on critical noEconomyCreeps before income rollback", () => {
   const health = {
     tick: 1000,

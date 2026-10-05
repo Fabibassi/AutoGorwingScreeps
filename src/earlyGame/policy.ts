@@ -91,6 +91,32 @@ export interface EconomyContext {
   energyIncomePerTick?: number;
   baselineIncome?: number;
   spawnFillPct?: number;
+  /** Room energyAvailable (spawn + extensions). */
+  energyAvailable?: number;
+}
+
+/** Source containers missing — static mining stays locked off. */
+export function missingSourceContainers(
+  rcl: number,
+  containersAtSources: number,
+  sourceCount: number,
+): boolean {
+  if (rcl < EARLY_GAME_THRESHOLDS.minRclForContainers) return false;
+  return containersAtSources < Math.max(1, sourceCount);
+}
+
+/**
+ * Keep one builder finishing source-container sites even when depressed.
+ * Without this, depressed mode sets builder=0 and sites never complete.
+ */
+export function needsInfrastructureBuilder(
+  rcl: number,
+  containersAtSources: number,
+  sourceCount: number,
+  hasConstructionSites: boolean,
+): boolean {
+  if (!hasConstructionSites) return false;
+  return missingSourceContainers(rcl, containersAtSources, sourceCount);
 }
 
 /** Income collapsed or spawn nearly empty — defer builders and trim upgraders. */
@@ -197,6 +223,13 @@ export function desiredCreeps(
 
   const dedicatedMiners = useDedicatedMiners(rcl, containersAtSources, sources);
 
+  const infraBuilder = needsInfrastructureBuilder(
+    rcl,
+    containersAtSources,
+    sources,
+    hasConstructionSites,
+  );
+
   if (shouldFallbackToMobileHarvest(dedicatedMiners, economy)) {
     return {
       harvester: sources + 1,
@@ -204,7 +237,7 @@ export function desiredCreeps(
       // Static mining always had source containers; haulers unlock energy for spawn.
       hauler: sources,
       upgrader: 1,
-      builder: 0,
+      builder: infraBuilder ? 1 : 0,
     };
   }
 
@@ -219,7 +252,7 @@ export function desiredCreeps(
       // (emergency CARRY-only may already own the first slot).
       hauler: depressed ? (energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy ? 2 : 1) : 0,
       upgrader: depressed ? 1 : 2,
-      builder: hasConstructionSites && !depressed ? 1 : 0,
+      builder: infraBuilder || (hasConstructionSites && !depressed) ? 1 : 0,
     };
   }
 
@@ -228,7 +261,7 @@ export function desiredCreeps(
     miner: sources,
     hauler: sources,
     upgrader: depressed ? 1 : 2,
-    builder: hasConstructionSites && !depressed ? 1 : 0,
+    builder: infraBuilder || (hasConstructionSites && !depressed) ? 1 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {

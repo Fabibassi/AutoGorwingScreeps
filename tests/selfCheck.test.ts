@@ -121,7 +121,7 @@ describe("computeHealthCheck", () => {
     });
     expect(health.creepDeficit).toBe(3);
     expect(health.understaffed).toEqual(["harvester", "upgrader"]);
-    expect(health.critical).toEqual([]);
+    expect(health.critical).toEqual(["missingSourceContainers"]);
     const summary = formatHealthCheck(health);
     expect(summary).toContain("deficit=3");
     expect(summary).toContain("harvester,upgrader");
@@ -205,7 +205,13 @@ describe("downgrade / critical helpers", () => {
     });
     expect(signals[0]).toBe("softLock");
     expect(signals).toEqual(
-      expect.arrayContaining(["softLock", "noEconomyCreeps", "incomeCollapsed", "noUpgraders"]),
+      expect.arrayContaining([
+        "softLock",
+        "noEconomyCreeps",
+        "incomeCollapsed",
+        "missingSourceContainers",
+        "noUpgraders",
+      ]),
     );
   });
 });

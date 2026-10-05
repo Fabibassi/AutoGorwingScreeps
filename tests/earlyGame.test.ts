@@ -68,7 +68,7 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl4 zero income wants recovery haulers, skips builders (#36)", () => {
+  test("rcl4 zero income wants recovery haulers + infra builder for container sites", () => {
     expect(
       desiredCreeps(4, 2, 0, true, {
         energyIncomePerTick: 0,
@@ -80,7 +80,7 @@ describe("desiredCreeps", () => {
       miner: 0,
       hauler: 2,
       upgrader: 1,
-      builder: 0,
+      builder: 1,
     });
   });
 
