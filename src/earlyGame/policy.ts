@@ -214,6 +214,17 @@ export function spawnPriorityOrder(
   }
 
   if (opts?.infrastructurePush) {
+    // Low spawn fill + collapsed income: refill economy before more builders.
+    if (isEconomyDepressed(ctx)) {
+      const economyFirst: Array<keyof CreepQuotas> = [
+        "harvester",
+        "hauler",
+        "builder",
+        "upgrader",
+        "miner",
+      ];
+      return economyFirst.filter((role) => order.includes(role));
+    }
     return prioritizeInfrastructureBuilder(order);
   }
   return order;
@@ -262,23 +273,31 @@ export function desiredCreeps(
 
   if (!dedicatedMiners) {
     const energy = economy?.energyAvailable ?? 300;
+    const spawnFill = economy?.spawnFillPct ?? 1;
+    const infraBuilders =
+      infraBuilder && depressed && spawnFill < 0.35 ? 1 : infraBuilder ? 2 : 0;
     return {
       harvester: sources + 1,
       miner: 0,
       // Soft-lock: want>0 so hauler actually spawns; at >=100 prefer a 2nd mobile hauler
       // (emergency CARRY-only may already own the first slot).
-      // During source-container push, skip haulers — no containers/drops to move yet;
-      // spawn energy must fund the second infra builder instead.
+      // During source-container push, one hauler consolidates extension energy into spawn.
       hauler: infraBuilder
-        ? 0
+        ? depressed && energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy
+          ? 1
+          : 0
         : depressed
           ? energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy
             ? 2
             : 1
           : 0,
-      upgrader: infraBuilder ? 0 : depressed ? 1 : 2,
-      // Two builders finish source containers much faster under source contention.
-      builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
+      upgrader: infraBuilder ? 1 : depressed ? 1 : 2,
+      builder:
+        infraBuilders > 0
+          ? infraBuilders
+          : hasConstructionSites && !depressed
+            ? 1
+            : 0,
     };
   }
 

@@ -13,9 +13,9 @@ export function canWithdrawFromSpawn(
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
   const ratio = spawnEnergy / spawnCapacity;
-  // ~35%: allow builders to finish source containers while spawn still banks a
-  // bootstrap harvester (200). 40% left the live room stuck just under the cut.
-  if (opts?.infrastructurePush) return ratio >= 0.35;
+  // ~20%: allow builders to withdraw when spawn is thin but extensions hold energy
+  // (issue #42: 22% fill blocked container progress indefinitely).
+  if (opts?.infrastructurePush) return ratio >= 0.2;
   return ratio >= 0.85;
 }
 
