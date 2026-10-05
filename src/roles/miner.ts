@@ -26,7 +26,8 @@ export function runMiner(creep: Creep): number {
     creep.memory.sourceId = source.id;
   }
 
-  if (creep.pos.isEqualTo(source.pos)) {
+  // Sources are not walkable — mine from an adjacent tile (often the container).
+  if (creep.pos.isNearTo(source)) {
     const code = creep.harvest(source);
     if (code === OK) {
       return creep.getActiveBodyparts(WORK) * 2;

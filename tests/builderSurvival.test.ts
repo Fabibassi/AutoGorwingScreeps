@@ -3,6 +3,7 @@ import { canWithdrawFromSpawn } from "../src/roles/builder";
 import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
   reassignForEconomySurvival,
+  reassignSpareHarvesterToInfraBuilder,
   recycleExcessHaulers,
 } from "../src/spawn";
 
@@ -78,6 +79,72 @@ describe("reassignForEconomySurvival", () => {
       },
     );
     expect(builder.memory.role).toBe("harvester");
+  });
+});
+
+describe("reassignSpareHarvesterToInfraBuilder", () => {
+  test("converts a spare harvester into builder when infra builders collapse", () => {
+    const harvester = {
+      room: { name: "W21N35" },
+      memory: { role: "harvester", sourceId: "s1" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "harvester-1": harvester },
+    };
+    const ok = reassignSpareHarvesterToInfraBuilder(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 3,
+        miner: 0,
+        hauler: 0,
+        upgrader: 0,
+        builder: 2,
+      },
+      {
+        harvester: 3,
+        miner: 0,
+        hauler: 0,
+        upgrader: 0,
+        builder: 1,
+      },
+      true,
+      2,
+    );
+    expect(ok).toBe(true);
+    expect(harvester.memory.role).toBe("builder");
+    expect(harvester.memory.sourceId).toBeUndefined();
+  });
+
+  test("keeps one harvester per source", () => {
+    const harvester = {
+      room: { name: "W21N35" },
+      memory: { role: "harvester" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "harvester-1": harvester },
+    };
+    expect(
+      reassignSpareHarvesterToInfraBuilder(
+        { name: "W21N35" } as Room,
+        {
+          harvester: 3,
+          miner: 0,
+          hauler: 0,
+          upgrader: 0,
+          builder: 2,
+        },
+        {
+          harvester: 2,
+          miner: 0,
+          hauler: 0,
+          upgrader: 0,
+          builder: 1,
+        },
+        true,
+        2,
+      ),
+    ).toBe(false);
+    expect(harvester.memory.role).toBe("harvester");
   });
 });
 

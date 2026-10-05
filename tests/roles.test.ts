@@ -199,6 +199,37 @@ describe("runMiner", () => {
     vi.stubGlobal("FIND_MY_SPAWNS", 105);
   });
 
+  test("harvests when adjacent to source (cannot stand on source tile)", () => {
+    const harvest = vi.fn(() => 0);
+    const moveTo = vi.fn(() => 0);
+    const source = {
+      id: "s1" as Id<Source>,
+      pos: { x: 10, y: 10, roomName: "W1N1" },
+    };
+    const creep = {
+      memory: { sourceId: "s1" as Id<Source> },
+      pos: {
+        isEqualTo: () => false,
+        isNearTo: (target: { pos?: { x: number; y: number } } | { x: number; y: number }) => {
+          const pos = "pos" in target && target.pos ? target.pos : (target as { x: number; y: number });
+          return pos.x === 10 && pos.y === 10;
+        },
+      },
+      harvest,
+      getActiveBodyparts: () => 3,
+      moveTo,
+      room: { find: () => [] },
+    } as unknown as Creep;
+
+    vi.stubGlobal("Game", {
+      getObjectById: () => source,
+    });
+
+    expect(runMiner(creep)).toBe(6);
+    expect(harvest).toHaveBeenCalledWith(source);
+    expect(moveTo).not.toHaveBeenCalled();
+  });
+
   test("retreats from source when harvest returns ERR_FULL", () => {
     const moveTo = vi.fn(() => 0);
     const source = {
@@ -208,8 +239,8 @@ describe("runMiner", () => {
     const creep = {
       memory: { sourceId: "s1" as Id<Source> },
       pos: {
-        isEqualTo: (pos: { x: number; y: number }) =>
-          pos.x === 10 && pos.y === 10,
+        isEqualTo: () => false,
+        isNearTo: () => true,
       },
       harvest: vi.fn(() => -8),
       getActiveBodyparts: () => 2,
@@ -237,6 +268,7 @@ describe("runMiner", () => {
       memory: { sourceId: "s1" as Id<Source> },
       pos: {
         isEqualTo: () => true,
+        isNearTo: () => true,
       },
       harvest: vi.fn(() => 0),
       getActiveBodyparts: () => 3,

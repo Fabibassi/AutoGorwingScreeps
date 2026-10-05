@@ -31,6 +31,33 @@ export function reassignForEconomySurvival(
   }
 }
 
+/**
+ * Instantly restore a missing infra builder from a spare harvester.
+ * Waiting for a fresh 200-energy spawn stalls container finish when B dies.
+ */
+export function reassignSpareHarvesterToInfraBuilder(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+  infrastructurePush: boolean,
+  sourceCount: number,
+): boolean {
+  if (!infrastructurePush) return false;
+  if (counts.builder >= want.builder) return false;
+  // Keep at least one mobile harvester per source.
+  if (counts.harvester <= sourceCount) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "harvester") continue;
+    creep.memory.role = "builder";
+    delete creep.memory.sourceId;
+    return true;
+  }
+  return false;
+}
+
 /** Recycle carry-less creeps next to spawn to claw energy back toward a hauler spawn. */
 export function recycleCarryLessBootstrap(spawn: StructureSpawn): boolean {
   if (spawn.spawning) return false;
@@ -146,6 +173,19 @@ export function runSpawn(spawn: StructureSpawn): void {
   );
   const counts = countCreepsByRole();
   reassignForEconomySurvival(room, counts);
+  const infrastructurePush = needsInfrastructureBuilder(
+    rcl,
+    containersAtSources,
+    sourceCount,
+    hasConstructionSites,
+  );
+  reassignSpareHarvesterToInfraBuilder(
+    room,
+    want,
+    countCreepsByRole(),
+    infrastructurePush,
+    sourceCount,
+  );
   // Recount after possible role reassignment so quotas/spawn order stay consistent.
   const liveCounts = countCreepsByRole();
 
@@ -160,12 +200,6 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (recycleCarryLessWorker(spawn)) return;
   }
 
-  const infrastructurePush = needsInfrastructureBuilder(
-    rcl,
-    containersAtSources,
-    sourceCount,
-    hasConstructionSites,
-  );
   if (recycleExcessHaulers(spawn, want, liveCounts, infrastructurePush)) {
     return;
   }
