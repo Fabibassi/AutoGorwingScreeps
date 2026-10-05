@@ -416,7 +416,7 @@ describe("recycleExcessHaulers", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("cancels stuck spawn when Spawning.cancel is available", () => {
+  test("cancels when an aged creep is still named in spawn.spawning", () => {
     const cancel = vi.fn(() => OK);
     const suicide = vi.fn();
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
@@ -438,7 +438,29 @@ describe("clearZombieSpawn", () => {
     expect(suicide).not.toHaveBeenCalled();
   });
 
-  test("suicides when cancel is unavailable", () => {
+  test("does not kill a newborn on the birth tick (remainingTime 0, TTL 1500)", () => {
+    const suicide = vi.fn();
+    const cancel = vi.fn(() => OK);
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      creeps: {
+        "miner-1": {
+          suicide,
+          ticksToLive: 1500,
+          memory: { role: "miner" },
+        },
+      },
+    };
+    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
+    const spawn = {
+      spawning: { name: "miner-1", remainingTime: 0, cancel },
+      room: { name: "W21N35" },
+    };
+    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(suicide).not.toHaveBeenCalled();
+  });
+
+  test("suicides aged creep when cancel is unavailable", () => {
     const suicide = vi.fn();
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
       creeps: {
@@ -451,29 +473,10 @@ describe("clearZombieSpawn", () => {
     };
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
-      spawning: { name: "hauler-1", remainingTime: 0 },
+      spawning: { name: "hauler-1", remainingTime: 12 },
       room: { name: "W21N35" },
     };
     expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
     expect(suicide).toHaveBeenCalled();
-  });
-
-  test("ignores a brand-new creep that is still birthing", () => {
-    const suicide = vi.fn();
-    (globalThis as { Game?: unknown }).Game = {
-      creeps: {
-        "hauler-1": {
-          suicide,
-          ticksToLive: 1500,
-          memory: { role: "hauler" },
-        },
-      },
-    };
-    const spawn = {
-      spawning: { name: "hauler-1", remainingTime: 3 },
-      room: { name: "W21N35" },
-    };
-    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
-    expect(suicide).not.toHaveBeenCalled();
   });
 });

@@ -202,17 +202,18 @@ export function recycleExcessHaulers(
  * name so the spawn queue can clear and miners can respawn.
  */
 /**
- * Screeps can leave spawn.spawning stuck pointing at a creep that already lives
- * (ERR_BUSY forever). Prefer Spawning.cancel(); fall back to suicide.
+ * Screeps can leave spawn.spawning stuck pointing at an *aged* creep name
+ * (ERR_BUSY forever). Do NOT treat newborns (TTL near 1500, remainingTime 0
+ * on the birth tick) as zombies — that suicides miners as they hatch.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
   if (!spawning) return false;
   const existing = Game.creeps[spawning.name];
-  const ttl = existing?.ticksToLive ?? 1500;
-  const stuck =
-    spawning.remainingTime <= 0 || (existing != null && ttl < 1490);
-  if (!stuck) return false;
+  if (!existing) return false;
+  const ttl = existing.ticksToLive ?? 1500;
+  // Fresh creeps start at CREEP_LIFE_TIME (1500). Only aged creeps are zombies.
+  if (ttl >= 1490) return false;
 
   const ags = typeof Memory !== "undefined" ? Memory.ags : undefined;
   if (ags) {
@@ -220,22 +221,18 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: spawning.remainingTime,
-      ttl: existing?.ticksToLive,
-      hasExact: existing != null,
+      ttl,
+      hasExact: true,
     };
   }
 
-  // Official API: cancel the stuck spawning process.
   const cancel = (
     spawning as { cancel?: () => ScreepsReturnCode }
   ).cancel?.();
   if (cancel === OK) return true;
 
-  if (existing) {
-    existing.suicide();
-    return true;
-  }
-  return false;
+  existing.suicide();
+  return true;
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
