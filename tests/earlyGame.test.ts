@@ -76,10 +76,21 @@ describe("desiredCreeps", () => {
         energyAvailable: 152,
       }),
     ).toEqual({
-      harvester: 3,
+      // Infra push: sources only (no spare H) so builder #2 can claim spawn.
+      harvester: 2,
       miner: 0,
       hauler: 1,
       upgrader: 0,
+      builder: 2,
+    });
+  });
+
+  test("rcl2 infra push keeps one upgrader so RCL3 can advance during builds", () => {
+    expect(desiredCreeps(2, 2, 0, true)).toEqual({
+      harvester: 2,
+      miner: 0,
+      hauler: 0,
+      upgrader: 1,
       builder: 2,
     });
   });
@@ -115,8 +126,19 @@ describe("desiredCreeps", () => {
       harvester: 0,
       miner: 2,
       hauler: 2,
-      upgrader: 2,
+      upgrader: 3,
       builder: 0,
+    });
+  });
+
+  test("rcl2 climb keeps upgraders even when construction sites exist", () => {
+    expect(desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 6 })).toEqual({
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 3,
+      // Baseline builderInfra=2; climb caps at min(infra, 2).
+      builder: 2,
     });
   });
 
@@ -346,10 +368,10 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
-    // Only source containers — controller container waits until sources are done.
+    // Only source containers — extensions wait until containers exist.
     expect(queue.filter((s) => s === "container")).toHaveLength(2);
     expect(queue[0]).toBe("container");
-    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
+    expect(queue.filter((s) => s === "extension")).toHaveLength(0);
     expect(queue.includes("storage")).toBe(false);
     expect(queue.includes("road")).toBe(false);
   });
@@ -366,7 +388,7 @@ describe("constructionPriority", () => {
     expect(queue.filter((s) => s === "container")).toHaveLength(1);
   });
 
-  test("extensions lead once every source has a container", () => {
+  test("extensions deferred at RCL2 so climb can finish first", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -375,8 +397,21 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
+    // Bootstrap capacity for fatter upgraders — not the full RCL2 quota.
+    expect(queue.filter((s) => s === "extension")).toHaveLength(2);
+  });
+
+  test("extensions lead at RCL3 once every source has a container", () => {
+    const queue = constructionPriority(3, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+    });
     expect(queue[0]).toBe("extension");
-    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
+    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(3));
   });
 
   test("storage after full extensions at RCL 4", () => {

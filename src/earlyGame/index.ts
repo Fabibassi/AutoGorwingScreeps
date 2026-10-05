@@ -5,6 +5,32 @@ export {
   buildWorkerBody,
 } from "./bodies";
 export {
+  parseRoadPolicy,
+  preferSourceRoads,
+  roadMinRcl,
+  roadsBlockedByContainers,
+  roadsWhileContainersMissing,
+  ROAD_POLICIES,
+  type RoadPolicy,
+} from "./roadPolicy";
+export {
+  AB_KNOBS,
+  AB_VARIANTS,
+  BASELINE_PROFILE,
+  OPTIMIZED_PROFILE,
+  allowControllerContainer,
+  experimentTag,
+  extensionBootstrapCap,
+  isAbKnob,
+  minEnergyForRoads,
+  parseAbVariant,
+  profileForVariant,
+  resolveExperiment,
+  sourceContainerQueueCount,
+  type AbKnob,
+  type ExperimentProfile,
+} from "./experimentPolicy";
+export {
   constructionPriority,
   DEFAULT_SPAWN_ORDER,
   desiredCreeps,

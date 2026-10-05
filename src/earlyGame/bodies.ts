@@ -12,19 +12,22 @@ const PART_COST: Record<BodyPartConstant, number> = {
   claim: 600,
 };
 
-export function buildMinerBody(energyAvailable: number): BodyPartConstant[] {
+export function buildMinerBody(
+  energyAvailable: number,
+  opts?: { minWork?: number; maxWork?: number },
+): BodyPartConstant[] {
   const pairCost = PART_COST.work + PART_COST.move;
+  const minWork = Math.max(1, opts?.minWork ?? 1);
+  const maxWork = Math.min(5, opts?.maxWork ?? 5);
+  if (energyAvailable < minWork * pairCost) return [];
   const body: BodyPartConstant[] = [];
   let remaining = energyAvailable;
   while (
     remaining >= pairCost &&
-    body.filter((p) => p === "work").length < 5
+    body.filter((p) => p === "work").length < maxWork
   ) {
     body.push("work", "move");
     remaining -= pairCost;
-  }
-  if (body.length === 0 && energyAvailable >= pairCost) {
-    return ["work", "move"];
   }
   return body;
 }
@@ -72,11 +75,13 @@ export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
 export function bodyForRole(
   role: keyof CreepQuotas,
   energyAvailable: number,
-  opts?: { haulerMaxCost?: number },
+  opts?: { haulerMaxCost?: number; minerMinWork?: number },
 ): BodyPartConstant[] {
   switch (role) {
     case "miner":
-      return buildMinerBody(energyAvailable);
+      return buildMinerBody(energyAvailable, {
+        minWork: opts?.minerMinWork,
+      });
     case "hauler":
       return buildHaulerBody(energyAvailable, {
         maxCost: opts?.haulerMaxCost,

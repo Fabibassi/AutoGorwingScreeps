@@ -1,4 +1,11 @@
 import { isIncomeStalled } from "../telemetry";
+import {
+  allowControllerContainer,
+  extensionBootstrapCap,
+  sourceContainerQueueCount,
+  type ExperimentProfile,
+  BASELINE_PROFILE,
+} from "./experimentPolicy";
 
 /**
  * Early-game policy derived from common Screeps guides:
@@ -63,10 +70,14 @@ export function shouldBuildRoads(
   rcl: number,
   spawnEnergy: number,
   hasHigherPrioritySites: boolean,
+  opts?: { minRcl?: number; minSpawnEnergy?: number },
 ): boolean {
-  if (rcl < EARLY_GAME_THRESHOLDS.minRclForRoads) return false;
+  const minRcl = opts?.minRcl ?? EARLY_GAME_THRESHOLDS.minRclForRoads;
+  const minEnergy =
+    opts?.minSpawnEnergy ?? EARLY_GAME_THRESHOLDS.minSpawnEnergyForRoads;
+  if (rcl < minRcl) return false;
   if (hasHigherPrioritySites) return false;
-  return spawnEnergy >= EARLY_GAME_THRESHOLDS.minSpawnEnergyForRoads;
+  return spawnEnergy >= minEnergy;
 }
 
 /** Walls/ramparts burn upgrade energy early — defer until economy is established. */
@@ -272,8 +283,11 @@ export function desiredCreeps(
   containersAtSources: number,
   hasConstructionSites: boolean,
   economy?: EconomyContext,
+  experiment?: ExperimentProfile,
 ): CreepQuotas {
+  const exp = experiment ?? BASELINE_PROFILE;
   const sources = Math.max(1, sourceCount);
+  const infraBuilders = Math.max(1, exp.builderInfra);
 
   if (rcl <= 1) {
     return {
@@ -301,7 +315,7 @@ export function desiredCreeps(
       // Static mining always had source containers; haulers unlock energy for spawn.
       hauler: sources,
       upgrader: 1,
-      builder: infraBuilder ? 2 : 0,
+      builder: infraBuilder ? infraBuilders : 0,
     };
   }
 
@@ -319,12 +333,23 @@ export function desiredCreeps(
         harvester: uncovered <= 0 ? 0 : infraBuilder ? uncovered : uncovered + 1,
         miner: readyContainers,
         hauler: readyContainers,
-        upgrader: infraBuilder ? 0 : depressed ? 1 : 2,
-        builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
+        upgrader: infraBuilder
+          ? rcl < 3
+            ? Math.min(1, exp.upgraderQuotaClimb)
+            : 0
+          : depressed
+            ? 1
+            : 2,
+        builder: infraBuilder
+          ? infraBuilders
+          : hasConstructionSites && !depressed
+            ? 1
+            : 0,
       };
     }
     return {
-      harvester: sources + 1,
+      // During container push, skip the spare H — convert capacity into builders.
+      harvester: infraBuilder ? sources : sources + 1,
       miner: 0,
       // Soft-lock / empty income: always want a hauler to drain storage/containers
       // into spawn — even during infra push (otherwise sites starve forever).
@@ -339,22 +364,47 @@ export function desiredCreeps(
                 ? 2
                 : 1
               : 0,
-      upgrader: infraBuilder ? 0 : depressed ? 1 : 2,
-      // Two builders finish source containers much faster under source contention.
-      builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
+      upgrader: infraBuilder
+        ? rcl < 3
+          ? Math.min(1, exp.upgraderQuotaClimb)
+          : 0
+        : depressed
+          ? 1
+          : 2,
+      // Infra builders finish source containers under source contention.
+      builder: infraBuilder
+        ? infraBuilders
+        : hasConstructionSites && !depressed
+          ? 1
+          : 0,
     };
   }
 
-  // Extension push: pause upgraders and convert their WORK into builders —
-  // WCM bodies + spawn drain otherwise leave 3k sites nearly idle.
-  const extensionPush = hasConstructionSites && !depressed;
+  // After source containers: climb to RCL3 before extension spam — otherwise
+  // 45k controller progress never finishes under a 4-builder extension push.
+  const climbingToRcl3 = rcl < 3;
+  const extensionPush = hasConstructionSites && !depressed && !climbingToRcl3;
 
   const quotas: CreepQuotas = {
     harvester: 0,
     miner: sources,
     hauler: sources,
-    upgrader: extensionPush ? 0 : depressed ? 1 : 2,
-    builder: infraBuilder ? 2 : extensionPush ? 4 : 0,
+    upgrader: climbingToRcl3
+      ? exp.upgraderQuotaClimb
+      : extensionPush
+        ? 0
+        : depressed
+          ? 1
+          : 2,
+    builder: climbingToRcl3
+      ? hasConstructionSites
+        ? Math.max(1, Math.min(infraBuilders, 2))
+        : 0
+      : infraBuilder
+        ? infraBuilders
+        : extensionPush
+          ? 4
+          : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {
@@ -375,33 +425,61 @@ export function constructionPriority(
     roadSitesAllowed: boolean;
     /** Built extensions + extension construction sites. */
     extensionCount?: number;
+    /** Finished extensions only (for containerTiming=later). */
+    extensionBuilt?: number;
+    /** Open source-container construction sites. */
+    sourceContainerSites?: number;
+    experiment?: ExperimentProfile;
   },
 ): BuildableStructureConstant[] {
+  const exp = opts.experiment ?? BASELINE_PROFILE;
   const queue: BuildableStructureConstant[] = [];
 
-  const missingSourceContainers = shouldBuildContainers(rcl)
+  const missingAll = shouldBuildContainers(rcl)
     ? Math.max(0, opts.sourceCount - opts.sourceContainerCount)
     : 0;
+  const containerSites = sourceContainerQueueCount(
+    exp,
+    missingAll,
+    opts.sourceContainerSites ?? 0,
+    opts.extensionBuilt ?? 0,
+  );
 
-  // Source containers unlock miner/hauler pairs — never defer them past extension spam.
-  for (let i = 0; i < missingSourceContainers; i++) {
+  const laterMode = exp.containerTiming === "later";
+  // later: bootstrap extensions before source containers.
+  if (laterMode && shouldBuildExtensions(rcl)) {
+    const have = opts.extensionCount ?? 0;
+    const cap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
+    const missing = Math.max(0, cap - have);
+    for (let i = 0; i < missing; i++) queue.push("extension");
+  }
+
+  // Source containers unlock miner/hauler pairs — never defer them past extension spam
+  // (except later-mode, which already queued extensions above).
+  for (let i = 0; i < containerSites; i++) {
     queue.push("container");
   }
 
-  if (shouldBuildExtensions(rcl)) {
+  if (
+    shouldBuildExtensions(rcl) &&
+    !laterMode &&
+    containerSites === 0 &&
+    missingAll === 0
+  ) {
     const have = opts.extensionCount ?? 0;
-    const missing = Math.max(0, extensionQuota(rcl) - have);
+    // RCL2: experiment caps extensions so climb can finish first.
+    const cap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
+    const missing = Math.max(0, cap - have);
     for (let i = 0; i < missing; i++) {
       queue.push("extension");
     }
   }
 
-  // Controller container only after source containers — otherwise it steals the
-  // 3-site cap and dilutes build effort away from miner unlock.
+  // Controller container timing is experiment-driven.
   if (
     shouldBuildContainers(rcl) &&
     !opts.hasControllerContainer &&
-    missingSourceContainers === 0
+    allowControllerContainer(exp, rcl, missingAll)
   ) {
     queue.push("container");
   }
