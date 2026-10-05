@@ -202,54 +202,32 @@ export function recycleExcessHaulers(
  * name so the spawn queue can clear and miners can respawn.
  */
 /**
- * Screeps can leave spawn.spawning stuck pointing at a live creep name (ERR_BUSY).
- * Newborns share the birth tick with remainingTime 0 — wait a few ticks before
- * treating the name as a zombie, then cancel+suicide.
+ * Only block on an *active* spawn (remainingTime > 0).
+ * remainingTime 0 with a live namesake is a zombie ERR_BUSY state — try cancel,
+ * but never suicide newborns; if cancel fails we still attempt spawnCreep below.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
   if (!spawning) return false;
+  if (spawning.remainingTime > 0) return false;
   const existing = Game.creeps[spawning.name];
-  if (!existing) return false;
-
   const ags = typeof Memory !== "undefined" ? Memory.ags : undefined;
-  const seen = (ags?.zombieSpawnSeen ?? {}) as Record<string, number>;
-  const firstSeen = seen[spawning.name];
-  if (firstSeen == null) {
-    if (ags) {
-      ags.zombieSpawnSeen = { ...seen, [spawning.name]: Game.time };
-    }
-    return false;
-  }
-  // Grace: allow the birth tick + a few more before declaring a zombie.
-  if (Game.time - firstSeen < 10) return false;
-
-  const ttl = existing.ticksToLive;
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: spawning.remainingTime,
-      ttl,
-      firstSeen,
-      hasExact: true,
+      ttl: existing?.ticksToLive,
+      hasExact: existing != null,
     };
   }
-
-  (
+  const code = (
     spawning as { cancel?: () => ScreepsReturnCode }
   ).cancel?.();
-  existing.suicide();
-  if (ags?.zombieSpawnSeen) {
-    delete ags.zombieSpawnSeen[spawning.name];
-  }
-  return true;
+  return code === OK;
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
-  if (!spawn.spawning && typeof Memory !== "undefined" && Memory.ags) {
-    Memory.ags.zombieSpawnSeen = {};
-  }
   clearZombieSpawn(spawn);
 
   const room = spawn.room;
@@ -318,7 +296,7 @@ export function runSpawn(spawn: StructureSpawn): void {
   }
   const liveCounts = countCreepsByRole();
 
-  if (spawn.spawning) {
+  if (spawn.spawning && spawn.spawning.remainingTime > 0) {
     if (Memory.ags) {
       Memory.ags.lastSpawnFail = {
         tick: Game.time,
