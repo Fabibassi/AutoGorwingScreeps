@@ -68,7 +68,7 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl4 zero income wants infra builders not haulers/upgraders for container sites", () => {
+  test("rcl4 depressed infra push keeps one upgrader and hauler to refill spawn (#42)", () => {
     expect(
       desiredCreeps(4, 2, 0, true, {
         energyIncomePerTick: 0,
@@ -78,9 +78,9 @@ describe("desiredCreeps", () => {
     ).toEqual({
       harvester: 3,
       miner: 0,
-      hauler: 0,
-      upgrader: 0,
-      builder: 2,
+      hauler: 1,
+      upgrader: 1,
+      builder: 1,
     });
   });
 
@@ -211,12 +211,24 @@ describe("spawnPriorityOrder", () => {
     ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
   });
 
-  test("builder before upgrader when source-container infrastructure push", () => {
+  test("builder before upgrader when source-container infrastructure push and spawn healthy", () => {
     expect(
-      spawnPriorityOrder(false, { energyIncomePerTick: 2.7, spawnFillPct: 0.27 }, undefined, undefined, {
+      spawnPriorityOrder(false, { energyIncomePerTick: 2.7, spawnFillPct: 0.5 }, undefined, undefined, {
         infrastructurePush: true,
       }),
     ).toEqual(["hauler", "miner", "harvester", "builder", "upgrader"]);
+  });
+
+  test("harvester before builder when infra push and economy depressed (#42)", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        { energyIncomePerTick: 1, spawnFillPct: 0.22 },
+        { harvester: 2, miner: 0 },
+        200,
+        { infrastructurePush: true },
+      ),
+    ).toEqual(["harvester", "hauler", "builder", "upgrader", "miner"]);
   });
 });
 

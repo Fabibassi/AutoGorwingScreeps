@@ -19,13 +19,13 @@ describe("canWithdrawFromSpawn", () => {
     expect(canWithdrawFromSpawn(270, 300, true)).toBe(true);
   });
 
-  test("infrastructure push allows spawn withdraw at ~35% to finish containers", () => {
+  test("infrastructure push allows spawn withdraw at ~20% to finish containers (#42)", () => {
     expect(canWithdrawFromSpawn(100, 300, true)).toBe(false);
     expect(
-      canWithdrawFromSpawn(105, 300, true, { infrastructurePush: true }),
+      canWithdrawFromSpawn(68, 300, true, { infrastructurePush: true }),
     ).toBe(true);
     expect(
-      canWithdrawFromSpawn(104, 300, true, { infrastructurePush: true }),
+      canWithdrawFromSpawn(59, 300, true, { infrastructurePush: true }),
     ).toBe(false);
   });
 });
