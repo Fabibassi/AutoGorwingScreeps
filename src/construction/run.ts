@@ -76,11 +76,11 @@ export function runConstruction(room: Room): void {
   const extCap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
   const needExtensions = extensionCount < extCap;
 
-  // Extensions starve when dozens of road sites dilute builders — remove roads first.
+  // Extensions starve when road sites dilute builders — purge all roads at once.
   if (needExtensions) {
-    const roadSite = existingSites.find((s) => s.structureType === STRUCTURE_ROAD);
-    if (roadSite) {
-      roadSite.remove();
+    const roads = existingSites.filter((s) => s.structureType === STRUCTURE_ROAD);
+    if (roads.length > 0) {
+      for (const road of roads) road.remove();
       return;
     }
   }

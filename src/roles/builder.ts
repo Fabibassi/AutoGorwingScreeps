@@ -76,7 +76,14 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
       );
     }
   }
-  const sites = creep.room.find(FIND_CONSTRUCTION_SITES);
+  let sites = creep.room.find(FIND_CONSTRUCTION_SITES);
+  // Roads finish faster (300 vs 3000) and steal WORK under remaining-progress pick.
+  if (containersAtSources >= sourceCount) {
+    const extensions = sites.filter(
+      (s) => s.structureType === STRUCTURE_EXTENSION,
+    );
+    if (extensions.length > 0) sites = extensions;
+  }
   const picked = pickBuildSite(
     sites.map((site) => ({
       site,
@@ -211,7 +218,8 @@ export function runBuilder(creep: Creep): number {
     return 0;
   }
 
-  // Container push: self-harvest is still the fastest refill near sources.
+  // Container push: self-harvest next to source-adjacent sites. Walking to a
+  // distant storage bank then back costs more ticks than local harvest cycles.
   if (refillFromHarvest(creep)) return 0;
   refillFromLogistics(creep);
   return 0;
