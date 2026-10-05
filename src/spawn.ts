@@ -202,9 +202,9 @@ export function recycleExcessHaulers(
  * name so the spawn queue can clear and miners can respawn.
  */
 /**
- * Only block on an *active* spawn (remainingTime > 0).
- * remainingTime 0 with a live namesake is a zombie ERR_BUSY state — try cancel,
- * but never suicide newborns; if cancel fails we still attempt spawnCreep below.
+ * remainingTime 0 + live creep = birth tick or sticky spawning flag.
+ * NEVER cancel/suicide when the creep already exists — cancel kills newborns.
+ * Only cancel an empty stuck spawn (remainingTime 0, no Game.creeps entry).
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
@@ -221,6 +221,8 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
       hasExact: existing != null,
     };
   }
+  // Birth tick / sticky name with a living creep — leave it alone.
+  if (existing) return false;
   const code = (
     spawning as { cancel?: () => ScreepsReturnCode }
   ).cancel?.();
