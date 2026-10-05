@@ -113,5 +113,8 @@ export function tickTelemetry(opts: {
     incomeWindows,
     errorSamples,
     lastErrors,
+    // Preserve ops diagnostics across ticks (tickTelemetry rebuilds the object).
+    health: prev.health,
+    lastSpawnFail: prev.lastSpawnFail,
   };
 }

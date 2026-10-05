@@ -25,7 +25,12 @@ export function loop(): void {
     for (const name in Game.rooms) {
       const room = Game.rooms[name];
       if (room.controller?.my) {
-        runConstruction(room);
+        try {
+          runConstruction(room);
+        } catch (e) {
+          errorsThisTick++;
+          console.log(`construction ${name} error`, e);
+        }
       }
     }
 

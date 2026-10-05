@@ -263,7 +263,18 @@ export function runSpawn(spawn: StructureSpawn): void {
   }
   const liveCounts = countCreepsByRole();
 
-  if (spawn.spawning) return;
+  if (spawn.spawning) {
+    if (Memory.ags) {
+      Memory.ags.lastSpawnFail = {
+        tick: Game.time,
+        role: `spawning:${spawn.spawning.name}`,
+        result: ERR_BUSY,
+        energyAvailable,
+        bodyParts: spawn.spawning.remainingTime,
+      };
+    }
+    return;
+  }
 
   const hasCarry = Object.keys(Game.creeps).some(
     (n) => Game.creeps[n].getActiveBodyparts(CARRY) > 0,
