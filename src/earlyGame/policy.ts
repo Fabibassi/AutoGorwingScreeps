@@ -87,6 +87,30 @@ export function useDedicatedMiners(
   );
 }
 
+/** Source containers missing — static mining and hauler throughput stay capped. */
+export function missingSourceContainers(
+  rcl: number,
+  containersAtSources: number,
+  sourceCount: number,
+): boolean {
+  if (rcl < EARLY_GAME_THRESHOLDS.minRclForContainers) return false;
+  return containersAtSources < Math.max(1, sourceCount);
+}
+
+/**
+ * One builder to finish source-container sites while economy creeps exist.
+ * Without this, depressed mode sets builder=0 and container sites never complete.
+ */
+export function needsInfrastructureBuilder(
+  rcl: number,
+  containersAtSources: number,
+  sourceCount: number,
+  hasConstructionSites: boolean,
+): boolean {
+  if (!hasConstructionSites) return false;
+  return missingSourceContainers(rcl, containersAtSources, sourceCount);
+}
+
 export interface EconomyContext {
   energyIncomePerTick?: number;
   baselineIncome?: number;
@@ -148,11 +172,45 @@ export function hasNoEconomyCreeps(counts: Pick<CreepQuotas, "harvester" | "mine
 }
 
 /** Spawn harvester first when static mining stalled — hauler-first starves recovery. */
+export interface SpawnInfraContext {
+  rcl: number;
+  containersAtSources: number;
+  sourceCount: number;
+  hasConstructionSites: boolean;
+}
+
+function withInfrastructureBuilder(
+  order: Array<keyof CreepQuotas>,
+  infra?: SpawnInfraContext,
+  counts?: Pick<CreepQuotas, "harvester" | "miner">,
+): Array<keyof CreepQuotas> {
+  if (!infra || !counts || hasNoEconomyCreeps(counts)) return order;
+  if (
+    !needsInfrastructureBuilder(
+      infra.rcl,
+      infra.containersAtSources,
+      infra.sourceCount,
+      infra.hasConstructionSites,
+    )
+  ) {
+    return order;
+  }
+  const withoutBuilder = order.filter((role) => role !== "builder");
+  const upgraderIdx = withoutBuilder.indexOf("upgrader");
+  if (upgraderIdx === -1) return [...withoutBuilder, "builder"];
+  return [
+    ...withoutBuilder.slice(0, upgraderIdx),
+    "builder",
+    ...withoutBuilder.slice(upgraderIdx),
+  ];
+}
+
 export function spawnPriorityOrder(
   dedicatedMiners: boolean,
   ctx?: EconomyContext,
   counts?: Pick<CreepQuotas, "harvester" | "miner">,
   energyAvailable?: number,
+  infra?: SpawnInfraContext,
 ): Array<keyof CreepQuotas> {
   // Soft-lock: energy trapped in extensions — hauler (100) consolidates into spawn for harvester (150).
   if (
@@ -160,7 +218,11 @@ export function spawnPriorityOrder(
     energyAvailable != null &&
     isSoftLocked(energyAvailable, counts)
   ) {
-    return ["hauler", "harvester", "miner", "upgrader", "builder"];
+    return withInfrastructureBuilder(
+      ["hauler", "harvester", "miner", "upgrader", "builder"],
+      infra,
+      counts,
+    );
   }
   // Empty economy: always bootstrap a harvester before haulers/builders.
   if (counts && hasNoEconomyCreeps(counts)) {
@@ -168,12 +230,20 @@ export function spawnPriorityOrder(
   }
   if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
     // Hauler-first: containers may hold all room energy; hauler body costs 100 vs 150.
-    return ["hauler", "harvester", "upgrader", "builder"];
+    return withInfrastructureBuilder(
+      ["hauler", "harvester", "upgrader", "builder"],
+      infra,
+      counts,
+    );
   }
   if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
-    return ["harvester", "hauler", "miner", "upgrader", "builder"];
+    return withInfrastructureBuilder(
+      ["harvester", "hauler", "miner", "upgrader", "builder"],
+      infra,
+      counts,
+    );
   }
-  return DEFAULT_SPAWN_ORDER;
+  return withInfrastructureBuilder(DEFAULT_SPAWN_ORDER, infra, counts);
 }
 
 export function desiredCreeps(
@@ -196,6 +266,12 @@ export function desiredCreeps(
   }
 
   const dedicatedMiners = useDedicatedMiners(rcl, containersAtSources, sources);
+  const infraBuilder = needsInfrastructureBuilder(
+    rcl,
+    containersAtSources,
+    sources,
+    hasConstructionSites,
+  );
 
   if (shouldFallbackToMobileHarvest(dedicatedMiners, economy)) {
     return {
@@ -204,7 +280,7 @@ export function desiredCreeps(
       // Static mining always had source containers; haulers unlock energy for spawn.
       hauler: sources,
       upgrader: 1,
-      builder: 0,
+      builder: infraBuilder ? 1 : 0,
     };
   }
 
@@ -219,7 +295,7 @@ export function desiredCreeps(
       // (emergency CARRY-only may already own the first slot).
       hauler: depressed ? (energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy ? 2 : 1) : 0,
       upgrader: depressed ? 1 : 2,
-      builder: hasConstructionSites && !depressed ? 1 : 0,
+      builder: infraBuilder ? 1 : hasConstructionSites && !depressed ? 1 : 0,
     };
   }
 
@@ -228,7 +304,7 @@ export function desiredCreeps(
     miner: sources,
     hauler: sources,
     upgrader: depressed ? 1 : 2,
-    builder: hasConstructionSites && !depressed ? 1 : 0,
+    builder: infraBuilder ? 1 : hasConstructionSites && !depressed ? 1 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {

@@ -31,7 +31,7 @@ export interface AgsHealthCheck {
   /** Controller.ticksToDowngrade when known. */
   ticksToDowngrade?: number;
   /**
-   * Active critical signals (softLock, noEconomyCreeps, incomeCollapsed, …).
+   * Active critical signals (softLock, noEconomyCreeps, incomeCollapsed, missingSourceContainers, …).
    * Metrics evolves when this is non-empty (unless force/rollback overrides).
    */
   critical: string[];

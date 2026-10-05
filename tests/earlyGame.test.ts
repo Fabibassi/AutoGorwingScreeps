@@ -70,7 +70,7 @@ describe("desiredCreeps", () => {
 
   test("rcl4 zero income wants recovery haulers, skips builders (#36)", () => {
     expect(
-      desiredCreeps(4, 2, 0, true, {
+      desiredCreeps(4, 2, 0, false, {
         energyIncomePerTick: 0,
         spawnFillPct: 0.27,
         energyAvailable: 152,
@@ -81,6 +81,23 @@ describe("desiredCreeps", () => {
       hauler: 2,
       upgrader: 1,
       builder: 0,
+    });
+  });
+
+  test("rcl4 stalled income with missing containers keeps infra builder (#40)", () => {
+    expect(
+      desiredCreeps(4, 2, 0, true, {
+        energyIncomePerTick: 1.52,
+        baselineIncome: 5,
+        spawnFillPct: 0.38,
+        energyAvailable: 115,
+      }),
+    ).toEqual({
+      harvester: 3,
+      miner: 0,
+      hauler: 2,
+      upgrader: 1,
+      builder: 1,
     });
   });
 
@@ -209,6 +226,18 @@ describe("spawnPriorityOrder", () => {
         81,
       ),
     ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
+  });
+
+  test("builder before upgrader when source containers missing (#40)", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        { energyIncomePerTick: 1.52, baselineIncome: 5, spawnFillPct: 0.38 },
+        { harvester: 3, miner: 0 },
+        115,
+        { rcl: 4, containersAtSources: 0, sourceCount: 2, hasConstructionSites: true },
+      ),
+    ).toEqual(["hauler", "miner", "harvester", "builder", "upgrader"]);
   });
 });
 

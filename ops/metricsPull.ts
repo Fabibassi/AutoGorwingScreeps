@@ -72,7 +72,8 @@ export function healthNeedsEvolve(health?: AgsHealthCheck): boolean {
   return (
     critical.includes("softLock") ||
     critical.includes("noEconomyCreeps") ||
-    critical.includes("downgradeRisk")
+    critical.includes("downgradeRisk") ||
+    critical.includes("missingSourceContainers")
   );
 }
 

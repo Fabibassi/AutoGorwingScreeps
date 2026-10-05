@@ -34,6 +34,7 @@ export type CriticalSignal =
   | "softLock"
   | "noEconomyCreeps"
   | "incomeCollapsed"
+  | "missingSourceContainers"
   | "downgradeRisk"
   | "noUpgraders";
 
@@ -74,6 +75,12 @@ export function computeCriticalSignals(input: HealthCheckInput): CriticalSignal[
     input.rcl >= 2 &&
     (income <= 0 || isIncomeStalled(income, input.baselineIncome));
   if (incomeCollapsed) critical.push("incomeCollapsed");
+
+  const missingContainers =
+    input.rcl >= 2 &&
+    input.containersAtSources < Math.max(1, input.sourceCount) &&
+    (incomeCollapsed || noEconomy);
+  if (missingContainers) critical.push("missingSourceContainers");
 
   const downgradeRisk = isDowngradeRisk(
     input.rcl,

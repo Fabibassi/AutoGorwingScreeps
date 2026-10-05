@@ -106,6 +106,33 @@ test("critical skipped when evolve already open falls through to rollback", () =
   ).toBe("rollback");
 });
 
+test("missingSourceContainers opens evolve before income rollback (#40)", () => {
+  const d = decideIssue({
+    stagnant: false,
+    rollback: true,
+    metrics: { ...metrics, rcl: 4, energyIncomePerTick: 1.52 },
+    health: {
+      tick: 83435252,
+      rcl: 4,
+      creepDeficit: 0,
+      understaffed: [],
+      containersAtSources: 0,
+      sourceCount: 2,
+      dedicatedMiners: false,
+      spawnFillPct: 0.38,
+      hasControllerContainer: false,
+      constructionSites: 3,
+      noEconomyCreeps: false,
+      downgradeRisk: false,
+      critical: ["incomeCollapsed", "missingSourceContainers"],
+    },
+    openEvolveCount: 0,
+    openRollbackCount: 0,
+  });
+  expect(d?.action).toBe("evolve");
+  expect(d?.title).toContain("missingSourceContainers");
+});
+
 test("downgradeRisk alone opens evolve with growth mandate", () => {
   const d = decideIssue({
     stagnant: false,

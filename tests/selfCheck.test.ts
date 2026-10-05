@@ -141,6 +141,40 @@ describe("downgrade / critical helpers", () => {
     expect(isDowngradeRisk(4, 15_000, 1)).toBe(false);
   });
 
+  test("computeCriticalSignals flags missingSourceContainers when income stalled (#40)", () => {
+    const signals = computeCriticalSignals({
+      tick: 83435252,
+      rcl: 4,
+      sourceCount: 2,
+      containersAtSources: 0,
+      hasControllerContainer: false,
+      constructionSites: 3,
+      counts: {
+        harvester: 3,
+        miner: 0,
+        hauler: 2,
+        upgrader: 1,
+        builder: 0,
+      },
+      want: {
+        harvester: 3,
+        miner: 0,
+        hauler: 2,
+        upgrader: 1,
+        builder: 1,
+      },
+      spawnEnergy: 115,
+      spawnCapacity: 300,
+      dedicatedMiners: false,
+      energyIncomePerTick: 1.52,
+      baselineIncome: 5,
+      ticksToDowngrade: 40_000,
+    });
+    expect(signals).toEqual(
+      expect.arrayContaining(["incomeCollapsed", "missingSourceContainers"]),
+    );
+  });
+
   test("computeCriticalSignals keeps incomeCollapsed visible without forcing alone", () => {
     const signals = computeCriticalSignals({
       tick: 1,

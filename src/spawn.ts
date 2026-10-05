@@ -106,6 +106,12 @@ export function runSpawn(spawn: StructureSpawn): void {
     economy,
     liveCounts,
     energyAvailable,
+    {
+      rcl,
+      containersAtSources,
+      sourceCount,
+      hasConstructionSites,
+    },
   );
 
   for (const role of spawnOrder) {
