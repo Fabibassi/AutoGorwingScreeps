@@ -197,14 +197,12 @@ export function recycleExcessHaulers(
 }
 
 /**
- * Screeps can leave spawn.spawning stuck pointing at a creep that already lives.
- * That keeps spawnCreep at ERR_BUSY forever. Suiciding the live creep frees the
- * name so the spawn queue can clear and miners can respawn.
- */
-/**
- * remainingTime 0 + live creep = birth tick or sticky spawning flag.
- * NEVER cancel/suicide when the creep already exists — cancel kills newborns.
- * Only cancel an empty stuck spawn (remainingTime 0, no Game.creeps entry).
+ * Screeps can leave spawn.spawning stuck at remainingTime 0 after the creep
+ * already exists. That keeps spawnCreep at ERR_BUSY forever.
+ *
+ * remainingTime > 0: real spawn in progress — never cancel (kills newborns).
+ * remainingTime === 0: spawning flag is stale — cancel clears it. The living
+ * creep (if any) is already born; cancel must NOT suicide it.
  */
 export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   const spawning = spawn.spawning;
@@ -219,10 +217,9 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
       remainingTime: spawning.remainingTime,
       ttl: existing?.ticksToLive,
       hasExact: existing != null,
+      action: "cancel",
     };
   }
-  // Birth tick / sticky name with a living creep — leave it alone.
-  if (existing) return false;
   const code = (
     spawning as { cancel?: () => ScreepsReturnCode }
   ).cancel?.();

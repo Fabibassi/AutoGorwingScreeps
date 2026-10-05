@@ -137,10 +137,48 @@ function findExtensionWithEnergy(creep: Creep): StructureExtension | null {
 
 function findEnergySource(creep: Creep): StructureContainer | StructureStorage | StructureExtension | Resource | null {
   const ctx = haulContext(creep);
+  const immobile = creep.getActiveBodyparts(MOVE) === 0;
+
+  // Stationary emergency CARRY: only structures/drops in range 1 (storage is
+  // adjacent to spawn). Never path-target remote source containers — moveTo
+  // is impossible and blocks soft-lock recovery while energy sits in storage.
+  if (immobile) {
+    const storage = creep.room.storage;
+    if (
+      storage &&
+      storage.store[RESOURCE_ENERGY] > 0 &&
+      creep.pos.isNearTo(storage)
+    ) {
+      return storage;
+    }
+    const nearContainer = creep.pos.findInRange(FIND_STRUCTURES, 1, {
+      filter: (s): s is StructureContainer =>
+        s.structureType === STRUCTURE_CONTAINER &&
+        s.store[RESOURCE_ENERGY] > 0,
+    })[0] as StructureContainer | undefined;
+    if (nearContainer) return nearContainer;
+    const nearExt = creep.pos.findInRange(FIND_MY_STRUCTURES, 1, {
+      filter: (s): s is StructureExtension =>
+        s.structureType === STRUCTURE_EXTENSION &&
+        s.store[RESOURCE_ENERGY] > 0,
+    })[0] as StructureExtension | undefined;
+    if (nearExt) return nearExt;
+    const nearDrop = creep.pos.findInRange(FIND_DROPPED_RESOURCES, 1, {
+      filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount > 0,
+    })[0];
+    return nearDrop ?? null;
+  }
+
   // Soft-lock recovery: pull energy out of extensions when spawn cannot afford bootstrap.
   if (ctx.spawnFillPct < 0.5 && ctx.extensionsNeedingEnergy === 0) {
     const ext = findExtensionWithEnergy(creep);
     if (ext) return ext;
+  }
+
+  // Spawn starving: drain storage before walking to remote source containers.
+  const storage = creep.room.storage;
+  if (storage && shouldWithdrawFromStorage(ctx) && ctx.spawnFillPct < 0.5) {
+    return storage;
   }
 
   const controller = creep.room.controller;
@@ -163,14 +201,9 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     filter: (r) => r.resourceType === RESOURCE_ENERGY && r.amount >= minDrop,
   });
   if (dropped.length > 0) {
-    // Stationary emergency haulers (CARRY-only) cannot path — use range search.
-    if (creep.getActiveBodyparts(MOVE) === 0) {
-      return creep.pos.findInRange(dropped, 1)[0] ?? null;
-    }
     return creep.pos.findClosestByPath(dropped);
   }
 
-  const storage = creep.room.storage;
   if (storage && shouldWithdrawFromStorage(ctx)) {
     return storage;
   }

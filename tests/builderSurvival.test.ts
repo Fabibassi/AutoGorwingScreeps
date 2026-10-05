@@ -416,7 +416,7 @@ describe("recycleExcessHaulers", () => {
 });
 
 describe("clearZombieSpawn", () => {
-  test("does not cancel when the creep already exists (birth tick)", () => {
+  test("cancels sticky remainingTime 0 even when the creep already exists", () => {
     const cancel = vi.fn(() => OK);
     const suicide = vi.fn();
     (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
@@ -430,8 +430,8 @@ describe("clearZombieSpawn", () => {
       spawning: { name: "hauler-1", remainingTime: 0, cancel },
       room: { name: "W21N35" },
     };
-    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
-    expect(cancel).not.toHaveBeenCalled();
+    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
+    expect(cancel).toHaveBeenCalled();
     expect(suicide).not.toHaveBeenCalled();
   });
 
@@ -445,7 +445,7 @@ describe("clearZombieSpawn", () => {
       spawning: { name: "ghost-1", remainingTime: 0, cancel },
       room: { name: "W21N35" },
     };
-    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(true);
+    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
     expect(cancel).toHaveBeenCalled();
   });
 
@@ -459,7 +459,7 @@ describe("clearZombieSpawn", () => {
       spawning: { name: "miner-1", remainingTime: 5, cancel },
       room: { name: "W21N35" },
     };
-    expect(clearZombieSpawn(spawn as StructureSpawn)).toBe(false);
+    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
   });
 });
