@@ -322,13 +322,16 @@ export function desiredCreeps(
     };
   }
 
+  // Extension push: pause upgraders and convert their WORK into builders —
+  // WCM bodies + spawn drain otherwise leave 3k sites nearly idle.
+  const extensionPush = hasConstructionSites && !depressed;
+
   const quotas: CreepQuotas = {
     harvester: 0,
     miner: sources,
     hauler: sources,
-    upgrader: depressed ? 1 : 2,
-    // Two builders finish RCL4 extension sites (3k each) much faster than one.
-    builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 2 : 0,
+    upgrader: extensionPush ? 0 : depressed ? 1 : 2,
+    builder: infraBuilder ? 2 : extensionPush ? 4 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {

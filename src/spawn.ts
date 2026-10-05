@@ -36,6 +36,29 @@ export function reassignForEconomySurvival(
 }
 
 /**
+ * During extension push, convert surplus upgraders into builders so 3k sites
+ * get WORK instead of competing for the same spawn/container energy.
+ */
+export function reassignUpgraderToExtensionBuilder(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+): boolean {
+  if (counts.builder >= want.builder) return false;
+  if (counts.upgrader <= want.upgrader) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "upgrader") continue;
+    creep.memory.role = "builder";
+    delete creep.memory.sourceId;
+    return true;
+  }
+  return false;
+}
+
+/**
  * Instantly restore a missing infra builder from a spare harvester.
  * Waiting for a fresh 200-energy spawn stalls container finish when B dies.
  */
@@ -194,6 +217,11 @@ export function runSpawn(spawn: StructureSpawn): void {
     sourceCount,
     containersAtSources,
   );
+  // Convert all surplus upgraders in one tick during extension push.
+  for (;;) {
+    const mid = countCreepsByRole();
+    if (!reassignUpgraderToExtensionBuilder(room, want, mid)) break;
+  }
   // Recount after possible role reassignment so quotas/spawn order stay consistent.
   const liveCounts = countCreepsByRole();
 

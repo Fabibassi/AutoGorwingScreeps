@@ -8,6 +8,7 @@ import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
+  reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
 } from "../src/spawn";
 
@@ -119,6 +120,37 @@ describe("reassignForEconomySurvival", () => {
       },
     );
     expect(builder.memory.role).toBe("harvester");
+  });
+});
+
+describe("reassignUpgraderToExtensionBuilder", () => {
+  test("converts surplus upgraders into builders during extension push", () => {
+    const upgrader = {
+      room: { name: "W21N35" },
+      memory: { role: "upgrader" },
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "upgrader-1": upgrader },
+    };
+    const ok = reassignUpgraderToExtensionBuilder(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 0,
+        builder: 4,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 2,
+        builder: 2,
+      },
+    );
+    expect(ok).toBe(true);
+    expect(upgrader.memory.role).toBe("builder");
   });
 });
 

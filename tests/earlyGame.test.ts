@@ -111,12 +111,22 @@ describe("desiredCreeps", () => {
   });
 
   test("rcl2 with all source containers switches to miner/hauler pairs", () => {
-    expect(desiredCreeps(2, 2, 2, true)).toEqual({
+    expect(desiredCreeps(2, 2, 2, false)).toEqual({
       harvester: 0,
       miner: 2,
       hauler: 2,
       upgrader: 2,
-      builder: 2,
+      builder: 0,
+    });
+  });
+
+  test("dedicated mining defers upgraders and boosts builders while extension sites exist", () => {
+    expect(desiredCreeps(4, 2, 2, true, { energyIncomePerTick: 6 })).toEqual({
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 0,
+      builder: 4,
     });
   });
 
