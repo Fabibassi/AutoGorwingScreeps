@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   canWithdrawFromSpawn,
+  pickBuildSite,
   pickClosestLogisticsEnergy,
   preferLogisticsRefill,
 } from "../src/roles/builder";
@@ -12,6 +13,22 @@ import {
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
 } from "../src/spawn";
+
+describe("pickBuildSite", () => {
+  test("finishes nearly complete extensions instead of the closest unfinished tile", () => {
+    // W21N35: haulers park on 2553/3000 next to spawn; path-closest skipped it for 1847.
+    const nearDone = { id: "lead", progress: 2553, progressTotal: 3000, range: 1 };
+    const mid = { id: "mid", progress: 1847, progressTotal: 3000, range: 1 };
+    const low = { id: "low", progress: 625, progressTotal: 3000, range: 1 };
+    expect(pickBuildSite([low, nearDone, mid])?.id).toBe("lead");
+  });
+
+  test("breaks remaining-progress ties by range", () => {
+    const far = { id: "far", progress: 100, progressTotal: 3000, range: 8 };
+    const close = { id: "close", progress: 100, progressTotal: 3000, range: 2 };
+    expect(pickBuildSite([far, close])?.id).toBe("close");
+  });
+});
 
 describe("preferLogisticsRefill", () => {
   test("uses logistics once every source has a container", () => {

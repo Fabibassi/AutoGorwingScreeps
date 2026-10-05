@@ -48,6 +48,22 @@ export function pickClosestLogisticsEnergy(
   return best?.id ?? null;
 }
 
+/** Prefer sites closest to completion so spawn-adjacent nearly-done extensions finish. */
+export function pickBuildSite<
+  T extends { progress: number; progressTotal: number; range: number },
+>(sites: T[]): T | null {
+  if (sites.length === 0) return null;
+  let best = sites[0];
+  for (const site of sites) {
+    const remain = Math.max(0, site.progressTotal - site.progress);
+    const bestRemain = Math.max(0, best.progressTotal - best.progress);
+    if (remain < bestRemain || (remain === bestRemain && site.range < best.range)) {
+      best = site;
+    }
+  }
+  return best;
+}
+
 function findBuildSite(creep: Creep): ConstructionSite | null {
   const sourceCount = creep.room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(creep.room);
@@ -60,10 +76,16 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
       );
     }
   }
-  return (
-    creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES) ??
-    creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES)
+  const sites = creep.room.find(FIND_CONSTRUCTION_SITES);
+  const picked = pickBuildSite(
+    sites.map((site) => ({
+      site,
+      progress: site.progress,
+      progressTotal: site.progressTotal,
+      range: creep.pos.getRangeTo(site),
+    })),
   );
+  return picked?.site ?? null;
 }
 
 function refillFromLogistics(creep: Creep): boolean {
@@ -165,7 +187,7 @@ export function runBuilder(creep: Creep): number {
     const site = findBuildSite(creep);
     if (site) {
       if (creep.build(site) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(site, { visualizePathStyle: { stroke: "#ffffff" } });
+        creep.moveTo(site, { range: 3, visualizePathStyle: { stroke: "#ffffff" } });
       }
       return 0;
     }
