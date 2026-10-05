@@ -211,11 +211,13 @@ export function desiredCreeps(
   const depressed = isEconomyDepressed(economy);
 
   if (!dedicatedMiners) {
+    const energy = economy?.energyAvailable ?? 300;
     return {
       harvester: sources + 1,
       miner: 0,
-      // Soft-lock: spawn order prefers hauler at <150 energy, but want must be >0.
-      hauler: depressed ? 1 : 0,
+      // Soft-lock: want>0 so hauler actually spawns; at >=100 prefer a 2nd mobile hauler
+      // (emergency CARRY-only may already own the first slot).
+      hauler: depressed ? (energy >= EARLY_GAME_THRESHOLDS.minHaulerEnergy ? 2 : 1) : 0,
       upgrader: depressed ? 1 : 2,
       builder: hasConstructionSites && !depressed ? 1 : 0,
     };

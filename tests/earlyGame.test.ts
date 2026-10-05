@@ -68,13 +68,17 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl4 zero income wants recovery hauler, skips builders (#36)", () => {
+  test("rcl4 zero income wants recovery haulers, skips builders (#36)", () => {
     expect(
-      desiredCreeps(4, 2, 0, true, { energyIncomePerTick: 0, spawnFillPct: 0.27 }),
+      desiredCreeps(4, 2, 0, true, {
+        energyIncomePerTick: 0,
+        spawnFillPct: 0.27,
+        energyAvailable: 152,
+      }),
     ).toEqual({
       harvester: 3,
       miner: 0,
-      hauler: 1,
+      hauler: 2,
       upgrader: 1,
       builder: 0,
     });
