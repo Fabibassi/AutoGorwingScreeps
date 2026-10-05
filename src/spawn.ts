@@ -319,6 +319,8 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
         };
       }
       if (result === OK) return true;
+      // Keep spawn-through-sticky diagnostics (do not overwrite with wait-living).
+      return false;
     }
   }
 
