@@ -304,7 +304,13 @@ export function constructionPriority(
     }
   }
 
-  if (shouldBuildContainers(rcl) && !opts.hasControllerContainer) {
+  // Controller container only after source containers — otherwise it steals the
+  // 3-site cap and dilutes build effort away from miner unlock.
+  if (
+    shouldBuildContainers(rcl) &&
+    !opts.hasControllerContainer &&
+    missingSourceContainers === 0
+  ) {
     queue.push("container");
   }
 

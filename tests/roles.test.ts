@@ -5,8 +5,8 @@ import { registeredRoles, runCreep } from "../src/roles";
 
 describe("shouldBuildSourceContainers", () => {
   test("true when spawn healthy and source containers missing", () => {
-    expect(shouldBuildSourceContainers(0.35, 0, 2)).toBe(true);
-    expect(shouldBuildSourceContainers(0.3, 0, 2)).toBe(false);
+    expect(shouldBuildSourceContainers(0.2, 0, 2)).toBe(true);
+    expect(shouldBuildSourceContainers(0.19, 0, 2)).toBe(false);
     expect(shouldBuildSourceContainers(0.9, 2, 2)).toBe(false);
   });
 });

@@ -1,4 +1,7 @@
-import { countSourceContainers } from "../room/queries";
+import {
+  countSourceContainers,
+  findSourceContainerSites,
+} from "../room/queries";
 
 /** Builders must not drain spawn energy needed to respawn harvesters/miners. */
 export function canWithdrawFromSpawn(
@@ -18,14 +21,13 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
   const sourceCount = creep.room.find(FIND_SOURCES).length;
   const containersAtSources = countSourceContainers(creep.room);
   if (containersAtSources < sourceCount) {
-    const containerSite =
-      creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES, {
-        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-      }) ??
-      creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES, {
-        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-      });
-    if (containerSite) return containerSite;
+    const sourceSites = findSourceContainerSites(creep.room);
+    if (sourceSites.length > 0) {
+      return (
+        creep.pos.findClosestByPath(sourceSites) ??
+        creep.pos.findClosestByRange(sourceSites)
+      );
+    }
   }
   return (
     creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES) ??

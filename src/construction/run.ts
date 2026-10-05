@@ -7,6 +7,7 @@ import {
 import {
   countSourceContainers,
   countStructures,
+  findSourceContainerSites,
   hasControllerContainer,
   sourceMissingContainer,
 } from "../room/queries";
@@ -39,6 +40,19 @@ export function runConstruction(room: Room): void {
   ).length;
   const extensionCount = extensionBuilt + extensionSites;
   const needExtensions = extensionCount < extensionQuota(rcl);
+
+  // Drop controller/other container sites until every source container is done.
+  if (needSourceContainers) {
+    const sourceSites = new Set(findSourceContainerSites(room).map((s) => s.id));
+    const stray = nonRoadSites.find(
+      (s) =>
+        s.structureType === STRUCTURE_CONTAINER && !sourceSites.has(s.id),
+    );
+    if (stray) {
+      stray.remove();
+      return;
+    }
+  }
 
   // At the 3-site cap: never sacrifice source-container sites.
   if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
@@ -91,7 +105,11 @@ export function runConstruction(room: Room): void {
     if (structureType === STRUCTURE_CONTAINER) {
       const source = sourceMissingContainer(room);
       if (source && tryPlaceContainer(room, source.pos)) return;
-      if (!controllerContainer && room.controller) {
+      if (
+        !needSourceContainers &&
+        !controllerContainer &&
+        room.controller
+      ) {
         if (tryPlaceContainer(room, room.controller.pos)) return;
       }
       continue;

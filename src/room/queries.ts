@@ -64,6 +64,22 @@ export function sourceMissingContainer(room: Room): Source | null {
   return null;
 }
 
+/** Container construction sites adjacent to a source (not controller/storage). */
+export function findSourceContainerSites(room: Room): ConstructionSite[] {
+  const sites: ConstructionSite[] = [];
+  const seen = new Set<Id<ConstructionSite>>();
+  for (const source of room.find(FIND_SOURCES)) {
+    for (const site of source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
+      filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+    })) {
+      if (seen.has(site.id)) continue;
+      seen.add(site.id);
+      sites.push(site);
+    }
+  }
+  return sites;
+}
+
 export function countStructures(room: Room, type: StructureConstant): number {
   return room.find(FIND_MY_STRUCTURES, { filter: (s) => s.structureType === type })
     .length;

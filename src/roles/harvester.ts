@@ -1,4 +1,7 @@
-import { countSourceContainers } from "../room/queries";
+import {
+  countSourceContainers,
+  findSourceContainerSites,
+} from "../room/queries";
 
 /** Prefer finishing source containers over controller when spawn is not starving. */
 export function shouldBuildSourceContainers(
@@ -7,7 +10,29 @@ export function shouldBuildSourceContainers(
   sourceCount: number,
 ): boolean {
   if (containersAtSources >= Math.max(1, sourceCount)) return false;
-  return spawnFillPct >= 0.35;
+  // Thin spawn buffer (~60/300): spend the rest next to sources to unlock miners.
+  return spawnFillPct >= 0.2;
+}
+
+function buildSourceContainerSite(creep: Creep): boolean {
+  const nearSite = creep.pos.findInRange(FIND_CONSTRUCTION_SITES, 3, {
+    filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+  })[0];
+  const site =
+    nearSite ??
+    (() => {
+      const sourceSites = findSourceContainerSites(creep.room);
+      if (sourceSites.length === 0) return null;
+      return (
+        creep.pos.findClosestByPath(sourceSites) ??
+        creep.pos.findClosestByRange(sourceSites)
+      );
+    })();
+  if (!site) return false;
+  if (creep.build(site) === ERR_NOT_IN_RANGE) {
+    creep.moveTo(site, { visualizePathStyle: { stroke: "#ffffff" } });
+  }
+  return true;
 }
 
 export function runHarvester(creep: Creep): number {
@@ -41,29 +66,20 @@ export function runHarvester(creep: Creep): number {
     return harvested;
   }
 
+  const sources = creep.room.find(FIND_SOURCES).length;
+  const atSources = countSourceContainers(creep.room);
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+  const capacitySpawn = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
+  const fill =
+    (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / capacitySpawn;
+  const preferBuild = shouldBuildSourceContainers(fill, atSources, sources);
+
+  // Full at/near a source: finish the adjacent container before the spawn trip.
+  if (preferBuild && buildSourceContainerSite(creep)) {
+    return 0;
+  }
+
   if (spawn && spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-    const capacitySpawn = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 1;
-    const fill =
-      (spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / capacitySpawn;
-    const sources = creep.room.find(FIND_SOURCES).length;
-    const atSources = countSourceContainers(creep.room);
-    // Spawn already healthy: put overflow into source-container sites (unlocks miners).
-    if (shouldBuildSourceContainers(fill, atSources, sources)) {
-      const site =
-        creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES, {
-          filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-        }) ??
-        creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES, {
-          filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-        });
-      if (site) {
-        if (creep.build(site) === ERR_NOT_IN_RANGE) {
-          creep.moveTo(site, { visualizePathStyle: { stroke: "#ffffff" } });
-        }
-        return 0;
-      }
-    }
     if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
       creep.moveTo(spawn);
     }
@@ -71,22 +87,8 @@ export function runHarvester(creep: Creep): number {
   }
 
   // Spawn full: build containers before upgrading.
-  const sources = creep.room.find(FIND_SOURCES).length;
-  const atSources = countSourceContainers(creep.room);
-  if (atSources < sources) {
-    const site =
-      creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES, {
-        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-      }) ??
-      creep.pos.findClosestByRange(FIND_CONSTRUCTION_SITES, {
-        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-      });
-    if (site) {
-      if (creep.build(site) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(site, { visualizePathStyle: { stroke: "#ffffff" } });
-      }
-      return 0;
-    }
+  if (atSources < sources && buildSourceContainerSite(creep)) {
+    return 0;
   }
 
   const controller = creep.room.controller;

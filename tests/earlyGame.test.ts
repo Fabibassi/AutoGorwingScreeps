@@ -222,11 +222,24 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
-    expect(queue.filter((s) => s === "container")).toHaveLength(3);
+    // Only source containers — controller container waits until sources are done.
+    expect(queue.filter((s) => s === "container")).toHaveLength(2);
     expect(queue[0]).toBe("container");
     expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(2));
     expect(queue.includes("storage")).toBe(false);
     expect(queue.includes("road")).toBe(false);
+  });
+
+  test("controller container queued only after source containers exist", () => {
+    const queue = constructionPriority(2, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: false,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: extensionQuota(2),
+    });
+    expect(queue.filter((s) => s === "container")).toHaveLength(1);
   });
 
   test("extensions lead once every source has a container", () => {
