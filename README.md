@@ -105,6 +105,26 @@ Derselbe Bot-Code. Ziel-URL über `SCREEPS_HOSTNAME` (z. B. `http://127.0.0.1:
 
 World-Deploy bleibt unverändert.
 
+## Multi-Sim Farm (lokal, schnelle Ticks)
+
+Deterministische Szenarien mit **screeps-server-mockup** (Tick-für-Tick, parallel).  
+Live-World bleibt Canary — Soft-Lock & Early-Game hier üben.
+
+```powershell
+npm run sim:softlock              # 1 Instanz, Soft-Lock-Szenario
+npm run sim:farm -- --workers 4   # 4 parallele Instanzen (eigene Ports/DBs)
+npm run sim:farm -- --workers 8 --ticks 60
+```
+
+| Hardware (dieser PC) | Empfehlung |
+|----------------------|------------|
+| ~20 Threads / ~64 GB | **8–16** Mockup-Worker parallel |
+| Voller Private Server (Steam/`screeps`) | eher **2–4** gleichzeitig |
+
+Pro Worker: eigener Ordner unter `.sim-servers/` + eigener Port (`--base-port`, Default 22100).
+
+World-Deploy bleibt unverändert. RCL8-Escort ist zugunsten der Sim-Farm pausiert.
+
 ## Lokal entwickeln (optional)
 
 ```bash

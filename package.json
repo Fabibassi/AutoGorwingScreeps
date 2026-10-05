@@ -2,7 +2,9 @@
   "name": "auto-growing-screeps",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsx ops/buildModules.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -11,12 +13,17 @@
     "deploy": "npm run build && tsx ops/deploy.ts",
     "deploy:private": "npm run build && tsx ops/deploy.ts",
     "metrics:pull": "tsx ops/metricsPull.ts",
-    "agent:evolve": "tsx ops/evolveAgent.ts"
+    "agent:evolve": "tsx ops/evolveAgent.ts",
+    "sim:softlock": "npm run build && tsx ops/sim/softLock.ts",
+    "sim:farm": "npm run build && tsx ops/sim/farm.ts"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.25",
     "@types/node": "^22.13.10",
     "@types/screeps": "^3.3.8",
     "esbuild": "^0.25.1",
+    "lodash": "^4.18.1",
+    "screeps-server-mockup": "^1.5.1",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.9"
