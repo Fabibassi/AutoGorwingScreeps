@@ -84,13 +84,29 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl2 with partial containers keeps mobile harvesters", () => {
+  test("rcl2 with partial containers unlocks miner/hauler for finished sources", () => {
     expect(desiredCreeps(2, 2, 1, false)).toEqual({
-      harvester: 3,
-      miner: 0,
-      hauler: 0,
+      harvester: 2,
+      miner: 1,
+      hauler: 1,
       upgrader: 2,
       builder: 0,
+    });
+  });
+
+  test("rcl4 partial container keeps builders and funds miner/hauler while income is collapsed", () => {
+    expect(
+      desiredCreeps(4, 2, 1, true, {
+        energyIncomePerTick: 2,
+        spawnFillPct: 0.12,
+        energyAvailable: 37,
+      }),
+    ).toEqual({
+      harvester: 2,
+      miner: 1,
+      hauler: 1,
+      upgrader: 0,
+      builder: 2,
     });
   });
 

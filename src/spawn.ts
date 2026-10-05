@@ -8,7 +8,11 @@ import {
   useDedicatedMiners,
   type CreepQuotas,
 } from "./earlyGame";
-import { countCreepsByRole, countSourceContainers } from "./room/queries";
+import {
+  countCreepsByRole,
+  countSourceContainers,
+  findSourcesWithContainers,
+} from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
 
@@ -221,7 +225,8 @@ export function runSpawn(spawn: StructureSpawn): void {
     const name = `${role}-${Game.time}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
-      const sources = room.find(FIND_SOURCES);
+      // Prefer finished container sources so early miners do not sit on bare drops.
+      const sources = findSourcesWithContainers(room);
       const assigned = new Set<string>();
       for (const n in Game.creeps) {
         const c = Game.creeps[n];

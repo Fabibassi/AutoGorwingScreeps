@@ -64,6 +64,16 @@ export function sourceMissingContainer(room: Room): Source | null {
   return null;
 }
 
+/** Sources that already have a finished adjacent container (ready for static miners). */
+export function findSourcesWithContainers(room: Room): Source[] {
+  return room.find(FIND_SOURCES).filter(
+    (source) =>
+      source.pos.findInRange(FIND_STRUCTURES, 1, {
+        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+      }).length > 0,
+  );
+}
+
 /** Container construction sites adjacent to a source (not controller/storage). */
 export function findSourceContainerSites(room: Room): ConstructionSite[] {
   const sites: ConstructionSite[] = [];

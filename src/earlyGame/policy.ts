@@ -288,6 +288,19 @@ export function desiredCreeps(
 
   if (!dedicatedMiners) {
     const energy = economy?.energyAvailable ?? 300;
+    const readyContainers = Math.max(0, Math.min(containersAtSources, sources));
+    // First finished source container: start static mining there immediately.
+    // Keep mobile harvesters only for sources still missing a container.
+    if (readyContainers > 0) {
+      const uncovered = Math.max(0, sources - readyContainers);
+      return {
+        harvester: uncovered > 0 ? uncovered + 1 : 0,
+        miner: readyContainers,
+        hauler: readyContainers,
+        upgrader: infraBuilder ? 0 : depressed ? 1 : 2,
+        builder: infraBuilder ? 2 : hasConstructionSites && !depressed ? 1 : 0,
+      };
+    }
     return {
       harvester: sources + 1,
       miner: 0,
