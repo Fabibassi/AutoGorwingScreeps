@@ -641,21 +641,34 @@ export function constructionPriority(
     towerCount?: number;
     /** Live miner WORK sum — gates extension build stages. */
     minerWorkParts?: number;
+    /** Room energyCapacityAvailable — pause new sites while upgrading miners. */
+    energyCapacityAvailable?: number;
     experiment?: ExperimentProfile;
   },
 ): BuildableStructureConstant[] {
   const exp = opts.experiment ?? BASELINE_PROFILE;
   const queue: BuildableStructureConstant[] = [];
   const fullExtQuota = extensionQuota(rcl);
+  const minerWorkParts = opts.minerWorkParts ?? 0;
   const stagedCap = stagedExtensionBuildCap({
     fullQuota: fullExtQuota,
-    minerWorkParts: opts.minerWorkParts ?? 0,
+    minerWorkParts,
     sourceCount: opts.sourceCount,
   });
-  const extCap = Math.min(
-    stagedCap,
-    extensionBootstrapCap(exp, rcl, fullExtQuota),
-  );
+  const bootstrapCap = extensionBootstrapCap(exp, rcl, fullExtQuota);
+  const finishedExt = opts.extensionBuilt ?? 0;
+  // Capacity already high but miners thin: spend energy on bodies, not new sites.
+  const pauseExtSites =
+    opts.energyCapacityAvailable != null &&
+    finishedExt >= stagedCap &&
+    shouldBankForBetterMiners({
+      energyCapacityAvailable: opts.energyCapacityAvailable,
+      minerWorkParts,
+      sourceCount: opts.sourceCount,
+    });
+  const extCap = pauseExtSites
+    ? finishedExt
+    : Math.min(stagedCap, bootstrapCap);
 
   const missingAll = shouldBuildContainers(rcl)
     ? Math.max(0, opts.sourceCount - opts.sourceContainerCount)

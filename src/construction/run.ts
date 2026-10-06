@@ -1,6 +1,7 @@
 import {
   constructionPriority,
   extensionQuota,
+  shouldBankForBetterMiners,
   shouldBuildRoads,
   shouldBuildWalls,
   stagedExtensionBuildCap,
@@ -90,14 +91,30 @@ export function runConstruction(room: Room): void {
     if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
     minerWorkParts += creep.getActiveBodyparts(WORK);
   }
-  const extCap = Math.min(
-    stagedExtensionBuildCap({
-      fullQuota: extensionQuota(rcl),
-      minerWorkParts,
-      sourceCount,
-    }),
-    extensionBootstrapCap(exp, rcl, extensionQuota(rcl)),
-  );
+  const energyCapacityAvailable = room.energyCapacityAvailable;
+  const stagedCap = stagedExtensionBuildCap({
+    fullQuota: extensionQuota(rcl),
+    minerWorkParts,
+    sourceCount,
+  });
+  const bootstrapCap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
+  const bankForMiners = shouldBankForBetterMiners({
+    energyCapacityAvailable,
+    minerWorkParts,
+    sourceCount,
+  });
+  // Enough finished extensions for this miner stage but bodies still thin:
+  // drop open extension sites so energy goes into upgrades, not 3k builds.
+  if (bankForMiners && extensionBuilt >= stagedCap && extensionSites > 0) {
+    for (const site of existingSites) {
+      if (site.structureType === STRUCTURE_EXTENSION) site.remove();
+    }
+    return;
+  }
+  const extCap =
+    bankForMiners && extensionBuilt >= stagedCap
+      ? extensionBuilt
+      : Math.min(stagedCap, bootstrapCap);
   const needExtensions = extensionCount < extCap;
   // Only starve roads during RCL2 extension bootstrap. At RCL3+ unfinished
   // extensions must not permanently block source roads (live W21N35 symptom).
@@ -235,6 +252,7 @@ export function runConstruction(room: Room): void {
     sourceContainerSites,
     towerCount,
     minerWorkParts,
+    energyCapacityAvailable,
     experiment: exp,
   });
 

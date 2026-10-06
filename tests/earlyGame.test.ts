@@ -612,6 +612,23 @@ describe("constructionPriority", () => {
     expect(queue.filter((s) => s === "extension")).toHaveLength(1);
   });
 
+  test("does not re-queue extensions while banking into existing capacity", () => {
+    // 10 finished extensions (capacity 800) + thin miners: upgrade bodies, don't place sites.
+    const queue = constructionPriority(3, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 10,
+      extensionBuilt: 10,
+      towerCount: 1,
+      minerWorkParts: 2,
+      energyCapacityAvailable: 800,
+    });
+    expect(queue.filter((s) => s === "extension")).toHaveLength(0);
+  });
+
   test("storage after tower and full extensions at RCL 4", () => {
     const queue = constructionPriority(4, {
       sourceContainerCount: 2,
