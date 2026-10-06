@@ -209,6 +209,8 @@ export function needsBootstrapHarvester(
   ctx?: EconomyContext,
 ): boolean {
   if (!dedicatedMiners || !ctx) return false;
+  // Miners already on seats: empty spawn with full containers is a haul gap.
+  if ((ctx.minerCount ?? 0) > 0) return false;
   // Same healthy-spawn gate as mobile-harvest fallback: banked container energy
   // makes income look dead while spawn is already refillable.
   if ((ctx.spawnFillPct ?? 0) >= 0.35 || (ctx.energyAvailable ?? 0) >= 150) {
@@ -225,6 +227,9 @@ export function shouldFallbackToMobileHarvest(
   ctx?: EconomyContext,
 ): boolean {
   if (!dedicatedMiners || !ctx) return false;
+  // Live miners + source containers: stalled income is energy sitting in
+  // containers, not a reason to demote miners into fat WCM harvesters.
+  if ((ctx.minerCount ?? 0) > 0) return false;
   // Healthy spawn/extensions: low measured income usually means energy banked in
   // source containers, not a dead miner pipeline. Demoting miners then leaves a
   // source idle while the converted body wanders as a mobile harvester.

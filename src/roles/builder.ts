@@ -272,10 +272,9 @@ export function runBuilder(creep: Creep): number {
   const containersAtSources = countSourceContainers(creep.room);
   const useLogistics = preferLogisticsRefill(containersAtSources, sourceCount);
 
-  // Dedicated mining online: do not contest source tiles — pull from logistics.
+  // Dedicated mining online: never contest source tiles — pull from logistics.
   if (useLogistics) {
-    if (refillFromLogistics(creep)) return 0;
-    refillFromHarvest(creep);
+    refillFromLogistics(creep);
     return 0;
   }
 

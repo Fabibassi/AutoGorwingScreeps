@@ -271,6 +271,27 @@ describe("desiredCreeps", () => {
       harvester: 1,
     });
   });
+
+  test("live miners plus full source containers do not spawn a bootstrap harvester", () => {
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 0,
+        spawnFillPct: 0.1,
+        energyAvailable: 80,
+        minerCount: 2,
+        minerWorkParts: 10,
+      }),
+    ).toBe(false);
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 0,
+        spawnFillPct: 0.1,
+        energyAvailable: 80,
+        minerCount: 2,
+        minerWorkParts: 10,
+      }),
+    ).toMatchObject({ miner: 2, harvester: 0 });
+  });
 });
 
 describe("spawnPriorityOrder", () => {
