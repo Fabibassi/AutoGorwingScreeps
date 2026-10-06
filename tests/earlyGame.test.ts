@@ -401,7 +401,7 @@ describe("constructionPriority", () => {
     expect(queue.filter((s) => s === "extension")).toHaveLength(2);
   });
 
-  test("extensions lead at RCL3 once every source has a container", () => {
+  test("tower leads at RCL3 once every source has a container", () => {
     const queue = constructionPriority(3, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -409,12 +409,14 @@ describe("constructionPriority", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: 0,
+      towerCount: 0,
     });
-    expect(queue[0]).toBe("extension");
+    expect(queue[0]).toBe("tower");
+    expect(queue.filter((s) => s === "tower")).toHaveLength(1);
     expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(3));
   });
 
-  test("storage after full extensions at RCL 4", () => {
+  test("storage after tower and full extensions at RCL 4", () => {
     const queue = constructionPriority(4, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -422,6 +424,7 @@ describe("constructionPriority", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: extensionQuota(4),
+      towerCount: 1,
     });
     expect(queue[0]).toBe("storage");
   });
@@ -490,16 +493,17 @@ describe("isSoftLocked", () => {
 });
 
 describe("bodyForRole", () => {
-  test("miner uses balanced work/move pairs", () => {
+  test("miner is stationary: WORK parts + single MOVE", () => {
     const body = bodyForRole("miner", 300);
     expect(body.filter((p) => p === "work")).toHaveLength(2);
-    expect(body.filter((p) => p === "move")).toHaveLength(2);
+    expect(body.filter((p) => p === "move")).toHaveLength(1);
   });
 
-  test("miner scales WORK up to 5 with enough energy", () => {
+  test("miner scales to 5 WORK + 1 MOVE at 550 energy", () => {
     const body = bodyForRole("miner", 550);
-    expect(body.filter((p) => p === "work")).toHaveLength(3);
-    expect(body.filter((p) => p === "move")).toHaveLength(3);
+    expect(body.filter((p) => p === "work")).toHaveLength(5);
+    expect(body.filter((p) => p === "move")).toHaveLength(1);
+    expect(body).toEqual(["work", "work", "work", "work", "work", "move"]);
   });
 
   test("hauler uses carry/move pairs", () => {

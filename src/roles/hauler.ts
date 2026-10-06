@@ -1,6 +1,11 @@
 import { isIncomeStalled } from "../telemetry";
 
-type HaulTarget = StructureSpawn | StructureExtension | StructureContainer | StructureStorage;
+type HaulTarget =
+  | StructureSpawn
+  | StructureExtension
+  | StructureTower
+  | StructureContainer
+  | StructureStorage;
 
 export interface StorageHaulContext {
   energyIncomePerTick: number;
@@ -193,6 +198,18 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
     const closest =
       creep.pos.findClosestByPath(extensions) ??
       creep.pos.findClosestByRange(extensions);
+    if (closest) return closest;
+  }
+
+  const towers = creep.room.find(FIND_MY_STRUCTURES, {
+    filter: (s): s is StructureTower =>
+      s.structureType === STRUCTURE_TOWER &&
+      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+  });
+  if (towers.length > 0) {
+    const closest =
+      creep.pos.findClosestByPath(towers) ??
+      creep.pos.findClosestByRange(towers);
     if (closest) return closest;
   }
 

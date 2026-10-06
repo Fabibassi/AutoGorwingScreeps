@@ -30,6 +30,7 @@ import {
   tryPlaceExtension,
   tryPlaceRoadOnPath,
   tryPlaceStorageNearSpawn,
+  tryPlaceTower,
 } from "./placement";
 
 const MAX_NON_ROAD_SITES = 3;
@@ -80,9 +81,11 @@ export function runConstruction(room: Room): void {
   const extensionCount = extensionBuilt + extensionSites;
   const extCap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
   const needExtensions = extensionCount < extCap;
+  // Only starve roads during RCL2 extension bootstrap. At RCL3+ unfinished
+  // extensions must not permanently block source roads (live W21N35 symptom).
+  const roadsBlockedByExtensionPush = rcl < 3 && needExtensions;
 
-  // Extensions starve when road sites dilute builders — purge all roads at once.
-  if (needExtensions) {
+  if (roadsBlockedByExtensionPush) {
     const roads = existingSites.filter((s) => s.structureType === STRUCTURE_ROAD);
     if (roads.length > 0) {
       for (const road of roads) road.remove();
@@ -119,7 +122,8 @@ export function runConstruction(room: Room): void {
       const sacrificial = nonRoadSites.find(
         (s) =>
           s.structureType !== STRUCTURE_EXTENSION &&
-          s.structureType !== STRUCTURE_CONTAINER,
+          s.structureType !== STRUCTURE_CONTAINER &&
+          s.structureType !== STRUCTURE_TOWER,
       );
       if (sacrificial) sacrificial.remove();
       else return;
@@ -139,12 +143,16 @@ export function runConstruction(room: Room): void {
   const containersBlockRoads =
     roadsBlockedByContainers(policy) && needSourceContainers;
   const roadSitesAllowed =
-    !needExtensions &&
+    !roadsBlockedByExtensionPush &&
     canPlaceMoreRoads &&
     shouldBuildRoads(rcl, spawnEnergy, containersBlockRoads, {
       minRcl: roadMinRcl(policy),
       minSpawnEnergy: minEnergyForRoads(exp),
     });
+  const towerBuilt = countStructures(room, STRUCTURE_TOWER);
+  const towerSites = existingSites.filter((s) => s.structureType === STRUCTURE_TOWER)
+    .length;
+  const towerCount = towerBuilt + towerSites;
 
   // Early / parallel: push at least one source-path road even mid-container-build.
   if (
@@ -189,10 +197,16 @@ export function runConstruction(room: Room): void {
         : extensionCount,
     extensionBuilt,
     sourceContainerSites,
+    towerCount,
     experiment: exp,
   });
 
   for (const structureType of queue) {
+    if (structureType === STRUCTURE_TOWER) {
+      if (tryPlaceTower(room, spawn.pos)) return;
+      continue;
+    }
+
     if (structureType === STRUCTURE_EXTENSION) {
       if (tryPlaceExtension(room, spawn.pos)) return;
       continue;

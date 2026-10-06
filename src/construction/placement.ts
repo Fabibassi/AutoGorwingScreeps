@@ -159,6 +159,13 @@ export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
   return room.createConstructionSite(spot, STRUCTURE_EXTENSION) === OK;
 }
 
+/** Tower near spawn (range 2..4), never on the exit ring. */
+export function tryPlaceTower(room: Room, spawnPos: RoomPosition): boolean {
+  const spot = findBuildSpotNear(room, spawnPos, 4, SPAWN_EXIT_MIN_RANGE);
+  if (!spot) return false;
+  return room.createConstructionSite(spot, STRUCTURE_TOWER) === OK;
+}
+
 export function tryPlaceContainer(room: Room, anchor: RoomPosition): boolean {
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   for (const [dx, dy] of ADJACENT_DELTAS) {

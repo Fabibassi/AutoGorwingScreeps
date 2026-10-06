@@ -1,4 +1,5 @@
 import { runConstruction } from "./construction";
+import { runTowers } from "./defense/towers";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
 import { runCreep } from "./roles";
 import { maybeUpdateHealthCheck } from "./selfCheck";
@@ -18,6 +19,10 @@ function clearDeadCreepMemory(): void {
 export function loop(): void {
   let errorsThisTick = 0;
   let energyHarvestedThisTick = 0;
+  const roadPolicySticky = Memory.ags?.roadPolicy;
+  const abKnobSticky = Memory.ags?.abKnob;
+  const abVariantSticky = Memory.ags?.abVariant;
+  const profileSticky = Memory.ags?.profile;
 
   try {
     clearDeadCreepMemory();
@@ -43,6 +48,17 @@ export function loop(): void {
       }
     }
 
+    for (const name in Game.rooms) {
+      const room = Game.rooms[name];
+      if (!room.controller?.my) continue;
+      try {
+        runTowers(room);
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`towers ${name} error`, e);
+      }
+    }
+
     for (const name in Game.creeps) {
       const creep = Game.creeps[name];
       try {
@@ -64,7 +80,16 @@ export function loop(): void {
       cpuUsed: Game.cpu.getUsed(),
       memory: Memory.ags,
     });
+    // Preserve experiment knobs across telemetry rewrites.
+    if (roadPolicySticky) Memory.ags.roadPolicy = roadPolicySticky;
+    if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
+    if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
+    if (profileSticky) Memory.ags.profile = profileSticky;
     Memory.ags = maybeUpdateHealthCheck(room, Memory.ags) ?? Memory.ags;
+    if (roadPolicySticky) Memory.ags.roadPolicy = roadPolicySticky;
+    if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
+    if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
+    if (profileSticky) Memory.ags.profile = profileSticky;
 
     logPlanStatusIfDue(room, Memory.ags);
   } catch (e) {

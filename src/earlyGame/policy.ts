@@ -50,8 +50,28 @@ export const EXTENSIONS_BY_RCL: Record<number, number> = {
   8: 60,
 };
 
+/** CONTROLLER_STRUCTURES.tower mirror (Screeps World). */
+export const TOWERS_BY_RCL: Record<number, number> = {
+  1: 0,
+  2: 0,
+  3: 1,
+  4: 1,
+  5: 2,
+  6: 2,
+  7: 3,
+  8: 6,
+};
+
 export function extensionQuota(rcl: number): number {
   return EXTENSIONS_BY_RCL[rcl] ?? 0;
+}
+
+export function towerQuota(rcl: number): number {
+  return TOWERS_BY_RCL[rcl] ?? 0;
+}
+
+export function shouldBuildTowers(rcl: number): boolean {
+  return towerQuota(rcl) > 0;
 }
 
 export function shouldBuildExtensions(rcl: number): boolean {
@@ -434,6 +454,8 @@ export function constructionPriority(
     extensionBuilt?: number;
     /** Open source-container construction sites. */
     sourceContainerSites?: number;
+    /** Built towers + tower construction sites. */
+    towerCount?: number;
     experiment?: ExperimentProfile;
   },
 ): BuildableStructureConstant[] {
@@ -463,6 +485,13 @@ export function constructionPriority(
   // (except later-mode, which already queued extensions above).
   for (let i = 0; i < containerSites; i++) {
     queue.push("container");
+  }
+
+  // First tower as soon as RCL3 + source containers are done (active defense).
+  if (shouldBuildTowers(rcl) && containerSites === 0 && missingAll === 0) {
+    const have = opts.towerCount ?? 0;
+    const missing = Math.max(0, towerQuota(rcl) - have);
+    for (let i = 0; i < missing; i++) queue.push("tower");
   }
 
   if (

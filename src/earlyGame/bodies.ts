@@ -12,23 +12,31 @@ const PART_COST: Record<BodyPartConstant, number> = {
   claim: 600,
 };
 
+/**
+ * Stationary source miner: max WORK + a single MOVE to walk spawn→container.
+ * Extra MOVE parts are wasted once the creep sits on the mining seat.
+ */
 export function buildMinerBody(
   energyAvailable: number,
   opts?: { minWork?: number; maxWork?: number },
 ): BodyPartConstant[] {
-  const pairCost = PART_COST.work + PART_COST.move;
+  const workCost = PART_COST.work;
+  const moveCost = PART_COST.move;
   const minWork = Math.max(1, opts?.minWork ?? 1);
   const maxWork = Math.min(5, opts?.maxWork ?? 5);
-  if (energyAvailable < minWork * pairCost) return [];
-  const body: BodyPartConstant[] = [];
-  let remaining = energyAvailable;
-  while (
-    remaining >= pairCost &&
-    body.filter((p) => p === "work").length < maxWork
-  ) {
-    body.push("work", "move");
-    remaining -= pairCost;
+  const minCost = minWork * workCost + moveCost;
+  if (energyAvailable < minCost) return [];
+
+  let workParts = minWork;
+  let remaining = energyAvailable - minCost;
+  while (workParts < maxWork && remaining >= workCost) {
+    workParts++;
+    remaining -= workCost;
   }
+
+  const body: BodyPartConstant[] = [];
+  for (let i = 0; i < workParts; i++) body.push("work");
+  body.push("move");
   return body;
 }
 
