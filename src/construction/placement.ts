@@ -54,6 +54,53 @@ export function countFreeSpawnExits(
   return free;
 }
 
+/**
+ * Tear down illegal spawn-ring blockers (extensions/storage/etc.).
+ * Roads/containers stay (walkable). Storage with energy is deferred until empty
+ * unless the ring is fully sealed (0 free exits).
+ */
+export function clearSpawnExitRing(
+  room: Room,
+  spawnPos: RoomPosition,
+): { removedSites: number; destroyedStructures: number } {
+  let removedSites = 0;
+  let destroyedStructures = 0;
+
+  const ringTiles: RoomPosition[] = [];
+  for (const [dx, dy] of ADJACENT_DELTAS) {
+    ringTiles.push(new RoomPosition(spawnPos.x + dx, spawnPos.y + dy, room.name));
+  }
+
+  for (const pos of ringTiles) {
+    for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES)) {
+      if (!blocksSpawnLanding(site.structureType)) continue;
+      if (site.remove() === OK) removedSites++;
+    }
+  }
+
+  const freeBefore = countFreeSpawnExits(room, spawnPos);
+  for (const pos of ringTiles) {
+    for (const s of pos.lookFor(LOOK_STRUCTURES)) {
+      const type = s.structureType;
+      if (!blocksSpawnLanding(type)) continue;
+      if (type === STRUCTURE_SPAWN) continue;
+      if (type === STRUCTURE_STORAGE) {
+        const energy = (s as StructureStorage).store[RESOURCE_ENERGY] ?? 0;
+        // Keep energy bank unless the spawn is completely sealed.
+        if (energy > 0 && freeBefore > 0) continue;
+      }
+      if (s.destroy() === OK) destroyedStructures++;
+    }
+  }
+
+  if (removedSites > 0 || destroyedStructures > 0) {
+    console.log(
+      `[spawn-exit] ${room.name} cleared ring sites=${removedSites} structs=${destroyedStructures} free=${countFreeSpawnExits(room, spawnPos)}`,
+    );
+  }
+  return { removedSites, destroyedStructures };
+}
+
 /** True if (x,y) is on the spawn's range-1 ring (illegal for extensions/storage). */
 export function isSpawnExitTile(
   spawnPos: RoomPosition,
@@ -113,9 +160,19 @@ export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
 }
 
 export function tryPlaceContainer(room: Room, anchor: RoomPosition): boolean {
-  const spot = findAdjacentSpot(room, anchor);
-  if (!spot) return false;
-  return room.createConstructionSite(spot, STRUCTURE_CONTAINER) === OK;
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
+  for (const [dx, dy] of ADJACENT_DELTAS) {
+    const x = anchor.x + dx;
+    const y = anchor.y + dy;
+    // Never put a site on the spawn landing ring (even walkable containers clutter exits).
+    if (spawn && isSpawnExitTile(spawn.pos, x, y)) continue;
+    if (!isFreeBuildTile(room, x, y)) continue;
+    const spot = new RoomPosition(x, y, room.name);
+    if (room.createConstructionSite(spot, STRUCTURE_CONTAINER) === OK) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /** Storage near spawn, never on the exit ring. */

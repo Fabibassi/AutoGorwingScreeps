@@ -25,6 +25,7 @@ import {
   sourceMissingContainer,
 } from "../room/queries";
 import {
+  clearSpawnExitRing,
   tryPlaceContainer,
   tryPlaceExtension,
   tryPlaceRoadOnPath,
@@ -56,6 +57,10 @@ export function runConstruction(room: Room): void {
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   if (!spawn || !room.controller?.my) return;
 
+  // Priority 0: never seal the spawn — creeps cannot walk through structures.
+  const cleared = clearSpawnExitRing(room, spawn.pos);
+  if (cleared.removedSites > 0 || cleared.destroyedStructures > 0) return;
+
   const policy = parseRoadPolicy(Memory.ags?.roadPolicy);
   const exp = resolveExperiment(Memory.ags);
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
@@ -85,8 +90,12 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // Drop controller/other container sites until every source container is done.
-  if (needSourceContainers) {
+  // Drop controller/other container sites until every source container is done
+  // (unless experiment explicitly allows early controller containers).
+  if (
+    needSourceContainers &&
+    !allowControllerContainer(exp, rcl, needSourceContainers ? 1 : 0)
+  ) {
     const sourceSites = new Set(findSourceContainerSites(room).map((s) => s.id));
     const stray = nonRoadSites.find(
       (s) =>

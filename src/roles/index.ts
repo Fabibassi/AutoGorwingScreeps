@@ -2,6 +2,7 @@ import { runBuilder } from "./builder";
 import { runHarvester } from "./harvester";
 import { runHauler } from "./hauler";
 import { runMiner } from "./miner";
+import { moveOffSpawn } from "./moveOffSpawn";
 import { runUpgrader } from "./upgrader";
 
 /** Energy harvested this tick; 0 for non-harvest roles. */
@@ -29,6 +30,8 @@ export function registeredRoles(): string[] {
 }
 
 export function runCreep(creep: Creep): number {
+  // Spawn tile is not walkable for work — step off before any role logic.
+  if (moveOffSpawn(creep)) return 0;
   const role = creep.memory.role;
   if (!role) return 0;
   const runner = roleRunners[role];
