@@ -76,12 +76,12 @@ describe("desiredCreeps", () => {
         energyAvailable: 152,
       }),
     ).toEqual({
-      // Infra push: sources only (no spare H) so builder #2 can claim spawn.
+      // Infra push: sources only (no spare H) so builders can claim spawn.
       harvester: 2,
       miner: 0,
       hauler: 1,
       upgrader: 0,
-      builder: 2,
+      builder: 4,
     });
   });
 
@@ -91,7 +91,7 @@ describe("desiredCreeps", () => {
       miner: 0,
       hauler: 0,
       upgrader: 1,
-      builder: 2,
+      builder: 4,
     });
   });
 
@@ -117,7 +117,7 @@ describe("desiredCreeps", () => {
       miner: 1,
       hauler: 1,
       upgrader: 0,
-      builder: 2,
+      builder: 4,
     });
   });
 
@@ -137,8 +137,8 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      // Baseline builderInfra=2; climb caps at min(infra, 2).
-      builder: 2,
+      // Overnight winner: builderInfra=4 (was 2).
+      builder: 4,
     });
   });
 
@@ -450,6 +450,33 @@ describe("isEconomyDepressed", () => {
     expect(isEconomyDepressed({ energyIncomePerTick: 5, spawnFillPct: 0.8 })).toBe(
       false,
     );
+  });
+
+  test("false when spawn is saturated even if measured income is zero", () => {
+    expect(isEconomyDepressed({ energyIncomePerTick: 0, spawnFillPct: 1 })).toBe(
+      false,
+    );
+    expect(isEconomyDepressed({ energyIncomePerTick: 0, spawnFillPct: 0.85 })).toBe(
+      false,
+    );
+  });
+});
+
+describe("desiredCreeps extension push under saturated zero-income", () => {
+  test("keeps 4 builders when spawn full but income samples read zero", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 0,
+        spawnFillPct: 1,
+        energyAvailable: 300,
+      }),
+    ).toEqual({
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 0,
+      builder: 4,
+    });
   });
 });
 

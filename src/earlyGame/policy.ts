@@ -133,6 +133,10 @@ export function needsInfrastructureBuilder(
 /** Income collapsed or spawn nearly empty — defer builders and trim upgraders. */
 export function isEconomyDepressed(ctx?: EconomyContext): boolean {
   if (!ctx) return false;
+  // Saturated spawn: harvest often reads ~0 because there is nowhere to deliver
+  // (energy banked in containers). Treating that as collapse drops builder
+  // quota to 0 and freezes extension sites while the spawn sits full.
+  if ((ctx.spawnFillPct ?? 0) >= 0.85) return false;
   const income = ctx.energyIncomePerTick ?? 0;
   if (income <= 0) return true;
   if (isIncomeStalled(income, ctx.baselineIncome)) return true;
@@ -398,12 +402,13 @@ export function desiredCreeps(
           : 2,
     builder: climbingToRcl3
       ? hasConstructionSites
-        ? Math.max(1, Math.min(infraBuilders, 2))
+        ? // Honour builderCount A/B (was capped at 2, which made variant 4 a no-op).
+          Math.max(1, infraBuilders)
         : 0
       : infraBuilder
         ? infraBuilders
         : extensionPush
-          ? 4
+          ? Math.max(4, infraBuilders)
           : 0,
   };
 
