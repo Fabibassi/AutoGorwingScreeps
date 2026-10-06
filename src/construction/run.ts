@@ -110,14 +110,20 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // At the 3-site cap: never sacrifice source-container sites.
+  // At the 3-site cap: never sacrifice source-container / tower sites.
+  // Roads do NOT count toward this cap — when full of extensions we must still
+  // place roads (live W21N35: 3 extension sites forever blocked all roads).
+  let skipNonRoadPlacement = false;
   if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
     if (needSourceContainers) {
       const extensionSite = nonRoadSites.find(
         (s) => s.structureType === STRUCTURE_EXTENSION,
       );
-      if (extensionSite) extensionSite.remove();
-      else return;
+      if (extensionSite) {
+        extensionSite.remove();
+        return;
+      }
+      skipNonRoadPlacement = true;
     } else if (needExtensions) {
       const sacrificial = nonRoadSites.find(
         (s) =>
@@ -125,10 +131,13 @@ export function runConstruction(room: Room): void {
           s.structureType !== STRUCTURE_CONTAINER &&
           s.structureType !== STRUCTURE_TOWER,
       );
-      if (sacrificial) sacrificial.remove();
-      else return;
+      if (sacrificial) {
+        sacrificial.remove();
+        return;
+      }
+      skipNonRoadPlacement = true;
     } else {
-      return;
+      skipNonRoadPlacement = true;
     }
   }
   const controllerContainer = hasControllerContainer(room);
@@ -154,33 +163,40 @@ export function runConstruction(room: Room): void {
     .length;
   const towerCount = towerBuilt + towerSites;
 
+  const placeRoads = (): boolean => {
+    if (!roadSitesAllowed) return false;
+    if (preferSourceRoads(policy)) {
+      if (tryPlaceSourceRoads(room, spawn)) return true;
+      if (tryPlaceControllerRoad(room, spawn)) return true;
+    } else {
+      if (tryPlaceControllerRoad(room, spawn)) return true;
+      if (tryPlaceSourceRoads(room, spawn)) return true;
+    }
+    return false;
+  };
+
   // Early / parallel: push at least one source-path road even mid-container-build.
   if (
     roadSitesAllowed &&
     roadsWhileContainersMissing(policy) &&
     roadCount + roadSites < 1
   ) {
-    if (preferSourceRoads(policy)) {
-      if (tryPlaceSourceRoads(room, spawn)) return;
-      if (tryPlaceControllerRoad(room, spawn)) return;
-    } else if (tryPlaceControllerRoad(room, spawn)) {
-      return;
-    }
+    if (placeRoads()) return;
   }
 
-  // Baseline: guarantee one road after source containers.
+  // Baseline: guarantee one road after source containers (even at non-road site cap).
   if (
     !needSourceContainers &&
     roadSitesAllowed &&
     roadCount + roadSites < 1
   ) {
-    if (preferSourceRoads(policy)) {
-      if (tryPlaceSourceRoads(room, spawn)) return;
-      if (tryPlaceControllerRoad(room, spawn)) return;
-    } else {
-      if (tryPlaceControllerRoad(room, spawn)) return;
-      if (tryPlaceSourceRoads(room, spawn)) return;
-    }
+    if (placeRoads()) return;
+  }
+
+  // Non-road cap full: still keep laying roads up to MAX_ROAD_SITES.
+  if (skipNonRoadPlacement) {
+    if (placeRoads()) return;
+    return;
   }
 
   const queue = constructionPriority(rcl, {
@@ -231,13 +247,7 @@ export function runConstruction(room: Room): void {
     }
 
     if (structureType === STRUCTURE_ROAD) {
-      if (preferSourceRoads(policy)) {
-        if (tryPlaceSourceRoads(room, spawn)) return;
-        if (tryPlaceControllerRoad(room, spawn)) return;
-      } else {
-        if (tryPlaceControllerRoad(room, spawn)) return;
-        if (tryPlaceSourceRoads(room, spawn)) return;
-      }
+      if (placeRoads()) return;
     }
   }
 
