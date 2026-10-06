@@ -103,6 +103,27 @@ export function reassignForEconomySurvival(
  * During extension push, convert surplus upgraders into builders so 3k sites
  * get WORK instead of competing for the same spawn/container energy.
  */
+/** Restore controller progress when infra push zeroed the upgrader quota. */
+export function reassignSurplusBuilderToUpgrader(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+): boolean {
+  if (counts.upgrader >= want.upgrader) return false;
+  if (want.upgrader <= 0) return false;
+  if (counts.builder <= want.builder) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "builder") continue;
+    creep.memory.role = "upgrader";
+    delete creep.memory.sourceId;
+    return true;
+  }
+  return false;
+}
+
 export function reassignUpgraderToExtensionBuilder(
   room: Room,
   want: CreepQuotas,
@@ -509,6 +530,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     sourceCount,
     containersAtSources,
   );
+  reassignSurplusBuilderToUpgrader(room, want, countCreepsByRole());
   // Convert all surplus upgraders in one tick during extension push.
   for (let n = 0; n < 10; n++) {
     const mid = countCreepsByRole();
@@ -610,12 +632,18 @@ export function runSpawn(spawn: StructureSpawn): void {
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
     infrastructureDedicated && liveCounts.miner < want.miner;
+  const upgradersBelowQuota = liveCounts.upgrader < want.upgrader;
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
     liveCounts,
     energyAvailable,
-    { infrastructurePush, buildersBelowQuota, economyFloorMet },
+    {
+      infrastructurePush,
+      buildersBelowQuota,
+      economyFloorMet,
+      upgradersBelowQuota,
+    },
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
   // Experiment haulerCap (thin) also caps when economy is healthy.

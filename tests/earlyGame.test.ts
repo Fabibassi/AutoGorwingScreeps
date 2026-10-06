@@ -103,8 +103,8 @@ describe("desiredCreeps", () => {
       harvester: 2,
       miner: 0,
       hauler: 1,
-      upgrader: 0,
-      builder: 4,
+      upgrader: 1,
+      builder: 2,
       filler: 0,
     });
   });
@@ -115,7 +115,7 @@ describe("desiredCreeps", () => {
       miner: 0,
       hauler: 0,
       upgrader: 1,
-      builder: 4,
+      builder: 2,
       filler: 0,
     });
   });
@@ -142,8 +142,8 @@ describe("desiredCreeps", () => {
       harvester: 1,
       miner: 1,
       hauler: 1,
-      upgrader: 0,
-      builder: 4,
+      upgrader: 1,
+      builder: 2,
       filler: 0,
     });
   });
@@ -165,8 +165,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      // Overnight winner: builderInfra=4 (was 2).
-      builder: 4,
+      builder: 2,
       filler: 0,
     });
   });
@@ -427,6 +426,34 @@ describe("spawnPriorityOrder", () => {
         infrastructurePush: true,
       }),
     ).toEqual(["hauler", "miner", "filler", "harvester", "builder", "upgrader"]);
+  });
+
+  test("upgrader before builder when infra push lacks upgraders and spawn is thin (#42)", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        { energyIncomePerTick: 1, spawnFillPct: 0.22 },
+        { harvester: 2, miner: 0, hauler: 0, upgrader: 0, builder: 2, filler: 0 },
+        68,
+        { infrastructurePush: true, upgradersBelowQuota: true, economyFloorMet: true },
+      ),
+    ).toEqual(["hauler", "harvester", "miner", "filler", "upgrader", "builder"]);
+  });
+
+  test("rcl4 missing containers with stalled income keeps upgrader and recovery hauler (#42)", () => {
+    expect(
+      desiredCreeps(4, 2, 0, true, {
+        energyIncomePerTick: 1,
+        spawnFillPct: 0.22,
+        energyAvailable: 68,
+        baselineIncome: 4,
+      }),
+    ).toMatchObject({
+      harvester: 2,
+      hauler: 1,
+      upgrader: 1,
+      builder: 2,
+    });
   });
 
   test("builder before spare harvester when infra builders short and economy floor met", () => {
