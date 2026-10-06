@@ -7,19 +7,48 @@ type HaulTarget =
   | StructureContainer
   | StructureStorage;
 
+/**
+ * Absolute energy thresholds (spawn store is always 300 — never % of storage 1M).
+ */
+export const HAUL_THRESHOLDS = {
+  /** Spawn this empty → deliver any carried energy immediately. */
+  spawnUrgent: 150,
+  /** Spawn below this → deliver once we hold a meaningful partial load. */
+  spawnHungry: 250,
+  /** Spawn at/above this counts as "topped up" for storage overflow. */
+  spawnComfortable: 250,
+  /** Min energy in CARRY before turning around for a hungry (non-urgent) spawn. */
+  minPartialLoad: 100,
+  /** For extension-only need: only early-deliver when CARRY is mostly full. */
+  extensionFillRatio: 0.6,
+} as const;
+
 export interface StorageHaulContext {
   energyIncomePerTick: number;
   baselineIncome?: number;
-  spawnFillPct: number;
+  /** Absolute energy in the spawn store (0..300). */
+  spawnEnergy: number;
+  /** Spawn store capacity (normally 300). */
+  spawnCapacity: number;
   extensionsNeedingEnergy: number;
   storageExists: boolean;
   storageEnergy?: number;
 }
 
-/** Keep spawn/extensions fed before RCL4 storage absorbs recoverable energy. */
+/** Spawn is nearly full — safe to overflow into storage (absolute, not % of 1M). */
+export function spawnIsComfortable(ctx: Pick<StorageHaulContext, "spawnEnergy" | "spawnCapacity">): boolean {
+  const cap = Math.max(1, ctx.spawnCapacity);
+  // Within 50 of full, or at absolute comfortable floor for tiny/odd caps.
+  return (
+    ctx.spawnEnergy >= Math.min(HAUL_THRESHOLDS.spawnComfortable, cap - 50) ||
+    ctx.spawnEnergy >= cap - 50
+  );
+}
+
+/** Keep spawn/extensions fed before storage absorbs recoverable energy. */
 export function shouldDepositInStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists) return false;
-  if (ctx.spawnFillPct < 0.85) return false;
+  if (!spawnIsComfortable(ctx)) return false;
   if (ctx.extensionsNeedingEnergy > 0) return false;
   // Zero income: haulers need overflow target when spawn+extensions are full (#32).
   if (ctx.energyIncomePerTick <= 0) return true;
@@ -28,26 +57,43 @@ export function shouldDepositInStorage(ctx: StorageHaulContext): boolean {
   return true;
 }
 
-/** Pull from storage when income stalled and spawn energy is unavailable for spawning. */
+/** Pull from storage when spawn needs absolute energy (never % of storage). */
 export function shouldWithdrawFromStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists || (ctx.storageEnergy ?? 0) <= 0) return false;
-  if (ctx.spawnFillPct < 0.85) return true;
+  if (!spawnIsComfortable(ctx)) return true;
   return isIncomeStalled(ctx.energyIncomePerTick, ctx.baselineIncome);
 }
 
 /**
- * Deliver even with a partial load when spawn/extensions need energy.
- * Waiting for a full CARRY while spawn sits at ~0 left builders draining the bank
- * and energyAvailable never approaching capacity (RCL4 extension push).
+ * When to stop collecting and deliver.
+ * Softened: do not U-turn at the mine for every hungry extension with a few energy.
  */
 export function shouldDeliverNow(
   carried: number,
   freeCapacity: number,
-  ctx: Pick<StorageHaulContext, "spawnFillPct" | "extensionsNeedingEnergy">,
+  ctx: Pick<
+    StorageHaulContext,
+    "spawnEnergy" | "spawnCapacity" | "extensionsNeedingEnergy"
+  >,
 ): boolean {
   if (carried <= 0) return false;
   if (freeCapacity <= 0) return true;
-  return ctx.spawnFillPct < 0.85 || ctx.extensionsNeedingEnergy > 0;
+
+  // Critical spawn — any energy home now.
+  if (ctx.spawnEnergy < HAUL_THRESHOLDS.spawnUrgent) return true;
+
+  // Hungry spawn — only turn around with a worthwhile partial load.
+  if (ctx.spawnEnergy < HAUL_THRESHOLDS.spawnHungry) {
+    return carried >= HAUL_THRESHOLDS.minPartialLoad;
+  }
+
+  // Spawn comfortable; extensions still want energy — finish filling CARRY first.
+  if (ctx.extensionsNeedingEnergy > 0) {
+    const total = carried + freeCapacity;
+    return total > 0 && carried / total >= HAUL_THRESHOLDS.extensionFillRatio;
+  }
+
+  return false;
 }
 
 export interface HaulerPickupCandidate {
@@ -70,10 +116,12 @@ export interface HaulerPickupPeer {
  */
 export function minWorthwhilePickup(
   freeCapacity: number,
-  spawnFillPct: number,
+  spawnEnergy: number,
 ): number {
   if (freeCapacity <= 0) return 0;
-  if (spawnFillPct < 0.5) return Math.min(freeCapacity, 25);
+  if (spawnEnergy < HAUL_THRESHOLDS.spawnUrgent) {
+    return Math.min(freeCapacity, 25);
+  }
   // At least 100 or 25% of free space (fat haulers ignore <100 containers).
   return Math.min(freeCapacity, Math.max(100, Math.floor(freeCapacity * 0.25)));
 }
@@ -88,7 +136,7 @@ export function minWorthwhilePickup(
 export function pickHaulerContainer(opts: {
   haulerId: string;
   freeCapacity: number;
-  spawnFillPct: number;
+  spawnEnergy: number;
   containers: HaulerPickupCandidate[];
   peers: HaulerPickupPeer[];
 }): string | null {
@@ -112,10 +160,10 @@ export function pickHaulerContainer(opts: {
 
   const pickFor = (
     freeCapacity: number,
-    spawnFillPct: number,
+    spawnEnergy: number,
     enforceMin: boolean,
   ): string | null => {
-    const minEnergy = minWorthwhilePickup(freeCapacity, spawnFillPct);
+    const minEnergy = minWorthwhilePickup(freeCapacity, spawnEnergy);
     let bestId: string | null = null;
     let bestScore = -Infinity;
     for (const c of opts.containers) {
@@ -133,8 +181,8 @@ export function pickHaulerContainer(opts: {
 
   for (const claim of unassigned) {
     const chosen =
-      pickFor(claim.freeCapacity, opts.spawnFillPct, true) ??
-      pickFor(claim.freeCapacity, opts.spawnFillPct, false);
+      pickFor(claim.freeCapacity, opts.spawnEnergy, true) ??
+      pickFor(claim.freeCapacity, opts.spawnEnergy, false);
     if (!chosen) {
       if (claim.id === opts.haulerId) return null;
       continue;
@@ -150,9 +198,8 @@ export function pickHaulerContainer(opts: {
 
 function haulContext(creep: Creep): StorageHaulContext {
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
-  const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
-  const spawnFillPct =
-    (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / spawnCapacity;
+  const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 300;
+  const spawnEnergy = spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
   const extensionsNeedingEnergy = creep.room.find(FIND_MY_STRUCTURES, {
     filter: (s): s is StructureExtension =>
       s.structureType === STRUCTURE_EXTENSION &&
@@ -162,7 +209,8 @@ function haulContext(creep: Creep): StorageHaulContext {
   return {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
     baselineIncome: Memory.ags?.baseline?.energyIncomePerTick,
-    spawnFillPct,
+    spawnEnergy,
+    spawnCapacity,
     extensionsNeedingEnergy,
     storageExists: storage !== undefined,
     storageEnergy: storage?.store[RESOURCE_ENERGY] ?? 0,
@@ -174,9 +222,7 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
   if (!spawn) return null;
 
   const spawnFree = spawn.store.getFreeCapacity(RESOURCE_ENERGY);
-  const spawnCap = spawn.store.getCapacity(RESOURCE_ENERGY) ?? 1;
-  const spawnFillPct =
-    (spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / Math.max(1, spawnCap);
+  const spawnEnergy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
 
   const extensions = creep.room.find(FIND_MY_STRUCTURES, {
     filter: (s): s is StructureExtension =>
@@ -190,7 +236,10 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
     const role = Game.creeps[n].memory.role;
     return role === "miner" || role === "harvester";
   }).length;
-  if ((spawnFillPct < 0.5 || miningCreeps === 0) && spawnFree > 0) {
+  if (
+    (spawnEnergy < HAUL_THRESHOLDS.spawnUrgent || miningCreeps === 0) &&
+    spawnFree > 0
+  ) {
     return spawn;
   }
 
@@ -285,14 +334,21 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
   }
 
   // Soft-lock recovery: pull energy out of extensions when spawn cannot afford bootstrap.
-  if (ctx.spawnFillPct < 0.5 && ctx.extensionsNeedingEnergy === 0) {
+  if (
+    ctx.spawnEnergy < HAUL_THRESHOLDS.spawnUrgent &&
+    ctx.extensionsNeedingEnergy === 0
+  ) {
     const ext = findExtensionWithEnergy(creep);
     if (ext) return ext;
   }
 
   // Spawn starving: drain storage before walking to remote source containers.
   const storage = creep.room.storage;
-  if (storage && shouldWithdrawFromStorage(ctx) && ctx.spawnFillPct < 0.5) {
+  if (
+    storage &&
+    shouldWithdrawFromStorage(ctx) &&
+    ctx.spawnEnergy < HAUL_THRESHOLDS.spawnUrgent
+  ) {
     return storage;
   }
 
@@ -336,7 +392,7 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     const sticky = creep.memory.pickupId;
     if (sticky) {
       const still = containers.find((c) => c.id === sticky);
-      const minE = minWorthwhilePickup(freeCapacity, ctx.spawnFillPct);
+      const minE = minWorthwhilePickup(freeCapacity, ctx.spawnEnergy);
       if (still && (still.store[RESOURCE_ENERGY] ?? 0) >= minE) {
         return still;
       }
@@ -346,7 +402,7 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     const pickedId = pickHaulerContainer({
       haulerId: creep.id,
       freeCapacity,
-      spawnFillPct: ctx.spawnFillPct,
+      spawnEnergy: ctx.spawnEnergy,
       containers: candidates,
       peers,
     });

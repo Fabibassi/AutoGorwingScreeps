@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  HAUL_THRESHOLDS,
   minWorthwhilePickup,
   pickHaulerContainer,
   shouldDeliverNow,
@@ -10,65 +11,100 @@ import {
 } from "../src/roles/hauler";
 
 describe("shouldDeliverNow", () => {
-  test("waits to fill when spawn and extensions are topped up", () => {
+  test("waits to fill when spawn is comfortable and extensions are full", () => {
     expect(
-      shouldDeliverNow(40, 10, { spawnFillPct: 0.9, extensionsNeedingEnergy: 0 }),
+      shouldDeliverNow(40, 10, {
+        spawnEnergy: 280,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+      }),
     ).toBe(false);
   });
 
   test("delivers full loads always", () => {
     expect(
-      shouldDeliverNow(50, 0, { spawnFillPct: 1, extensionsNeedingEnergy: 0 }),
+      shouldDeliverNow(50, 0, {
+        spawnEnergy: 300,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+      }),
     ).toBe(true);
   });
 
-  test("delivers partial loads when spawn is hungry", () => {
+  test("delivers any partial when spawn is urgent (<150)", () => {
     expect(
-      shouldDeliverNow(18, 32, { spawnFillPct: 0.16, extensionsNeedingEnergy: 0 }),
+      shouldDeliverNow(18, 32, {
+        spawnEnergy: 48,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+      }),
     ).toBe(true);
   });
 
-  test("delivers partial loads when extensions need energy", () => {
+  test("hungry spawn only turns around with a meaningful partial load", () => {
     expect(
-      shouldDeliverNow(104, 46, { spawnFillPct: 0.9, extensionsNeedingEnergy: 1 }),
+      shouldDeliverNow(40, 410, {
+        spawnEnergy: 200,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverNow(120, 330, {
+        spawnEnergy: 200,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+      }),
+    ).toBe(true);
+  });
+
+  test("extension need alone does not U-turn a nearly empty hauler", () => {
+    expect(
+      shouldDeliverNow(40, 410, {
+        spawnEnergy: 280,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 3,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeliverNow(280, 170, {
+        spawnEnergy: 280,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 3,
+      }),
     ).toBe(true);
   });
 
   test("never delivers empty", () => {
     expect(
-      shouldDeliverNow(0, 50, { spawnFillPct: 0.1, extensionsNeedingEnergy: 1 }),
+      shouldDeliverNow(0, 50, {
+        spawnEnergy: 30,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 1,
+      }),
     ).toBe(false);
   });
 });
 
-describe("storage haul policy", () => {
-  test("allows storage overflow at zero income when spawn and extensions are full", () => {
+describe("storage haul policy (absolute spawn energy)", () => {
+  test("allows storage overflow when spawn is comfortable and extensions full", () => {
     expect(
       shouldDepositInStorage({
         energyIncomePerTick: 0,
-        spawnFillPct: 1,
+        spawnEnergy: 300,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
       }),
     ).toBe(true);
   });
 
-  test("blocks storage deposits at zero income while spawn still needs energy", () => {
+  test("blocks storage deposits while spawn still needs absolute energy", () => {
     expect(
       shouldDepositInStorage({
         energyIncomePerTick: 0,
-        spawnFillPct: 0.4,
-        extensionsNeedingEnergy: 0,
-        storageExists: true,
-      }),
-    ).toBe(false);
-  });
-
-  test("blocks storage deposits while spawn is not topped up", () => {
-    expect(
-      shouldDepositInStorage({
-        energyIncomePerTick: 5,
-        spawnFillPct: 0.5,
+        spawnEnergy: 120,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
       }),
@@ -79,19 +115,21 @@ describe("storage haul policy", () => {
     expect(
       shouldDepositInStorage({
         energyIncomePerTick: 5,
-        spawnFillPct: 1,
+        spawnEnergy: 300,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 2,
         storageExists: true,
       }),
     ).toBe(false);
   });
 
-  test("allows storage overflow when spawn and extensions are full", () => {
+  test("allows storage overflow when spawn comfortable and income healthy", () => {
     expect(
       shouldDepositInStorage({
         energyIncomePerTick: 5,
         baselineIncome: 5,
-        spawnFillPct: 0.9,
+        spawnEnergy: 270,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
       }),
@@ -103,19 +141,20 @@ describe("storage haul policy", () => {
       shouldDepositInStorage({
         energyIncomePerTick: 1.44,
         baselineIncome: 5,
-        spawnFillPct: 1,
+        spawnEnergy: 300,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
       }),
     ).toBe(false);
   });
 
-  test("withdraws from storage when income collapsed but spawn is topped up", () => {
+  test("withdraws from storage when spawn is not comfortable", () => {
     expect(
       shouldWithdrawFromStorage({
-        energyIncomePerTick: 1.44,
-        baselineIncome: 5,
-        spawnFillPct: 0.95,
+        energyIncomePerTick: 5,
+        spawnEnergy: 180,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
         storageEnergy: 2000,
@@ -123,14 +162,16 @@ describe("storage haul policy", () => {
     ).toBe(true);
   });
 
-  test("prefers storage withdrawal when spawn is low during income stall", () => {
+  test("withdraws from storage when income stalled even if spawn full", () => {
     expect(
       shouldWithdrawFromStorage({
-        energyIncomePerTick: 0,
-        spawnFillPct: 0.2,
+        energyIncomePerTick: 1.44,
+        baselineIncome: 5,
+        spawnEnergy: 290,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
-        storageEnergy: 500,
+        storageEnergy: 2000,
       }),
     ).toBe(true);
   });
@@ -139,24 +180,31 @@ describe("storage haul policy", () => {
     expect(
       shouldWithdrawFromStorage({
         energyIncomePerTick: 0,
-        spawnFillPct: 0.1,
+        spawnEnergy: 30,
+        spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
         storageEnergy: 0,
       }),
     ).toBe(false);
   });
+
+  test("thresholds are absolute spawn units not storage percents", () => {
+    expect(HAUL_THRESHOLDS.spawnUrgent).toBe(150);
+    expect(HAUL_THRESHOLDS.spawnComfortable).toBe(250);
+    // Sanity: comfortable is far below any storage-% interpretation of 1M.
+    expect(HAUL_THRESHOLDS.spawnComfortable).toBeLessThan(1000);
+  });
 });
 
 describe("hauler pickup selection", () => {
   test("ignores crumb containers when free capacity is large", () => {
-    // 450 free, spawn healthy → need a meaningful pile, not <100.
-    expect(minWorthwhilePickup(450, 0.9)).toBeGreaterThanOrEqual(100);
-    expect(minWorthwhilePickup(450, 0.9)).toBeLessThanOrEqual(450);
+    expect(minWorthwhilePickup(450, 280)).toBeGreaterThanOrEqual(100);
+    expect(minWorthwhilePickup(450, 280)).toBeLessThanOrEqual(450);
   });
 
-  test("accepts smaller piles when spawn is starving", () => {
-    expect(minWorthwhilePickup(450, 0.2)).toBeLessThanOrEqual(50);
+  test("accepts smaller piles when spawn is urgent", () => {
+    expect(minWorthwhilePickup(450, 100)).toBeLessThanOrEqual(50);
   });
 
   test("two haulers split across two rich containers", () => {
@@ -164,7 +212,6 @@ describe("hauler pickup selection", () => {
       { id: "cA", energy: 800, range: 10 },
       { id: "cB", energy: 700, range: 12 },
     ];
-    // No sticky targets yet — claim in id order so both creeps agree.
     const peers: HaulerPickupPeer[] = [
       { id: "h1", freeCapacity: 450 },
       { id: "h2", freeCapacity: 450 },
@@ -172,14 +219,14 @@ describe("hauler pickup selection", () => {
     const pickA = pickHaulerContainer({
       haulerId: "h1",
       freeCapacity: 450,
-      spawnFillPct: 0.9,
+      spawnEnergy: 280,
       containers,
       peers,
     });
     const pickB = pickHaulerContainer({
       haulerId: "h2",
       freeCapacity: 450,
-      spawnFillPct: 0.9,
+      spawnEnergy: 280,
       containers,
       peers,
     });
@@ -196,7 +243,7 @@ describe("hauler pickup selection", () => {
     const pick = pickHaulerContainer({
       haulerId: "h1",
       freeCapacity: 450,
-      spawnFillPct: 0.9,
+      spawnEnergy: 280,
       containers,
       peers: [],
     });
@@ -211,7 +258,7 @@ describe("hauler pickup selection", () => {
     const pick = pickHaulerContainer({
       haulerId: "h1",
       freeCapacity: 450,
-      spawnFillPct: 0.9,
+      spawnEnergy: 280,
       containers,
       peers: [],
     });
