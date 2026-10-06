@@ -198,7 +198,9 @@ export function isEconomyDepressed(ctx?: EconomyContext): boolean {
   const income = ctx.energyIncomePerTick ?? 0;
   if (income <= 0) return true;
   if (isIncomeStalled(income, ctx.baselineIncome)) return true;
-  return (ctx.spawnFillPct ?? 1) < 0.35;
+  // Low spawn with healthy income is builders/haulers cycling energy, not
+  // collapse. Dropping builder quota here leaves 3k sites frozen after TTL deaths.
+  return false;
 }
 
 /** Keep one mobile harvester when static mining economy has stalled. */

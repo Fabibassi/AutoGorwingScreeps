@@ -500,12 +500,12 @@ describe("constructionPriority", () => {
 });
 
 describe("isEconomyDepressed", () => {
-  test("true at zero income or low spawn fill", () => {
+  test("true at zero income; false when income is healthy even if spawn is low", () => {
     expect(isEconomyDepressed({ energyIncomePerTick: 0, spawnFillPct: 0.5 })).toBe(
       true,
     );
     expect(isEconomyDepressed({ energyIncomePerTick: 5, spawnFillPct: 0.2 })).toBe(
-      true,
+      false,
     );
     expect(isEconomyDepressed({ energyIncomePerTick: 5, spawnFillPct: 0.8 })).toBe(
       false,
@@ -523,6 +523,23 @@ describe("isEconomyDepressed", () => {
 });
 
 describe("desiredCreeps extension push under saturated zero-income", () => {
+  test("keeps 4 builders when income is healthy but spawn is nearly empty", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 12,
+        spawnFillPct: 0.19,
+        energyAvailable: 56,
+      }),
+    ).toEqual({
+      harvester: 1,
+      miner: 2,
+      hauler: 2,
+      upgrader: 0,
+      builder: 4,
+      filler: 0,
+    });
+  });
+
   test("keeps 4 builders when spawn full but income samples read zero", () => {
     expect(
       desiredCreeps(4, 2, 2, true, {
