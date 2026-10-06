@@ -475,6 +475,55 @@ describe("recycleExcessHaulers", () => {
       ),
     ).toBe(false);
   });
+
+  test("recycles surplus haulers during extension push when builders are missing", () => {
+    vi.stubGlobal("OK", 0);
+    const spawnPos = { x: 10, y: 10 };
+    const hauler = {
+      room: { name: "W21N35" },
+      memory: { role: "hauler" },
+      pos: {
+        isNearTo: (s: { pos: { x: number; y: number } }) =>
+          s.pos.x === spawnPos.x && s.pos.y === spawnPos.y,
+        x: 10,
+        y: 10,
+      },
+      moveTo: () => OK,
+    };
+    let recycled = false;
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: spawnPos,
+      recycleCreep: (c: unknown) => {
+        recycled = c === hauler;
+        return OK;
+      },
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "hauler-1": hauler } };
+    const ok = recycleExcessHaulers(
+      spawn as unknown as StructureSpawn,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 0,
+        builder: 4,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 9,
+        upgrader: 0,
+        builder: 0,
+        filler: 0,
+      },
+      true,
+    );
+    expect(ok).toBe(true);
+    expect(recycled).toBe(true);
+  });
 });
 
 describe("directionsToward", () => {

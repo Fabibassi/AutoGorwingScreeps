@@ -235,17 +235,17 @@ export function recycleCarryLessWorker(spawn: StructureSpawn): boolean {
 }
 
 /**
- * Source-container push wants hauler=0 / builder=2. Leftover haulers reclaim no
- * energy (no containers yet) and keep spawn below the second builder body cost.
+ * Surplus haulers reclaim no extra energy once sources are staffed and keep
+ * spawn under the builder body cost (100 hauler vs 200 WORK+CARRY+MOVE).
  */
 export function recycleExcessHaulers(
   spawn: StructureSpawn,
   want: CreepQuotas,
   counts: CreepQuotas,
-  infrastructurePush: boolean,
+  reclaimForBuilders: boolean,
 ): boolean {
   if (spawn.spawning) return false;
-  if (!infrastructurePush) return false;
+  if (!reclaimForBuilders) return false;
   if (counts.builder >= want.builder) return false;
   if (counts.hauler <= want.hauler) return false;
 
@@ -500,10 +500,17 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (recycleCarryLessWorker(spawn)) return;
   }
 
-  if (recycleExcessHaulers(spawn, want, liveCounts, infrastructurePush)) {
+  const buildersBelowQuota = liveCounts.builder < want.builder;
+  if (
+    recycleExcessHaulers(
+      spawn,
+      want,
+      liveCounts,
+      infrastructurePush || buildersBelowQuota,
+    )
+  ) {
     return;
   }
-  const buildersBelowQuota = liveCounts.builder < want.builder;
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
@@ -528,7 +535,11 @@ export function runSpawn(spawn: StructureSpawn): void {
       role === "miner"
         ? minersDurable
         : role === "hauler"
-          ? haulersDurable
+          ? // Don't pre-spawn hauler replacements while builders are missing —
+            // 100-energy haulers keep spawn under the 200 builder body.
+            buildersBelowQuota
+            ? liveCounts.hauler
+            : haulersDurable
           : liveCounts[role];
     if (filled >= want[role]) continue;
     // Never spend on builders while sources have no harvester/miner.

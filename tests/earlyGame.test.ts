@@ -413,6 +413,21 @@ describe("spawnPriorityOrder", () => {
       ),
     ).toEqual(["hauler", "miner", "filler", "builder", "harvester", "upgrader"]);
   });
+
+  test("builder before hauler when extension builders missing and miners staffed", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 12, spawnFillPct: 0.4 },
+        { harvester: 0, miner: 2 },
+        200,
+        {
+          buildersBelowQuota: true,
+          economyFloorMet: true,
+        },
+      ),
+    ).toEqual(["miner", "filler", "builder", "hauler", "harvester", "upgrader"]);
+  });
 });
 
 describe("constructionPriority", () => {

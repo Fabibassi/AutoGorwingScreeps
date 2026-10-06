@@ -307,6 +307,24 @@ function prioritizeBuilderOverSpareHarvester(
   return next;
 }
 
+/** Prefer the next 200 on a missing builder, not another 100-energy hauler. */
+function prioritizeBuilderAfterEconomy(
+  order: Array<keyof CreepQuotas>,
+): Array<keyof CreepQuotas> {
+  const core: Array<keyof CreepQuotas> = order.filter(
+    (role) => role !== "builder" && role !== "hauler",
+  );
+  const fillerIdx = core.indexOf("filler");
+  const minerIdx = core.indexOf("miner");
+  const insertAt =
+    fillerIdx >= 0 ? fillerIdx + 1 : minerIdx >= 0 ? minerIdx + 1 : 0;
+  const next = core.slice();
+  next.splice(insertAt, 0, "builder");
+  const builderIdx = next.indexOf("builder");
+  next.splice(builderIdx + 1, 0, "hauler");
+  return next;
+}
+
 /** Spawn harvester first when static mining stalled — hauler-first starves recovery. */
 export function spawnPriorityOrder(
   dedicatedMiners: boolean,
@@ -357,6 +375,8 @@ export function spawnPriorityOrder(
     if (opts.buildersBelowQuota && opts.economyFloorMet) {
       order = prioritizeBuilderOverSpareHarvester(order);
     }
+  } else if (opts?.buildersBelowQuota && opts.economyFloorMet) {
+    order = prioritizeBuilderAfterEconomy(order);
   }
   return withFillerSlot(order);
 }
