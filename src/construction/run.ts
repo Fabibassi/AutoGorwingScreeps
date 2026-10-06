@@ -25,6 +25,7 @@ import {
   sourceMissingContainer,
 } from "../room/queries";
 import {
+  clearBlockingSitesOnRoads,
   clearSpawnExitRing,
   tryPlaceContainer,
   tryPlaceExtension,
@@ -61,6 +62,8 @@ export function runConstruction(room: Room): void {
   // Priority 0: never seal the spawn — creeps cannot walk through structures.
   const cleared = clearSpawnExitRing(room, spawn.pos);
   if (cleared.removedSites > 0 || cleared.destroyedStructures > 0) return;
+  // Extensions on roads plug the hub corridors (live W21N35 south exit).
+  if (clearBlockingSitesOnRoads(room) > 0) return;
 
   const policy = parseRoadPolicy(Memory.ags?.roadPolicy);
   const exp = resolveExperiment(Memory.ags);

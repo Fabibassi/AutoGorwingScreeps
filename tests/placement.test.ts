@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   SPAWN_EXIT_MIN_RANGE,
+  clearBlockingSitesOnRoads,
   clearSpawnExitRing,
   countFreeSpawnExits,
   findBuildSpotNear,
@@ -78,7 +79,28 @@ function makeRoom(opts: {
 
   const room = {
     name: "W0N0",
-  } as Room;
+    find(type: number) {
+      // FIND_CONSTRUCTION_SITES
+      if (type === 111 || type === ("constructionSite" as unknown as number)) {
+        const out: FakeSite[] = [];
+        for (const [k, cell] of byPos) {
+          const [x, y] = k.split(",").map(Number);
+          for (const site of cell.sites) {
+            out.push(
+              Object.assign(site, {
+                pos: new RoomPosition(x, y, "W0N0"),
+              }),
+            );
+          }
+        }
+        return out;
+      }
+      return [];
+    },
+  } as unknown as Room;
+
+  (globalThis as { FIND_CONSTRUCTION_SITES?: number }).FIND_CONSTRUCTION_SITES =
+    111;
 
   (globalThis as { Game?: unknown }).Game = {
     map: {
@@ -163,5 +185,41 @@ describe("spawn exit ring stays open", () => {
     const cleared = clearSpawnExitRing(room, spawnPos);
     expect(cleared.destroyedStructures).toBe(1);
     expect(countFreeSpawnExits(room, spawnPos)).toBe(7);
+  });
+
+  test("does not place blocking builds on road tiles", () => {
+    const room = makeRoom({
+      structures: [
+        { x: 25, y: 27, structureType: "road" },
+        { x: 24, y: 27, structureType: "road" },
+        { x: 26, y: 27, structureType: "road" },
+        { x: 23, y: 27, structureType: "road" },
+        { x: 27, y: 27, structureType: "road" },
+        { x: 25, y: 23, structureType: "road" },
+        { x: 23, y: 25, structureType: "road" },
+        { x: 27, y: 25, structureType: "road" },
+      ],
+    });
+    const spawnPos = new RoomPosition(25, 25, room.name);
+    const spot = findBuildSpotNear(room, spawnPos, 4, SPAWN_EXIT_MIN_RANGE, true);
+    expect(spot).not.toBeNull();
+    // Cardinal range-2 south is a road — must not pick it.
+    expect(spot!.x === 25 && spot!.y === 27).toBe(false);
+  });
+
+  test("preferOffCardinal picks diagonal before axis corridor", () => {
+    const room = makeRoom({});
+    const spawnPos = new RoomPosition(25, 25, room.name);
+    const spot = findBuildSpotNear(room, spawnPos, 4, SPAWN_EXIT_MIN_RANGE, true);
+    expect(spot).not.toBeNull();
+    expect(spot!.x !== 25 && spot!.y !== 25).toBe(true);
+  });
+
+  test("clearBlockingSitesOnRoads removes extension sites on roads", () => {
+    const room = makeRoom({
+      structures: [{ x: 25, y: 27, structureType: "road" }],
+      sites: [{ x: 25, y: 27, structureType: "extension" }],
+    });
+    expect(clearBlockingSitesOnRoads(room)).toBe(1);
   });
 });

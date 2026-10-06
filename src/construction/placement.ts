@@ -11,6 +11,17 @@ function blocksSpawnLanding(structureType: StructureConstant): boolean {
   );
 }
 
+function tileHasRoad(pos: RoomPosition): boolean {
+  return (
+    pos
+      .lookFor(LOOK_STRUCTURES)
+      .some((s) => s.structureType === STRUCTURE_ROAD) ||
+    pos
+      .lookFor(LOOK_CONSTRUCTION_SITES)
+      .some((s) => s.structureType === STRUCTURE_ROAD)
+  );
+}
+
 function isFreeBuildTile(room: Room, x: number, y: number): boolean {
   if (x < 1 || x > 48 || y < 1 || y > 48) return false;
   if (!isBuildableTerrain(room, x, y)) return false;
@@ -19,6 +30,8 @@ function isFreeBuildTile(room: Room, x: number, y: number): boolean {
     .lookFor(LOOK_STRUCTURES)
     .some((s) => blocksSpawnLanding((s as Structure).structureType));
   if (blocking) return false;
+  // Roads mark walk corridors — never park extensions/towers on them.
+  if (tileHasRoad(pos)) return false;
   return pos.lookFor(LOOK_CONSTRUCTION_SITES).length === 0;
 }
 
@@ -130,31 +143,68 @@ export function findAdjacentSpot(
 /**
  * Expanding ring around spawn for extensions/storage.
  * Default minRange=2 — never place blocking structures on the spawn exit ring.
+ * preferOffCardinal: keep N/S/E/W corridors open (bunker cross) before filling
+ * the axis tiles at that range.
  */
 export function findBuildSpotNear(
   room: Room,
   anchor: RoomPosition,
   maxRange = 4,
   minRange = SPAWN_EXIT_MIN_RANGE,
+  preferOffCardinal = false,
 ): RoomPosition | null {
   const start = Math.max(1, minRange);
-  for (let range = start; range <= maxRange; range++) {
-    for (let dx = -range; dx <= range; dx++) {
-      for (let dy = -range; dy <= range; dy++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== range) continue;
-        const x = anchor.x + dx;
-        const y = anchor.y + dy;
-        if (!isFreeBuildTile(room, x, y)) continue;
-        return new RoomPosition(x, y, room.name);
+  const passes: Array<(dx: number, dy: number) => boolean> = preferOffCardinal
+    ? [(dx, dy) => dx !== 0 && dy !== 0, () => true]
+    : [() => true];
+  for (const accept of passes) {
+    for (let range = start; range <= maxRange; range++) {
+      for (let dx = -range; dx <= range; dx++) {
+        for (let dy = -range; dy <= range; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== range) continue;
+          if (!accept(dx, dy)) continue;
+          const x = anchor.x + dx;
+          const y = anchor.y + dy;
+          if (!isFreeBuildTile(room, x, y)) continue;
+          return new RoomPosition(x, y, room.name);
+        }
       }
     }
   }
   return null;
 }
 
+/** Remove blocking construction sites that were wrongly placed on roads. */
+export function clearBlockingSitesOnRoads(room: Room): number {
+  let removed = 0;
+  const sites = room.find(FIND_CONSTRUCTION_SITES);
+  for (const site of sites) {
+    if (
+      site.structureType === STRUCTURE_ROAD ||
+      site.structureType === STRUCTURE_CONTAINER
+    ) {
+      continue;
+    }
+    const onRoad = site.pos
+      .lookFor(LOOK_STRUCTURES)
+      .some((s) => s.structureType === STRUCTURE_ROAD);
+    if (onRoad && site.remove() === OK) removed++;
+  }
+  if (removed > 0) {
+    console.log(`[road-clear] ${room.name} removed ${removed} sites on roads`);
+  }
+  return removed;
+}
+
 export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
-  // Range 2..6 — leave the spawn landing ring completely open.
-  const spot = findBuildSpotNear(room, spawnPos, 6, SPAWN_EXIT_MIN_RANGE);
+  // Range 2..6 — leave landing ring + prefer off-cardinal (keep road cross open).
+  const spot = findBuildSpotNear(
+    room,
+    spawnPos,
+    6,
+    SPAWN_EXIT_MIN_RANGE,
+    true,
+  );
   if (!spot) return false;
   return room.createConstructionSite(spot, STRUCTURE_EXTENSION) === OK;
 }
