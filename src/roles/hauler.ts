@@ -93,7 +93,9 @@ export function shouldDeliverNow(
     return total > 0 && carried / total >= HAUL_THRESHOLDS.extensionFillRatio;
   }
 
-  return false;
+  // Spawn + extensions saturated: dump whatever we hold (storage/tower) and
+  // return empty — do not hike back to the miner half-full to top off CARRY.
+  return true;
 }
 
 export interface HaulerPickupCandidate {

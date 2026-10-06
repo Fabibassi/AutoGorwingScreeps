@@ -11,14 +11,21 @@ import {
 } from "../src/roles/hauler";
 
 describe("shouldDeliverNow", () => {
-  test("waits to fill when spawn is comfortable and extensions are full", () => {
+  test("dumps partial to storage when spawn is comfortable and extensions are full", () => {
     expect(
       shouldDeliverNow(40, 10, {
         spawnEnergy: 280,
         spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
       }),
-    ).toBe(false);
+    ).toBe(true);
+    expect(
+      shouldDeliverNow(350, 100, {
+        spawnEnergy: 300,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+      }),
+    ).toBe(true);
   });
 
   test("delivers full loads always", () => {
