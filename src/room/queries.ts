@@ -1,5 +1,30 @@
 import type { CreepQuotas } from "../earlyGame";
 
+const KNOWN_ROLES: Array<keyof CreepQuotas> = [
+  "harvester",
+  "miner",
+  "hauler",
+  "upgrader",
+  "builder",
+  "filler",
+];
+
+/** Spawn names are `{role}-{tick}-…`; restore role when Memory.creeps lost it. */
+export function healCreepRoleFromName(creep: Creep): boolean {
+  const current = creep.memory.role as string | undefined;
+  if (current && (KNOWN_ROLES as string[]).includes(current)) return false;
+  const prefix = creep.name.split("-")[0] as keyof CreepQuotas;
+  if (!(KNOWN_ROLES as string[]).includes(prefix)) return false;
+  creep.memory.role = prefix;
+  return true;
+}
+
+export function healCreepRoles(): void {
+  for (const name in Game.creeps) {
+    healCreepRoleFromName(Game.creeps[name]);
+  }
+}
+
 export function countCreepsByRole(): CreepQuotas {
   const counts: CreepQuotas = {
     harvester: 0,

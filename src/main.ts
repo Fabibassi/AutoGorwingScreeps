@@ -2,6 +2,7 @@ import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
+import { healCreepRoles } from "./room/queries";
 import { runCreep } from "./roles";
 import { maybeUpdateHealthCheck } from "./selfCheck";
 import { runSpawn } from "./spawn";
@@ -28,6 +29,7 @@ export function loop(): void {
   try {
     applyParsedMemoryReuse();
     clearDeadCreepMemory();
+    healCreepRoles();
 
     for (const name in Game.rooms) {
       const room = Game.rooms[name];

@@ -6,6 +6,7 @@ import {
   pickClosestLogisticsEnergy,
   preferLogisticsRefill,
 } from "../src/roles/builder";
+import { healCreepRoleFromName } from "../src/room/queries";
 import { hasNoEconomyCreeps } from "../src/earlyGame";
 import {
   clearZombieSpawn,
@@ -635,5 +636,39 @@ describe("clearZombieSpawn", () => {
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
+  });
+
+  test("cancels stale living spawn flag after the creep has already aged", () => {
+    const cancel = vi.fn(() => OK);
+    const suicide = vi.fn();
+    (globalThis as { Game?: unknown; Memory?: unknown }).Game = {
+      time: 200,
+      creeps: {
+        "hauler-1": { suicide, ticksToLive: 1430, memory: { role: "hauler" } },
+      },
+    };
+    (globalThis as { Memory?: unknown }).Memory = { ags: {} };
+    const spawn = {
+      spawning: { name: "hauler-1", remainingTime: 0, cancel },
+      room: { name: "W21N35", energyAvailable: 67 },
+    };
+    expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
+    expect(cancel).toHaveBeenCalled();
+    expect(suicide).not.toHaveBeenCalled();
+    expect(
+      (Memory as { ags?: { zombieDebug?: { action?: string } } }).ags
+        ?.zombieDebug?.action,
+    ).toBe("cancel-stale-living");
+  });
+});
+
+describe("healCreepRoleFromName", () => {
+  test("restores hauler role from spawn name when Memory lost it", () => {
+    const creep = {
+      name: "hauler-83465322-231835",
+      memory: {} as { role?: string },
+    };
+    expect(healCreepRoleFromName(creep as Creep)).toBe(true);
+    expect(creep.memory.role).toBe("hauler");
   });
 });

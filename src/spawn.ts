@@ -19,6 +19,7 @@ import {
   countCreepsByRole,
   countSourceContainers,
   findSourcesWithContainers,
+  healCreepRoles,
 } from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
@@ -286,18 +287,26 @@ export function clearZombieSpawn(spawn: StructureSpawn): boolean {
   }
 
   const existing = Game.creeps[spawning.name];
+  const ttl = existing?.ticksToLive;
+  // Newborns sit at remainingTime 0 for 1–2 ticks with TTL≈1500. After that the
+  // flag is stale: cancel() clears spawn without deleting the already-born creep.
+  const staleLiving = existing != null && ttl != null && ttl < 1480;
   if (ags) {
     ags.zombieDebug = {
       tick: Game.time,
       spawningName: spawning.name,
       remainingTime: 0,
-      ttl: existing?.ticksToLive,
+      ttl,
       hasExact: existing != null,
-      action: existing ? "hands-off-living" : "cancel-ghost",
+      action: existing
+        ? staleLiving
+          ? "cancel-stale-living"
+          : "hands-off-living"
+        : "cancel-ghost",
     };
   }
 
-  if (existing) return false;
+  if (existing && !staleLiving) return false;
 
   if (ags?.zombieSpawnSeen) delete ags.zombieSpawnSeen[spawning.name];
   return (
@@ -332,6 +341,7 @@ export function hasRecoverableEnergyBeside(spawn: StructureSpawn): boolean {
 }
 
 export function runSpawn(spawn: StructureSpawn): void {
+  healCreepRoles();
   clearZombieSpawn(spawn);
   // Free sticky spawn + reclaim energy from CARRY-only haulers on the wrong tile.
   if (reclaimStrandedEmergencyHauler(spawn)) return;
