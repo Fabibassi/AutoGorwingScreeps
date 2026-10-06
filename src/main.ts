@@ -1,3 +1,4 @@
+import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
@@ -17,6 +18,7 @@ function clearDeadCreepMemory(): void {
 }
 
 export function loop(): void {
+  applyParsedMemoryReuse();
   let errorsThisTick = 0;
   let energyHarvestedThisTick = 0;
   const roadPolicySticky = Memory.ags?.roadPolicy;

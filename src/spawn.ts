@@ -9,6 +9,7 @@ import {
   type CreepQuotas,
 } from "./earlyGame";
 import {
+  durableCount,
   durableMinerCount,
   minerReplacementLeadTime,
   sourceIdForReplacementMiner,
@@ -454,6 +455,25 @@ export function runSpawn(spawn: StructureSpawn): void {
     minerSourceIds,
     leadTimeFor,
   );
+  const haulerSnapshots: Array<{ ticksToLive?: number }> = [];
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name || creep.memory.role !== "hauler") continue;
+    haulerSnapshots.push({ ticksToLive: creep.ticksToLive });
+  }
+  const nextHaulerBody = bodyForRole("hauler", energyAvailable, {
+    haulerMaxCost: exp.haulerMaxCost,
+  });
+  const haulerLead = minerReplacementLeadTime({
+    bodyParts: nextHaulerBody.length || 2,
+    workParts: 0,
+    moveParts: Math.max(
+      1,
+      nextHaulerBody.filter((p) => p === "move").length,
+    ),
+    range: economy.haulRange ?? 20,
+  });
+  const haulersDurable = durableCount(haulerSnapshots, haulerLead);
 
   // Any spawn.spawning (active OR sticky with live creep) → do not spawnCreep.
   if (spawn.spawning) {
@@ -504,7 +524,12 @@ export function runSpawn(spawn: StructureSpawn): void {
       : exp.haulerMaxCost;
 
   for (const role of spawnOrder) {
-    const filled = role === "miner" ? minersDurable : liveCounts[role];
+    const filled =
+      role === "miner"
+        ? minersDurable
+        : role === "hauler"
+          ? haulersDurable
+          : liveCounts[role];
     if (filled >= want[role]) continue;
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;

@@ -38,6 +38,14 @@ function minersOnSource(
   return miners.filter((m) => m.sourceId === sourceId);
 }
 
+export function durableCount(
+  snapshots: Array<{ ticksToLive?: number }>,
+  leadTime: number,
+): number {
+  return snapshots.filter((s) => !minerNeedsReplacement(s.ticksToLive, leadTime))
+    .length;
+}
+
 export function durableMinerCount(
   miners: MinerHandoffSnapshot[],
   sourceIds: string[],

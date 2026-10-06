@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { ROLE_ICONS, showCreepJob } from "../src/visuals";
+import { ROLE_ICONS, shouldShowCreepJobs, showCreepJob } from "../src/visuals";
 
 describe("showCreepJob", () => {
   test("shows visual-only icon for known role", () => {
@@ -33,6 +33,13 @@ describe("showCreepJob", () => {
     showCreepJob(creep);
 
     expect(say).not.toHaveBeenCalled();
+  });
+});
+
+describe("shouldShowCreepJobs", () => {
+  test("hides icons when the CPU bucket is starved", () => {
+    expect(shouldShowCreepJobs(1999)).toBe(false);
+    expect(shouldShowCreepJobs(2000)).toBe(true);
   });
 });
 

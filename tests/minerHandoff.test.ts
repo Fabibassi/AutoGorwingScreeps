@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  durableCount,
   durableMinerCount,
   minerMoveTicksPerTile,
   minerNeedsReplacement,
@@ -137,5 +138,16 @@ describe("shouldWaitForIncumbentMiner", () => {
         [{ name: "miner-new", ticksToLive: 1490 }],
       ),
     ).toBe(false);
+  });
+});
+
+describe("durableCount", () => {
+  test("excludes dying creeps so haulers can be replaced before TTL hits 0", () => {
+    expect(
+      durableCount(
+        [{ ticksToLive: 800 }, { ticksToLive: 40 }],
+        100,
+      ),
+    ).toBe(1);
   });
 });

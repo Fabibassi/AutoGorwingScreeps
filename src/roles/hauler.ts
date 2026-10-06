@@ -470,12 +470,12 @@ export function runHauler(creep: Creep): number {
     }
     if (source instanceof Resource) {
       if (creep.pickup(source) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(source);
+        creep.moveTo(source, { reusePath: 20 });
       }
       return 0;
     }
     if (creep.withdraw(source, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(source);
+      creep.moveTo(source, { reusePath: 20 });
     }
     return 0;
   }
@@ -485,7 +485,7 @@ export function runHauler(creep: Creep): number {
   if (!target) return 0;
 
   if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-    creep.moveTo(target);
+    creep.moveTo(target, { reusePath: 20 });
   }
   return 0;
 }
