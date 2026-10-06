@@ -2,7 +2,22 @@ import {
   countSourceContainers,
   findSourceContainerSites,
 } from "../room/queries";
+import { HAUL_THRESHOLDS } from "./hauler";
 import { INFRA_BUILDER_SPAWN_ENERGY } from "./harvester";
+
+/**
+ * Absolute spawn-energy gates for builder withdraw (spawn store is 300).
+ * Never interpret these as % of storage (1M). Storage itself stays ungated —
+ * builders may drain the overflow bank freely; only the spawn bank is protected.
+ */
+export const BUILDER_SPAWN_THRESHOLDS = {
+  /** Normal / upgrader: only siphon when spawn is comfortable. */
+  default: HAUL_THRESHOLDS.spawnComfortable,
+  /** Hub logistics: half spawn is enough once source containers exist. */
+  logistics: HAUL_THRESHOLDS.spawnUrgent,
+  /** Finish containers / extension sites while spawn still holds a cheap refill. */
+  infrastructure: 100,
+} as const;
 
 /** Builders must not drain spawn energy needed to respawn harvesters/miners. */
 export function canWithdrawFromSpawn(
@@ -18,18 +33,19 @@ export function canWithdrawFromSpawn(
 ): boolean {
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
-  const ratio = spawnEnergy / spawnCapacity;
   // 2nd infra builder missing: keep a full WORK+CARRY+MOVE body (+1 CARRY slack)
   // so spawnCreep can claim it before we siphon the bank back under 200.
   if (opts?.buildersBelowQuota) {
     return spawnEnergy >= INFRA_BUILDER_SPAWN_ENERGY + 50;
   }
-  // ~35%: allow builders to finish source containers while spawn still banks a
-  // cheap refill (hauler/partial). Do not use this path while buildersBelowQuota.
-  if (opts?.infrastructurePush) return ratio >= 0.35;
-  // Logistics mode: use spawn at half-full instead of hiking to source containers.
-  if (opts?.logisticsRefill) return ratio >= 0.5;
-  return ratio >= 0.85;
+  // Absolute spawn units — never spawnEnergy/capacity as if capacity were 1M storage.
+  if (opts?.infrastructurePush) {
+    return spawnEnergy >= BUILDER_SPAWN_THRESHOLDS.infrastructure;
+  }
+  if (opts?.logisticsRefill) {
+    return spawnEnergy >= BUILDER_SPAWN_THRESHOLDS.logistics;
+  }
+  return spawnEnergy >= BUILDER_SPAWN_THRESHOLDS.default;
 }
 
 /**

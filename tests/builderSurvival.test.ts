@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  BUILDER_SPAWN_THRESHOLDS,
   canWithdrawFromSpawn,
   pickBuildSite,
   pickClosestLogisticsEnergy,
@@ -79,11 +80,14 @@ describe("pickClosestLogisticsEnergy", () => {
 });
 
 describe("canWithdrawFromSpawn logistics refill", () => {
-  test("allows spawn at 50% when logistics refill is active", () => {
+  test("allows spawn at absolute logistics threshold when logistics refill is active", () => {
     expect(canWithdrawFromSpawn(150, 300, true)).toBe(false);
     expect(
       canWithdrawFromSpawn(150, 300, true, { logisticsRefill: true }),
     ).toBe(true);
+    expect(
+      canWithdrawFromSpawn(149, 300, true, { logisticsRefill: true }),
+    ).toBe(false);
   });
 });
 
@@ -92,21 +96,23 @@ describe("canWithdrawFromSpawn", () => {
     expect(canWithdrawFromSpawn(300, 300, false)).toBe(false);
   });
 
-  test("blocks spawn drain while spawn is below 85%", () => {
+  test("blocks spawn drain while spawn is below comfortable absolute energy", () => {
     expect(canWithdrawFromSpawn(100, 300, true)).toBe(false);
+    expect(canWithdrawFromSpawn(249, 300, true)).toBe(false);
   });
 
-  test("allows overflow only when economy exists and spawn is nearly full", () => {
+  test("allows overflow only when economy exists and spawn is comfortable (≥250)", () => {
+    expect(canWithdrawFromSpawn(250, 300, true)).toBe(true);
     expect(canWithdrawFromSpawn(270, 300, true)).toBe(true);
   });
 
-  test("infrastructure push allows spawn withdraw at ~35% to finish containers", () => {
+  test("infrastructure push allows spawn withdraw at absolute 100 energy", () => {
     expect(canWithdrawFromSpawn(100, 300, true)).toBe(false);
     expect(
-      canWithdrawFromSpawn(105, 300, true, { infrastructurePush: true }),
+      canWithdrawFromSpawn(100, 300, true, { infrastructurePush: true }),
     ).toBe(true);
     expect(
-      canWithdrawFromSpawn(104, 300, true, { infrastructurePush: true }),
+      canWithdrawFromSpawn(99, 300, true, { infrastructurePush: true }),
     ).toBe(false);
   });
 
@@ -130,6 +136,13 @@ describe("canWithdrawFromSpawn", () => {
         buildersBelowQuota: true,
       }),
     ).toBe(true);
+  });
+
+  test("thresholds are absolute spawn units aligned with hauler comfort", () => {
+    expect(BUILDER_SPAWN_THRESHOLDS.default).toBe(250);
+    expect(BUILDER_SPAWN_THRESHOLDS.logistics).toBe(150);
+    expect(BUILDER_SPAWN_THRESHOLDS.infrastructure).toBe(100);
+    expect(BUILDER_SPAWN_THRESHOLDS.default).toBeLessThan(1000);
   });
 });
 
