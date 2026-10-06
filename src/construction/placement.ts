@@ -22,17 +22,10 @@ function tileHasRoad(pos: RoomPosition): boolean {
   );
 }
 
-function isFreeBuildTile(room: Room, x: number, y: number): boolean {
-  if (x < 1 || x > 48 || y < 1 || y > 48) return false;
-  if (!isBuildableTerrain(room, x, y)) return false;
-  const pos = new RoomPosition(x, y, room.name);
-  const blocking = pos
+function tileHasBlockingStructure(pos: RoomPosition): boolean {
+  return pos
     .lookFor(LOOK_STRUCTURES)
     .some((s) => blocksSpawnLanding((s as Structure).structureType));
-  if (blocking) return false;
-  // Roads mark walk corridors — never park extensions/towers on them.
-  if (tileHasRoad(pos)) return false;
-  return pos.lookFor(LOOK_CONSTRUCTION_SITES).length === 0;
 }
 
 /**
@@ -41,6 +34,9 @@ function isFreeBuildTile(room: Room, x: number, y: number): boolean {
  * Keep the entire Chebyshev-range-1 ring free of blocking builds; only roads OK.
  */
 export const SPAWN_EXIT_MIN_RANGE = 2;
+
+/** How far the N/S/E/W hub road rays extend from spawn. */
+export const HUB_CORRIDOR_RAY = 4;
 
 const ADJACENT_DELTAS: Array<[number, number]> = [
   [1, 0],
@@ -53,7 +49,131 @@ const ADJACENT_DELTAS: Array<[number, number]> = [
   [-1, -1],
 ];
 
-/** Walkable adjacent tiles (no blocking structure/site, not wall). */
+/**
+ * Reserved walk network (diamond hub):
+ * - range-1 exit ring around spawn
+ * - cardinal rays N/S/E/W through the hub
+ * Roads belong here; blocking structures never do — even before a road exists.
+ */
+export function isHubCorridor(
+  spawnPos: RoomPosition,
+  x: number,
+  y: number,
+  maxRay = HUB_CORRIDOR_RAY,
+): boolean {
+  const dx = x - spawnPos.x;
+  const dy = y - spawnPos.y;
+  const r = Math.max(Math.abs(dx), Math.abs(dy));
+  if (r === 0) return true;
+  if (r === 1) return true;
+  if ((dx === 0 || dy === 0) && r <= maxRay) return true;
+  return false;
+}
+
+/**
+ * Diamond extension pockets relative to spawn.
+ * Roads form the cross; structures sit in the gaps (community diagonal/bunker pattern).
+ */
+export const HUB_EXTENSION_STAMP: ReadonlyArray<readonly [number, number]> = [
+  // r2 pockets (not the exit ring — [±1,±1] is still range 1)
+  [2, 1],
+  [2, -1],
+  [-2, 1],
+  [-2, -1],
+  [1, 2],
+  [1, -2],
+  [-1, 2],
+  [-1, -2],
+  [2, 2],
+  [2, -2],
+  [-2, 2],
+  [-2, -2],
+  // r3
+  [3, 1],
+  [3, -1],
+  [-3, 1],
+  [-3, -1],
+  [1, 3],
+  [1, -3],
+  [-1, 3],
+  [-1, -3],
+  [3, 2],
+  [3, -2],
+  [-3, 2],
+  [-3, -2],
+  [2, 3],
+  [2, -3],
+  [-2, 3],
+  [-2, -3],
+  [3, 3],
+  [3, -3],
+  [-3, 3],
+  [-3, -3],
+  // r4
+  [4, 1],
+  [4, -1],
+  [-4, 1],
+  [-4, -1],
+  [1, 4],
+  [1, -4],
+  [-1, 4],
+  [-1, -4],
+  [4, 2],
+  [4, -2],
+  [-4, 2],
+  [-4, -2],
+  [2, 4],
+  [2, -4],
+  [-2, 4],
+  [-2, -4],
+  [4, 3],
+  [4, -3],
+  [-4, 3],
+  [-4, -3],
+  [3, 4],
+  [3, -4],
+  [-3, 4],
+  [-3, -4],
+  [4, 4],
+  [4, -4],
+  [-4, 4],
+  [-4, -4],
+];
+
+/** Hub road stamp: exit ring + cardinal rays. */
+export const HUB_ROAD_STAMP: ReadonlyArray<readonly [number, number]> = [
+  ...ADJACENT_DELTAS,
+  [0, 2],
+  [0, -2],
+  [2, 0],
+  [-2, 0],
+  [0, 3],
+  [0, -3],
+  [3, 0],
+  [-3, 0],
+  [0, 4],
+  [0, -4],
+  [4, 0],
+  [-4, 0],
+];
+
+/** Tile free for a blocking structure (extension/tower/storage). */
+function isFreeBuildTile(
+  room: Room,
+  x: number,
+  y: number,
+  spawnPos?: RoomPosition,
+): boolean {
+  if (x < 1 || x > 48 || y < 1 || y > 48) return false;
+  if (!isBuildableTerrain(room, x, y)) return false;
+  if (spawnPos && isHubCorridor(spawnPos, x, y)) return false;
+  const pos = new RoomPosition(x, y, room.name);
+  if (tileHasBlockingStructure(pos)) return false;
+  if (tileHasRoad(pos)) return false;
+  return pos.lookFor(LOOK_CONSTRUCTION_SITES).length === 0;
+}
+
+/** Walkable adjacent tiles (no blocking structure; roads OK). */
 export function countFreeSpawnExits(
   room: Room,
   spawnPos: RoomPosition,
@@ -62,7 +182,14 @@ export function countFreeSpawnExits(
   for (const [dx, dy] of ADJACENT_DELTAS) {
     const x = spawnPos.x + dx;
     const y = spawnPos.y + dy;
-    if (isFreeBuildTile(room, x, y)) free++;
+    if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+    if (!isBuildableTerrain(room, x, y)) continue;
+    const pos = new RoomPosition(x, y, room.name);
+    if (tileHasBlockingStructure(pos)) continue;
+    if (pos.lookFor(LOOK_CONSTRUCTION_SITES).some((s) => blocksSpawnLanding(s.structureType))) {
+      continue;
+    }
+    free++;
   }
   return free;
 }
@@ -141,10 +268,9 @@ export function findAdjacentSpot(
 }
 
 /**
- * Expanding ring around spawn for extensions/storage.
+ * Expanding ring around spawn (legacy helper / non-stamp structures).
  * Default minRange=2 — never place blocking structures on the spawn exit ring.
- * preferOffCardinal: keep N/S/E/W corridors open (bunker cross) before filling
- * the axis tiles at that range.
+ * preferOffCardinal: keep N/S/E/W corridors open before axis tiles.
  */
 export function findBuildSpotNear(
   room: Room,
@@ -165,7 +291,7 @@ export function findBuildSpotNear(
           if (!accept(dx, dy)) continue;
           const x = anchor.x + dx;
           const y = anchor.y + dy;
-          if (!isFreeBuildTile(room, x, y)) continue;
+          if (!isFreeBuildTile(room, x, y, anchor)) continue;
           return new RoomPosition(x, y, room.name);
         }
       }
@@ -174,8 +300,12 @@ export function findBuildSpotNear(
   return null;
 }
 
-/** Remove blocking construction sites that were wrongly placed on roads. */
+/**
+ * Remove blocking construction sites on roads or reserved hub corridors
+ * (cardinal rays + exit ring) — the researched diamond walk network.
+ */
 export function clearBlockingSitesOnRoads(room: Room): number {
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
   let removed = 0;
   const sites = room.find(FIND_CONSTRUCTION_SITES);
   for (const site of sites) {
@@ -188,32 +318,59 @@ export function clearBlockingSitesOnRoads(room: Room): number {
     const onRoad = site.pos
       .lookFor(LOOK_STRUCTURES)
       .some((s) => s.structureType === STRUCTURE_ROAD);
-    if (onRoad && site.remove() === OK) removed++;
+    const onCorridor =
+      spawn != null && isHubCorridor(spawn.pos, site.pos.x, site.pos.y);
+    if ((onRoad || onCorridor) && site.remove() === OK) removed++;
   }
   if (removed > 0) {
-    console.log(`[road-clear] ${room.name} removed ${removed} sites on roads`);
+    console.log(`[road-clear] ${room.name} removed ${removed} sites on corridors/roads`);
   }
   return removed;
 }
 
-export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
-  // Range 2..6 — leave landing ring + prefer off-cardinal (keep road cross open).
-  const spot = findBuildSpotNear(
-    room,
-    spawnPos,
-    6,
-    SPAWN_EXIT_MIN_RANGE,
-    true,
-  );
-  if (!spot) return false;
-  return room.createConstructionSite(spot, STRUCTURE_EXTENSION) === OK;
+/** Place next missing hub road from the diamond stamp (exits + cardinal rays). */
+export function tryPlaceHubRoad(
+  room: Room,
+  spawnPos: RoomPosition,
+): boolean {
+  for (const [dx, dy] of HUB_ROAD_STAMP) {
+    const x = spawnPos.x + dx;
+    const y = spawnPos.y + dy;
+    if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+    if (!isBuildableTerrain(room, x, y)) continue;
+    const pos = new RoomPosition(x, y, room.name);
+    if (tileHasRoad(pos)) continue;
+    if (tileHasBlockingStructure(pos)) continue;
+    if (pos.lookFor(LOOK_CONSTRUCTION_SITES).length > 0) continue;
+    if (room.createConstructionSite(pos, STRUCTURE_ROAD) === OK) return true;
+  }
+  return false;
 }
 
-/** Tower near spawn (range 2..4), never on the exit ring. */
+export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
+  // Stamp pockets only — never greedy-fill corridor tiles.
+  for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+    const x = spawnPos.x + dx;
+    const y = spawnPos.y + dy;
+    if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+    if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Tower in a stamp pocket near spawn (same diamond gaps as extensions). */
 export function tryPlaceTower(room: Room, spawnPos: RoomPosition): boolean {
-  const spot = findBuildSpotNear(room, spawnPos, 4, SPAWN_EXIT_MIN_RANGE);
-  if (!spot) return false;
-  return room.createConstructionSite(spot, STRUCTURE_TOWER) === OK;
+  for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+    const r = Math.max(Math.abs(dx), Math.abs(dy));
+    if (r > 4) continue;
+    const x = spawnPos.x + dx;
+    const y = spawnPos.y + dy;
+    if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+    if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) return true;
+  }
+  return false;
 }
 
 export function tryPlaceContainer(room: Room, anchor: RoomPosition): boolean {
@@ -223,7 +380,8 @@ export function tryPlaceContainer(room: Room, anchor: RoomPosition): boolean {
     const y = anchor.y + dy;
     // Never put a site on the spawn landing ring (even walkable containers clutter exits).
     if (spawn && isSpawnExitTile(spawn.pos, x, y)) continue;
-    if (!isFreeBuildTile(room, x, y)) continue;
+    if (spawn && isHubCorridor(spawn.pos, x, y)) continue;
+    if (!isFreeBuildTile(room, x, y, spawn?.pos)) continue;
     const spot = new RoomPosition(x, y, room.name);
     if (room.createConstructionSite(spot, STRUCTURE_CONTAINER) === OK) {
       return true;
@@ -232,14 +390,20 @@ export function tryPlaceContainer(room: Room, anchor: RoomPosition): boolean {
   return false;
 }
 
-/** Storage near spawn, never on the exit ring. */
+/** Storage in a stamp pocket near spawn — never on exit ring / corridor. */
 export function tryPlaceStorageNearSpawn(
   room: Room,
   spawnPos: RoomPosition,
 ): boolean {
-  const spot = findBuildSpotNear(room, spawnPos, 3, SPAWN_EXIT_MIN_RANGE);
-  if (!spot) return false;
-  return room.createConstructionSite(spot, STRUCTURE_STORAGE) === OK;
+  for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+    const r = Math.max(Math.abs(dx), Math.abs(dy));
+    if (r > 3) continue;
+    const x = spawnPos.x + dx;
+    const y = spawnPos.y + dy;
+    if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+    if (room.createConstructionSite(x, y, STRUCTURE_STORAGE) === OK) return true;
+  }
+  return false;
 }
 
 export function tryPlaceRoadOnPath(

@@ -29,6 +29,7 @@ import {
   clearSpawnExitRing,
   tryPlaceContainer,
   tryPlaceExtension,
+  tryPlaceHubRoad,
   tryPlaceRoadOnPath,
   tryPlaceStorageNearSpawn,
   tryPlaceTower,
@@ -168,6 +169,8 @@ export function runConstruction(room: Room): void {
 
   const placeRoads = (): boolean => {
     if (!roadSitesAllowed) return false;
+    // Diamond hub first: exit ring + N/S/E/W corridors, then source/controller paths.
+    if (tryPlaceHubRoad(room, spawn.pos)) return true;
     if (preferSourceRoads(policy)) {
       if (tryPlaceSourceRoads(room, spawn)) return true;
       if (tryPlaceControllerRoad(room, spawn)) return true;
