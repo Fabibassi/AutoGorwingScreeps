@@ -1,3 +1,4 @@
+import { shouldBankForBetterMiners } from "../earlyGame/policy";
 import { isIncomeStalled } from "../telemetry";
 
 type HaulTarget =
@@ -251,8 +252,24 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
     const role = Game.creeps[n].memory.role;
     return role === "miner" || role === "harvester";
   }).length;
+  let minerWorkParts = 0;
+  for (const name in Game.creeps) {
+    const c = Game.creeps[name];
+    if (c.memory.role === "miner") minerWorkParts += c.getActiveBodyparts(WORK);
+  }
+  const sourceCount = creep.room.find(FIND_SOURCES).length;
+  const bankForMiners = shouldBankForBetterMiners({
+    energyCapacityAvailable: creep.room.energyCapacityAvailable,
+    minerWorkParts,
+    sourceCount,
+  });
+  // While upgrading miners, keep spawn topped before feeding empty extensions
+  // so energyAvailable can climb to a fat miner body (extensions fill after).
+  const spawnBankFloor = bankForMiners
+    ? HAUL_THRESHOLDS.spawnComfortable
+    : HAUL_THRESHOLDS.spawnUrgent;
   if (
-    (spawnEnergy < HAUL_THRESHOLDS.spawnUrgent || miningCreeps === 0) &&
+    (spawnEnergy < spawnBankFloor || miningCreeps === 0) &&
     spawnFree > 0
   ) {
     return spawn;

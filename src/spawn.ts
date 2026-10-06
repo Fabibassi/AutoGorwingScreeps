@@ -1,8 +1,12 @@
 import {
   bodyForRole,
   desiredCreeps,
+  effectiveMinerMinWork,
   hasNoEconomyCreeps,
+  minerBodyCost,
+  minerTargetWorkParts,
   needsInfrastructureBuilder,
+  shouldBankForBetterMiners,
   shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
   useDedicatedMiners,
@@ -328,6 +332,37 @@ export function recycleExcessMiners(
   return true;
 }
 
+/** Recycle underpowered miners once the room can afford capacity-sized bodies. */
+export function recycleWeakMiners(
+  spawn: StructureSpawn,
+  targetWork: number,
+  energyAvailable: number,
+): boolean {
+  if (spawn.spawning) return false;
+  if (targetWork <= 1) return false;
+  if (energyAvailable < minerBodyCost(targetWork)) return false;
+
+  let best: Creep | null = null;
+  let bestWork = Infinity;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.memory.role !== "miner") continue;
+    const work = creep.getActiveBodyparts(WORK);
+    if (work >= targetWork) continue;
+    if (!best || work < bestWork || (work === bestWork && creep.pos.isNearTo(spawn))) {
+      best = creep;
+      bestWork = work;
+    }
+  }
+  if (!best) return false;
+  if (best.pos.isNearTo(spawn)) {
+    return spawn.recycleCreep(best) === OK;
+  }
+  best.moveTo(spawn);
+  return true;
+}
+
 function clearHaulerRecycling(roomName: string): void {
   markHaulerRecycling(roomName, null);
 }
@@ -451,11 +486,13 @@ export function runSpawn(spawn: StructureSpawn): void {
     // Path length ≈ chebyshev×1.5 (diagonal bias); floor for throughput math.
     haulRangeSum += Math.ceil(spawn.pos.getRangeTo(source) * 1.5);
   }
+  const energyCapacityAvailable = room.energyCapacityAvailable;
   const economy = {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
     baselineIncome: Memory.ags?.baseline?.energyIncomePerTick,
     spawnFillPct,
     energyAvailable,
+    energyCapacityAvailable,
     minerWorkParts,
     minerCount,
     haulRange:
@@ -480,6 +517,9 @@ export function runSpawn(spawn: StructureSpawn): void {
   }
 
   const exp = resolveExperiment(Memory.ags);
+  const minerMinWork = infrastructureDedicated
+    ? effectiveMinerMinWork(exp.minerMinWork, energyCapacityAvailable)
+    : exp.minerMinWork;
   const want = desiredCreeps(
     rcl,
     sourceCount,
@@ -528,7 +568,7 @@ export function runSpawn(spawn: StructureSpawn): void {
   const containerSources = findSourcesWithContainers(room);
   const minerSourceIds = containerSources.map((s) => s.id);
   const nextMinerBody = bodyForRole("miner", energyAvailable, {
-    minerMinWork: exp.minerMinWork,
+    minerMinWork,
   });
   const leadTimeFor = (sourceId: string): number => {
     const src = Game.getObjectById(sourceId as Id<Source>);
@@ -607,6 +647,18 @@ export function runSpawn(spawn: StructureSpawn): void {
   if (recycleExcessMiners(spawn, want, liveCounts, minersDurable)) {
     return;
   }
+  const targetMinerWork = minerTargetWorkParts(energyCapacityAvailable);
+  if (
+    infrastructureDedicated &&
+    shouldBankForBetterMiners({
+      energyCapacityAvailable,
+      minerWorkParts,
+      sourceCount,
+    }) &&
+    recycleWeakMiners(spawn, targetMinerWork, energyAvailable)
+  ) {
+    return;
+  }
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
@@ -667,7 +719,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
     const body = bodyForRole(role, energyAvailable, {
       haulerMaxCost,
-      minerMinWork: exp.minerMinWork,
+      minerMinWork,
     });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;

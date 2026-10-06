@@ -4,10 +4,13 @@ import {
   constructionPriority,
   desiredCreeps,
   EARLY_GAME_THRESHOLDS,
+  effectiveMinerMinWork,
   estimateMiningPerTick,
   extensionQuota,
   haulerCountForMining,
   isSoftLocked,
+  minerTargetWorkParts,
+  shouldBankForBetterMiners,
   shouldBuildContainers,
   shouldBuildRoads,
   shouldBuildStorage,
@@ -55,6 +58,49 @@ describe("haulerCountForMining", () => {
     expect(estimateMiningPerTick(1, 2)).toBe(2);
     expect(haulerCountForMining(2, 2, { haulRange: 20 })).toBe(2);
     expect(haulerCountForMining(2, 10, { haulRange: 20 })).toBe(4);
+  });
+});
+
+describe("miner quality banking", () => {
+  test("target WORK scales with room energy capacity", () => {
+    expect(minerTargetWorkParts(150)).toBe(1);
+    expect(minerTargetWorkParts(300)).toBe(2);
+    expect(minerTargetWorkParts(550)).toBe(5);
+    expect(minerTargetWorkParts(800)).toBe(5);
+  });
+
+  test("banks when capacity allows fat miners but live WORK is thin", () => {
+    expect(
+      shouldBankForBetterMiners({
+        energyCapacityAvailable: 800,
+        minerWorkParts: 2,
+        sourceCount: 2,
+      }),
+    ).toBe(true);
+    expect(
+      shouldBankForBetterMiners({
+        energyCapacityAvailable: 800,
+        minerWorkParts: 10,
+        sourceCount: 2,
+      }),
+    ).toBe(false);
+  });
+
+  test("effective miner min WORK waits for capacity-sized bodies", () => {
+    expect(effectiveMinerMinWork(1, 800)).toBe(5);
+    expect(effectiveMinerMinWork(1, 300)).toBe(2);
+    expect(effectiveMinerMinWork(3, 300)).toBe(3);
+  });
+
+  test("extension push stays lean while banking for better miners", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 6,
+        minerWorkParts: 2,
+        minerCount: 2,
+        energyCapacityAvailable: 800,
+      }),
+    ).toMatchObject({ builder: 2, miner: 2, harvester: 0 });
   });
 });
 

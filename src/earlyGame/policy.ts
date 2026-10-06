@@ -134,6 +134,8 @@ export interface EconomyContext {
   haulRange?: number;
   /** Owned storage exists — haulers dump here, one filler tops spawn/extensions. */
   hasStorage?: boolean;
+  /** Room energyCapacityAvailable (spawn + extensions). */
+  energyCapacityAvailable?: number;
 }
 
 /** Each WORK harvests 2 energy/tick; a source caps at 10 e/t. */
@@ -143,6 +145,44 @@ export function estimateMiningPerTick(
 ): number {
   const sources = Math.max(1, sourceCount);
   return Math.min(Math.max(0, minerWorkParts) * 2, sources * 10);
+}
+
+/** Max WORK a stationary miner should wait for given room energy capacity (1W1M…5W1M). */
+export function minerTargetWorkParts(energyCapacityAvailable: number): number {
+  return Math.max(
+    1,
+    Math.min(5, Math.floor((Math.max(0, energyCapacityAvailable) - 50) / 100)),
+  );
+}
+
+export function minerBodyCost(workParts: number): number {
+  return Math.max(1, workParts) * 100 + 50;
+}
+
+/**
+ * True when the room can afford fat miners but live WORK is still thin —
+ * bank energyAvailable for upgrades instead of flooding builders/tiny miners.
+ */
+export function shouldBankForBetterMiners(opts: {
+  energyCapacityAvailable: number;
+  minerWorkParts: number;
+  sourceCount: number;
+}): boolean {
+  const sources = Math.max(1, opts.sourceCount);
+  const target = minerTargetWorkParts(opts.energyCapacityAvailable);
+  if (target <= 1) return false;
+  return opts.minerWorkParts < sources * target;
+}
+
+/** Spawn waits for capacity-sized miners (never 1W when the room can fund 5W). */
+export function effectiveMinerMinWork(
+  experimentMinWork: number,
+  energyCapacityAvailable: number,
+): number {
+  return Math.max(
+    Math.max(1, experimentMinWork),
+    minerTargetWorkParts(energyCapacityAvailable),
+  );
 }
 
 /**
@@ -508,6 +548,15 @@ export function desiredCreeps(
     haulRange: economy?.haulRange,
   });
 
+  // Only bank when live capacity is known — pure quota tests omit it.
+  const bankForMiners =
+    economy?.energyCapacityAvailable != null &&
+    shouldBankForBetterMiners({
+      energyCapacityAvailable: economy.energyCapacityAvailable,
+      minerWorkParts,
+      sourceCount: sources,
+    });
+
   const quotas: CreepQuotas = {
     harvester: liveMiners === 0 ? Math.max(1, sources) : 0,
     miner: sources,
@@ -528,7 +577,9 @@ export function desiredCreeps(
       : infraBuilder
         ? infraBuilders
         : extensionPush
-          ? Math.max(4, infraBuilders)
+          ? bankForMiners
+            ? Math.min(2, Math.max(1, infraBuilders))
+            : Math.max(4, infraBuilders)
           : 0,
     filler: economy?.hasStorage ? 1 : 0,
   };

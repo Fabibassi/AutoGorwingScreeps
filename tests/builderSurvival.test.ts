@@ -18,6 +18,7 @@ import {
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
   recycleExcessMiners,
+  recycleWeakMiners,
 } from "../src/spawn";
 
 describe("pickBuildSite", () => {
@@ -584,6 +585,57 @@ describe("recycleExcessHaulers", () => {
     );
     expect(ok).toBe(true);
     expect(recycled).toBe(true);
+  });
+});
+
+describe("recycleWeakMiners", () => {
+  test("recycles a 1W miner when the room can afford a 5W body", () => {
+    vi.stubGlobal("OK", 0);
+    vi.stubGlobal("WORK", "work");
+    const miner = {
+      room: { name: "W21N35" },
+      memory: { role: "miner" },
+      pos: { isNearTo: () => true },
+      moveTo: () => 0,
+      getActiveBodyparts: (p: string) => (p === "work" ? 1 : 0),
+    };
+    let recycled = false;
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: { x: 10, y: 10 },
+      recycleCreep: (c: unknown) => {
+        recycled = c === miner;
+        return OK;
+      },
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "miner-1": miner } };
+    expect(
+      recycleWeakMiners(spawn as unknown as StructureSpawn, 5, 550),
+    ).toBe(true);
+    expect(recycled).toBe(true);
+  });
+
+  test("keeps thin miners while energyAvailable cannot fund the upgrade", () => {
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: { x: 10, y: 10 },
+      recycleCreep: () => OK,
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: {
+        "miner-1": {
+          room: { name: "W21N35" },
+          memory: { role: "miner" },
+          pos: { isNearTo: () => true },
+          getActiveBodyparts: () => 1,
+        },
+      },
+    };
+    expect(
+      recycleWeakMiners(spawn as unknown as StructureSpawn, 5, 200),
+    ).toBe(false);
   });
 });
 
