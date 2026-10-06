@@ -157,16 +157,65 @@ export const HUB_ROAD_STAMP: ReadonlyArray<readonly [number, number]> = [
   [-4, 0],
 ];
 
+/** Min Chebyshev gap to walls/sources: 2 walkable tiles (no 1-creep tunnels). */
+export const WALKWAY_BUFFER = 2;
+
+function isWalkwayObstruction(room: Room, x: number, y: number): boolean {
+  if (x < 0 || x > 49 || y < 0 || y > 49) return true;
+  if (!isBuildableTerrain(room, x, y)) return true;
+  const controller = room.controller;
+  if (controller && controller.pos.x === x && controller.pos.y === y) {
+    return true;
+  }
+  const pos = new RoomPosition(x, y, room.name);
+  if (typeof pos.lookFor === "function") {
+    if (typeof LOOK_SOURCES !== "undefined") {
+      if (pos.lookFor(LOOK_SOURCES).length > 0) return true;
+    }
+    if (typeof LOOK_MINERALS !== "undefined") {
+      if (pos.lookFor(LOOK_MINERALS).length > 0) return true;
+    }
+    for (const s of pos.lookFor(LOOK_STRUCTURES)) {
+      if (
+        typeof STRUCTURE_WALL !== "undefined" &&
+        s.structureType === STRUCTURE_WALL
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** True when a blocking hub structure would pinch a 1-tile tunnel against walls. */
+export function tooCloseToWalkwayObstruction(
+  room: Room,
+  x: number,
+  y: number,
+): boolean {
+  for (let dx = -WALKWAY_BUFFER; dx <= WALKWAY_BUFFER; dx++) {
+    for (let dy = -WALKWAY_BUFFER; dy <= WALKWAY_BUFFER; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      if (isWalkwayObstruction(room, x + dx, y + dy)) return true;
+    }
+  }
+  return false;
+}
+
 /** Tile free for a blocking structure (extension/tower/storage). */
 function isFreeBuildTile(
   room: Room,
   x: number,
   y: number,
   spawnPos?: RoomPosition,
+  opts?: { walkwayBuffer?: boolean },
 ): boolean {
   if (x < 1 || x > 48 || y < 1 || y > 48) return false;
   if (!isBuildableTerrain(room, x, y)) return false;
   if (spawnPos && isHubCorridor(spawnPos, x, y)) return false;
+  if (opts?.walkwayBuffer && tooCloseToWalkwayObstruction(room, x, y)) {
+    return false;
+  }
   const pos = new RoomPosition(x, y, room.name);
   if (tileHasBlockingStructure(pos)) return false;
   if (tileHasRoad(pos)) return false;
@@ -356,7 +405,7 @@ export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
   for (const [dx, dy] of HUB_EXTENSION_STAMP) {
     const x = spawnPos.x + dx;
     const y = spawnPos.y + dy;
-    if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+    if (!isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: true })) continue;
     if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
       return true;
     }
@@ -371,7 +420,7 @@ export function tryPlaceTower(room: Room, spawnPos: RoomPosition): boolean {
     if (r > 4) continue;
     const x = spawnPos.x + dx;
     const y = spawnPos.y + dy;
-    if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+    if (!isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: true })) continue;
     if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) return true;
   }
   return false;
@@ -404,7 +453,7 @@ export function tryPlaceStorageNearSpawn(
     if (r > 3) continue;
     const x = spawnPos.x + dx;
     const y = spawnPos.y + dy;
-    if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+    if (!isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: true })) continue;
     if (room.createConstructionSite(x, y, STRUCTURE_STORAGE) === OK) return true;
   }
   return false;

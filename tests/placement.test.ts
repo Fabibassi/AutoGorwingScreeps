@@ -262,6 +262,21 @@ describe("diamond hub stamp", () => {
     );
   });
 
+  test("skips stamp pockets within 2 of a wall so creeps keep a two-tile walkway", () => {
+    // First pocket [2,1] → (27,26). Wall at (27,28) is range 2 → would leave a 1-tile tunnel.
+    const room = makeRoom({ walls: [[27, 28]] });
+    const spawnPos = new RoomPosition(25, 25, room.name);
+    expect(tryPlaceExtension(room, spawnPos)).toBe(true);
+    const sites = room.find(FIND_CONSTRUCTION_SITES) as Array<{
+      pos: RoomPosition;
+    }>;
+    expect(sites).toHaveLength(1);
+    expect(sites[0].pos.x === 27 && sites[0].pos.y === 26).toBe(false);
+    expect(
+      Math.max(Math.abs(sites[0].pos.x - 27), Math.abs(sites[0].pos.y - 28)),
+    ).toBeGreaterThan(2);
+  });
+
   test("clearSpawnExitRing destroys a north-ray extension that would seal the road", () => {
     const room = makeRoom({
       structures: [
