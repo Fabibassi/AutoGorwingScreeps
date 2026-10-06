@@ -1,8 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
+  minWorthwhilePickup,
+  pickHaulerContainer,
   shouldDeliverNow,
   shouldDepositInStorage,
   shouldWithdrawFromStorage,
+  type HaulerPickupCandidate,
+  type HaulerPickupPeer,
 } from "../src/roles/hauler";
 
 describe("shouldDeliverNow", () => {
@@ -141,5 +145,76 @@ describe("storage haul policy", () => {
         storageEnergy: 0,
       }),
     ).toBe(false);
+  });
+});
+
+describe("hauler pickup selection", () => {
+  test("ignores crumb containers when free capacity is large", () => {
+    // 450 free, spawn healthy → need a meaningful pile, not <100.
+    expect(minWorthwhilePickup(450, 0.9)).toBeGreaterThanOrEqual(100);
+    expect(minWorthwhilePickup(450, 0.9)).toBeLessThanOrEqual(450);
+  });
+
+  test("accepts smaller piles when spawn is starving", () => {
+    expect(minWorthwhilePickup(450, 0.2)).toBeLessThanOrEqual(50);
+  });
+
+  test("two haulers split across two rich containers", () => {
+    const containers: HaulerPickupCandidate[] = [
+      { id: "cA", energy: 800, range: 10 },
+      { id: "cB", energy: 700, range: 12 },
+    ];
+    // No sticky targets yet — claim in id order so both creeps agree.
+    const peers: HaulerPickupPeer[] = [
+      { id: "h1", freeCapacity: 450 },
+      { id: "h2", freeCapacity: 450 },
+    ];
+    const pickA = pickHaulerContainer({
+      haulerId: "h1",
+      freeCapacity: 450,
+      spawnFillPct: 0.9,
+      containers,
+      peers,
+    });
+    const pickB = pickHaulerContainer({
+      haulerId: "h2",
+      freeCapacity: 450,
+      spawnFillPct: 0.9,
+      containers,
+      peers,
+    });
+    expect(pickA).toBe("cA");
+    expect(pickB).toBe("cB");
+    expect(pickA).not.toBe(pickB);
+  });
+
+  test("skips thin container when a richer one exists", () => {
+    const containers: HaulerPickupCandidate[] = [
+      { id: "thin", energy: 80, range: 5 },
+      { id: "fat", energy: 900, range: 20 },
+    ];
+    const pick = pickHaulerContainer({
+      haulerId: "h1",
+      freeCapacity: 450,
+      spawnFillPct: 0.9,
+      containers,
+      peers: [],
+    });
+    expect(pick).toBe("fat");
+  });
+
+  test("falls back to best available when all piles are thin", () => {
+    const containers: HaulerPickupCandidate[] = [
+      { id: "a", energy: 40, range: 8 },
+      { id: "b", energy: 90, range: 10 },
+    ];
+    const pick = pickHaulerContainer({
+      haulerId: "h1",
+      freeCapacity: 450,
+      spawnFillPct: 0.9,
+      containers,
+      peers: [],
+    });
+    expect(pick).toBe("b");
   });
 });

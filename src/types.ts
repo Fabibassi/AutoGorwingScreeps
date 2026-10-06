@@ -60,6 +60,20 @@ export interface AgsMemory {
   zombieDebug?: Record<string, unknown>;
   /** spawn.spawning.name → first tick we saw it still alive (zombie grace). */
   zombieSpawnSeen?: Record<string, number>;
+  /**
+   * Road timing experiment (set by sim harness).
+   * after_containers | parallel | after_rcl3 | source_first
+   */
+  roadPolicy?: string;
+  /**
+   * Early-game A/B knob (set by sim harness).
+   * See src/earlyGame/experimentPolicy.ts AB_KNOBS.
+   */
+  abKnob?: string;
+  /** Variant for abKnob (e.g. "0" | "2" | "5" for extensionBootstrap). */
+  abVariant?: string;
+  /** Named profile: baseline (default) | optimized (merged winners). */
+  profile?: string;
 }
 
 declare global {
@@ -67,6 +81,8 @@ declare global {
     role?: string;
     /** Assigned energy source for dedicated miners. */
     sourceId?: Id<Source>;
+    /** Sticky container/storage/drop id while a hauler is collecting. */
+    pickupId?: Id<StructureContainer | StructureStorage | StructureExtension | Resource>;
   }
   interface Memory {
     ags?: AgsMemory;

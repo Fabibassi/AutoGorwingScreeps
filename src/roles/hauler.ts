@@ -45,6 +45,104 @@ export function shouldDeliverNow(
   return ctx.spawnFillPct < 0.85 || ctx.extensionsNeedingEnergy > 0;
 }
 
+export interface HaulerPickupCandidate {
+  id: string;
+  energy: number;
+  range: number;
+}
+
+export interface HaulerPickupPeer {
+  id: string;
+  freeCapacity: number;
+  /** Container/drop this peer is already heading to (memory or inferred). */
+  targetId?: string;
+  rangeToTarget?: number;
+}
+
+/**
+ * Don't walk across the room for crumbs when CARRY is large.
+ * Spawn-starving haulers accept smaller piles.
+ */
+export function minWorthwhilePickup(
+  freeCapacity: number,
+  spawnFillPct: number,
+): number {
+  if (freeCapacity <= 0) return 0;
+  if (spawnFillPct < 0.5) return Math.min(freeCapacity, 25);
+  // At least 100 or 25% of free space (fat haulers ignore <100 containers).
+  return Math.min(freeCapacity, Math.max(100, Math.floor(freeCapacity * 0.25)));
+}
+
+/**
+ * Pick a pickup container: prefer piles that cover free capacity, split peers
+ * so two haulers don't both race the same thin source.
+ *
+ * Deterministic: unassigned haulers (no sticky target) claim in id order so
+ * every creep computes the same split without shared memory writes.
+ */
+export function pickHaulerContainer(opts: {
+  haulerId: string;
+  freeCapacity: number;
+  spawnFillPct: number;
+  containers: HaulerPickupCandidate[];
+  peers: HaulerPickupPeer[];
+}): string | null {
+  if (opts.containers.length === 0) return null;
+
+  const reserved = new Map<string, number>();
+  for (const peer of opts.peers) {
+    if (!peer.targetId || peer.id === opts.haulerId) continue;
+    reserved.set(
+      peer.targetId,
+      (reserved.get(peer.targetId) ?? 0) + Math.max(0, peer.freeCapacity),
+    );
+  }
+
+  const unassigned = [
+    { id: opts.haulerId, freeCapacity: opts.freeCapacity },
+    ...opts.peers
+      .filter((p) => p.id !== opts.haulerId && !p.targetId)
+      .map((p) => ({ id: p.id, freeCapacity: p.freeCapacity })),
+  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  const pickFor = (
+    freeCapacity: number,
+    spawnFillPct: number,
+    enforceMin: boolean,
+  ): string | null => {
+    const minEnergy = minWorthwhilePickup(freeCapacity, spawnFillPct);
+    let bestId: string | null = null;
+    let bestScore = -Infinity;
+    for (const c of opts.containers) {
+      const available = c.energy - (reserved.get(c.id) ?? 0);
+      if (available <= 0) continue;
+      if (enforceMin && available < minEnergy) continue;
+      const score = available / (c.range + 1);
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = c.id;
+      }
+    }
+    return bestId;
+  };
+
+  for (const claim of unassigned) {
+    const chosen =
+      pickFor(claim.freeCapacity, opts.spawnFillPct, true) ??
+      pickFor(claim.freeCapacity, opts.spawnFillPct, false);
+    if (!chosen) {
+      if (claim.id === opts.haulerId) return null;
+      continue;
+    }
+    if (claim.id === opts.haulerId) return chosen;
+    reserved.set(
+      chosen,
+      (reserved.get(chosen) ?? 0) + Math.max(0, claim.freeCapacity),
+    );
+  }
+  return null;
+}
+
 function haulContext(creep: Creep): StorageHaulContext {
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
   const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
@@ -181,6 +279,7 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     return storage;
   }
 
+  const freeCapacity = creep.store.getFreeCapacity(RESOURCE_ENERGY);
   const controller = creep.room.controller;
   const containers = creep.room.find(FIND_STRUCTURES, {
     filter: (s): s is StructureContainer =>
@@ -189,7 +288,58 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
       (controller === undefined || s.pos.getRangeTo(controller) > 2),
   });
   if (containers.length > 0) {
-    return creep.pos.findClosestByPath(containers);
+    const peers: HaulerPickupPeer[] = [];
+    for (const name in Game.creeps) {
+      const other = Game.creeps[name];
+      if (other.id === creep.id) continue;
+      if (other.room.name !== creep.room.name) continue;
+      if (other.memory.role !== "hauler") continue;
+      if ((other.store.getFreeCapacity(RESOURCE_ENERGY) ?? 0) <= 0) continue;
+      const targetId = other.memory.pickupId;
+      peers.push({
+        id: other.id,
+        freeCapacity: other.store.getFreeCapacity(RESOURCE_ENERGY) ?? 0,
+        targetId,
+        rangeToTarget: targetId
+          ? other.pos.getRangeTo(
+              (Game.getObjectById(targetId) as RoomObject | null)?.pos ??
+                other.pos,
+            )
+          : undefined,
+      });
+    }
+
+    const candidates: HaulerPickupCandidate[] = containers.map((c) => ({
+      id: c.id,
+      energy: c.store[RESOURCE_ENERGY] ?? 0,
+      range: creep.pos.getRangeTo(c),
+    }));
+
+    // Honour sticky target if it still has worthwhile energy.
+    const sticky = creep.memory.pickupId;
+    if (sticky) {
+      const still = containers.find((c) => c.id === sticky);
+      const minE = minWorthwhilePickup(freeCapacity, ctx.spawnFillPct);
+      if (still && (still.store[RESOURCE_ENERGY] ?? 0) >= minE) {
+        return still;
+      }
+      delete creep.memory.pickupId;
+    }
+
+    const pickedId = pickHaulerContainer({
+      haulerId: creep.id,
+      freeCapacity,
+      spawnFillPct: ctx.spawnFillPct,
+      containers: candidates,
+      peers,
+    });
+    if (pickedId) {
+      const picked = containers.find((c) => c.id === pickedId) ?? null;
+      if (picked) {
+        creep.memory.pickupId = picked.id;
+        return picked;
+      }
+    }
   }
 
   // Soft-lock recovery: pick up small piles when spawn cannot afford WORK+MOVE.
@@ -218,7 +368,10 @@ export function runHauler(creep: Creep): number {
 
   if (!shouldDeliverNow(carried, freeCapacity, ctx)) {
     const source = findEnergySource(creep);
-    if (!source) return 0;
+    if (!source) {
+      delete creep.memory.pickupId;
+      return 0;
+    }
     if (source instanceof Resource) {
       if (creep.pickup(source) === ERR_NOT_IN_RANGE) {
         creep.moveTo(source);
@@ -231,6 +384,7 @@ export function runHauler(creep: Creep): number {
     return 0;
   }
 
+  delete creep.memory.pickupId;
   const target = findEnergyTarget(creep);
   if (!target) return 0;
 
