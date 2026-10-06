@@ -8,6 +8,11 @@ import {
   useDedicatedMiners,
   type CreepQuotas,
 } from "./earlyGame";
+import {
+  durableMinerCount,
+  minerReplacementLeadTime,
+  sourceIdForReplacementMiner,
+} from "./earlyGame/minerHandoff";
 import { resolveExperiment } from "./earlyGame/experimentPolicy";
 import {
   countCreepsByRole,
@@ -418,6 +423,37 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (!reassignUpgraderToExtensionBuilder(room, want, mid)) break;
   }
   const liveCounts = countCreepsByRole();
+  const minerSnapshots: Array<{ sourceId?: string; ticksToLive?: number }> = [];
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
+    minerSnapshots.push({
+      sourceId: creep.memory.sourceId,
+      ticksToLive: creep.ticksToLive,
+    });
+  }
+  const containerSources = findSourcesWithContainers(room);
+  const minerSourceIds = containerSources.map((s) => s.id);
+  const nextMinerBody = bodyForRole("miner", energyAvailable, {
+    minerMinWork: exp.minerMinWork,
+  });
+  const leadTimeFor = (sourceId: string): number => {
+    const src = Game.getObjectById(sourceId as Id<Source>);
+    const range = src ? spawn.pos.getRangeTo(src) : (economy.haulRange ?? 20);
+    const workParts = nextMinerBody.filter((p) => p === "work").length;
+    const moveParts = nextMinerBody.filter((p) => p === "move").length;
+    return minerReplacementLeadTime({
+      bodyParts: nextMinerBody.length || 6,
+      workParts: workParts || 5,
+      moveParts: moveParts || 1,
+      range,
+    });
+  };
+  const minersDurable = durableMinerCount(
+    minerSnapshots,
+    minerSourceIds,
+    leadTimeFor,
+  );
 
   // Any spawn.spawning (active OR sticky with live creep) → do not spawnCreep.
   if (spawn.spawning) {
@@ -468,7 +504,8 @@ export function runSpawn(spawn: StructureSpawn): void {
       : exp.haulerMaxCost;
 
   for (const role of spawnOrder) {
-    if (liveCounts[role] >= want[role]) continue;
+    const filled = role === "miner" ? minersDurable : liveCounts[role];
+    if (filled >= want[role]) continue;
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
     // Miner gap: do not spend the bank on hauler@100 / upgrader / builder —
@@ -489,17 +526,12 @@ export function runSpawn(spawn: StructureSpawn): void {
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
-      // Prefer finished container sources so early miners do not sit on bare drops.
-      const sources = findSourcesWithContainers(room);
-      const assigned = new Set<string>();
-      for (const n in Game.creeps) {
-        const c = Game.creeps[n];
-        if (c.memory.role === "miner" && c.memory.sourceId) {
-          assigned.add(c.memory.sourceId);
-        }
-      }
-      const free = sources.find((s) => !assigned.has(s.id));
-      if (free) memory.sourceId = free.id;
+      const replacementId = sourceIdForReplacementMiner(
+        minerSnapshots,
+        minerSourceIds,
+        leadTimeFor,
+      );
+      if (replacementId) memory.sourceId = replacementId as Id<Source>;
     }
     const result = spawn.spawnCreep(body, name, { memory });
     if (result !== OK && Memory.ags) {

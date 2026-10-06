@@ -1,3 +1,5 @@
+import { shouldWaitForIncumbentMiner } from "../earlyGame/minerHandoff";
+
 /** Step off a saturated source so haulers can drain and harvesters can recover income. */
 function retreatFromFullSource(creep: Creep): void {
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
@@ -26,8 +28,20 @@ export function runMiner(creep: Creep): number {
     creep.memory.sourceId = source.id;
   }
 
-  // Sources are not walkable — mine from an adjacent tile (often the container).
   if (creep.pos.isNearTo(source)) {
+    const peersNearSource: Array<{ name: string; ticksToLive?: number }> = [];
+    for (const name in Game.creeps ?? {}) {
+      const other = Game.creeps[name];
+      if (other.name === creep.name) continue;
+      if (other.memory.role !== "miner") continue;
+      if (other.memory.sourceId !== source.id) continue;
+      if (!other.pos.isNearTo(source)) continue;
+      peersNearSource.push({ name: other.name, ticksToLive: other.ticksToLive });
+    }
+    if (shouldWaitForIncumbentMiner(creep, peersNearSource)) {
+      return 0;
+    }
+
     const code = creep.harvest(source);
     if (code === OK) {
       return creep.getActiveBodyparts(WORK) * 2;

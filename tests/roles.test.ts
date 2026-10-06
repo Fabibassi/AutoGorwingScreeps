@@ -282,6 +282,40 @@ describe("runMiner", () => {
 
     expect(runMiner(creep)).toBe(6);
   });
+
+  test("incoming replacement waits instead of harvesting while incumbent is on the source", () => {
+    const harvest = vi.fn(() => 0);
+    const source = {
+      id: "s1" as Id<Source>,
+      pos: { x: 10, y: 10, roomName: "W1N1" },
+    };
+    const creep = {
+      name: "miner-new",
+      ticksToLive: 1490,
+      memory: { sourceId: "s1" as Id<Source>, role: "miner" },
+      pos: { isNearTo: () => true },
+      harvest,
+      getActiveBodyparts: () => 5,
+      moveTo: vi.fn(),
+      room: { find: () => [] },
+    } as unknown as Creep;
+
+    vi.stubGlobal("Game", {
+      getObjectById: () => source,
+      creeps: {
+        "miner-new": creep,
+        "miner-old": {
+          name: "miner-old",
+          ticksToLive: 40,
+          memory: { sourceId: "s1", role: "miner" },
+          pos: { isNearTo: () => true },
+        },
+      },
+    });
+
+    expect(runMiner(creep)).toBe(0);
+    expect(harvest).not.toHaveBeenCalled();
+  });
 });
 
 describe("runCreep", () => {
