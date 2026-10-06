@@ -2,6 +2,7 @@ import {
   bodyForRole,
   desiredCreeps,
   hasNoEconomyCreeps,
+  isIncomeRecoveryMode,
   needsInfrastructureBuilder,
   shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
@@ -615,7 +616,12 @@ export function runSpawn(spawn: StructureSpawn): void {
     economy,
     liveCounts,
     energyAvailable,
-    { infrastructurePush, buildersBelowQuota, economyFloorMet },
+    {
+      infrastructurePush,
+      buildersBelowQuota,
+      economyFloorMet,
+      incomeRecovery: infrastructurePush && isIncomeRecoveryMode(economy),
+    },
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
   // Experiment haulerCap (thin) also caps when economy is healthy.
