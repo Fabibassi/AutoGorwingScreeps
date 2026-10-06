@@ -301,6 +301,7 @@ describe("runCreep", () => {
         "harvester",
         "miner",
         "hauler",
+        "filler",
         "builder",
         "upgrader",
       ]),

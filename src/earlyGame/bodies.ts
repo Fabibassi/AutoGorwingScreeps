@@ -91,8 +91,9 @@ export function bodyForRole(
         minWork: opts?.minerMinWork,
       });
     case "hauler":
+    case "filler":
       return buildHaulerBody(energyAvailable, {
-        maxCost: opts?.haulerMaxCost,
+        maxCost: role === "filler" ? 300 : opts?.haulerMaxCost,
       });
     case "builder":
     case "harvester":

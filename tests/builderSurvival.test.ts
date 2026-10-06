@@ -184,6 +184,7 @@ describe("reassignForEconomySurvival", () => {
         hauler: 0,
         upgrader: 0,
         builder: 1,
+      filler: 0,
       },
     );
     expect(builder.memory.role).toBe("harvester");
@@ -203,6 +204,7 @@ describe("reassignForEconomySurvival", () => {
         hauler: 1,
         upgrader: 0,
         builder: 2,
+      filler: 0,
       },
     );
     expect(a.memory.role).toBe("harvester");
@@ -227,6 +229,7 @@ describe("reassignUpgraderToExtensionBuilder", () => {
         hauler: 2,
         upgrader: 0,
         builder: 4,
+      filler: 0,
       },
       {
         harvester: 0,
@@ -234,6 +237,7 @@ describe("reassignUpgraderToExtensionBuilder", () => {
         hauler: 2,
         upgrader: 2,
         builder: 2,
+      filler: 0,
       },
     );
     expect(ok).toBe(true);
@@ -258,6 +262,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
         hauler: 0,
         upgrader: 0,
         builder: 2,
+      filler: 0,
       },
       {
         harvester: 3,
@@ -265,6 +270,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
         hauler: 0,
         upgrader: 0,
         builder: 1,
+      filler: 0,
       },
       true,
       2,
@@ -291,6 +297,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
           hauler: 0,
           upgrader: 0,
           builder: 2,
+        filler: 0,
         },
         {
           harvester: 2,
@@ -298,6 +305,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
           hauler: 0,
           upgrader: 0,
           builder: 1,
+        filler: 0,
         },
         true,
         2,
@@ -322,6 +330,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
         hauler: 1,
         upgrader: 0,
         builder: 2,
+      filler: 0,
       },
       {
         harvester: 2,
@@ -329,6 +338,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
         hauler: 1,
         upgrader: 0,
         builder: 1,
+      filler: 0,
       },
       true,
       2,
@@ -375,8 +385,8 @@ describe("reassignSpareHarvesterToMiner", () => {
 
     const ok = reassignSpareHarvesterToMiner(
       room,
-      { harvester: 0, miner: 2, hauler: 2, upgrader: 0, builder: 1 },
-      { harvester: 1, miner: 1, hauler: 2, upgrader: 0, builder: 1 },
+      { harvester: 0, miner: 2, hauler: 2, upgrader: 0, builder: 1, filler: 0 },
+      { harvester: 1, miner: 1, hauler: 2, upgrader: 0, builder: 1, filler: 0 },
     );
     expect(ok).toBe(true);
     expect(harvester.memory.role).toBe("miner");
@@ -418,6 +428,7 @@ describe("recycleExcessHaulers", () => {
         hauler: 0,
         upgrader: 0,
         builder: 2,
+      filler: 0,
       },
       {
         harvester: 3,
@@ -425,6 +436,7 @@ describe("recycleExcessHaulers", () => {
         hauler: 2,
         upgrader: 0,
         builder: 1,
+      filler: 0,
       },
       true,
     );
@@ -449,6 +461,7 @@ describe("recycleExcessHaulers", () => {
           hauler: 2,
           upgrader: 0,
           builder: 2,
+        filler: 0,
         },
         {
           harvester: 3,
@@ -456,6 +469,7 @@ describe("recycleExcessHaulers", () => {
           hauler: 2,
           upgrader: 0,
           builder: 1,
+        filler: 0,
         },
         true,
       ),

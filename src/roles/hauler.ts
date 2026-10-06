@@ -57,7 +57,17 @@ export function shouldDepositInStorage(ctx: StorageHaulContext): boolean {
   return true;
 }
 
-/** Pull from storage when spawn needs absolute energy (never % of storage). */
+/** Haulers dump the whole CARRY into storage; a filler tops spawn/extensions. */
+export function shouldDumpToStorage(
+  ctx: StorageHaulContext,
+  fillerExists: boolean,
+): boolean {
+  if (!ctx.storageExists) return false;
+  if (ctx.spawnEnergy < HAUL_THRESHOLDS.spawnUrgent) return false;
+  // Without a filler, keep feeding spawn/extensions ourselves.
+  if (!fillerExists) return shouldDepositInStorage(ctx);
+  return true;
+}
 export function shouldWithdrawFromStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists || (ctx.storageEnergy ?? 0) <= 0) return false;
   if (!spawnIsComfortable(ctx)) return true;
@@ -245,6 +255,19 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
     return spawn;
   }
 
+  const fillerExists = Object.keys(Game.creeps).some(
+    (n) => Game.creeps[n].memory.role === "filler",
+  );
+  const ctx = haulContext(creep);
+  const storage = creep.room.storage;
+  if (
+    storage &&
+    storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0 &&
+    shouldDumpToStorage(ctx, fillerExists)
+  ) {
+    return storage;
+  }
+
   if (extensions.length > 0) {
     const closest =
       creep.pos.findClosestByPath(extensions) ??
@@ -279,8 +302,6 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
   )[0];
   if (controllerContainer) return controllerContainer;
 
-  const ctx = haulContext(creep);
-  const storage = creep.room.storage;
   if (
     storage &&
     storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0 &&

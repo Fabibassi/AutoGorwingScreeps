@@ -364,6 +364,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       sourceList.length > 0
         ? Math.max(8, Math.round(haulRangeSum / sourceList.length))
         : 20,
+    hasStorage: room.storage !== undefined,
   };
   const infrastructureDedicated = useDedicatedMiners(
     rcl,
@@ -475,7 +476,8 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (
       minersBelowQuota &&
       role !== "miner" &&
-      role !== "harvester"
+      role !== "harvester" &&
+      role !== "filler"
     ) {
       continue;
     }

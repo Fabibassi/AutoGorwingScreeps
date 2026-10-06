@@ -1,4 +1,5 @@
 import { runBuilder } from "./builder";
+import { runFiller } from "./filler";
 import { runHarvester } from "./harvester";
 import { runHauler } from "./hauler";
 import { runMiner } from "./miner";
@@ -13,6 +14,10 @@ const roleRunners: Record<string, RoleRunner> = {
   miner: runMiner,
   hauler: (creep) => {
     runHauler(creep);
+    return 0;
+  },
+  filler: (creep) => {
+    runFiller(creep);
     return 0;
   },
   builder: (creep) => {

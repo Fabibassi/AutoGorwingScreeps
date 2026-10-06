@@ -9,6 +9,7 @@ describe("desiredCreeps (spawn re-export)", () => {
       hauler: 0,
       upgrader: 1,
       builder: 0,
+      filler: 0,
     });
   });
 

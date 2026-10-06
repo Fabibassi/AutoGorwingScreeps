@@ -1,5 +1,7 @@
 import {
   desiredCreeps,
+  experimentTag,
+  resolveExperiment,
   spawnPriorityOrder,
   useDedicatedMiners,
   type CreepQuotas,
@@ -73,6 +75,7 @@ export function buildPlanSnapshot(
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
     spawnFillPct,
     energyAvailable: room.energyAvailable,
+    hasStorage: room.storage !== undefined,
   };
   const infrastructureDedicated = useDedicatedMiners(
     rcl,
@@ -85,6 +88,7 @@ export function buildPlanSnapshot(
     containersAtSources,
     hasConstructionSites,
     economy,
+    resolveExperiment(ags),
   );
   const counts = countCreepsByRole();
   const spawnOrder = spawnPriorityOrder(
@@ -125,6 +129,14 @@ export function formatPlanStatus(
   );
 }
 
+export function formatPlanStatusWithExperiment(
+  snapshot: PlanSnapshot,
+  ags: AgsMemory | undefined,
+  healthSummary?: string,
+): string {
+  return `${formatPlanStatus(snapshot, healthSummary)} | ${experimentTag(ags)}`;
+}
+
 export function logPlanStatusIfDue(
   room: Room | undefined,
   ags: AgsMemory | undefined,
@@ -133,5 +145,11 @@ export function logPlanStatusIfDue(
   if (!room || Game.time % interval !== 0) return;
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   const healthSummary = ags?.health ? formatHealthCheck(ags.health) : undefined;
-  console.log(formatPlanStatus(buildPlanSnapshot(room, spawn, ags), healthSummary));
+  console.log(
+    formatPlanStatusWithExperiment(
+      buildPlanSnapshot(room, spawn, ags),
+      ags,
+      healthSummary,
+    ),
+  );
 }

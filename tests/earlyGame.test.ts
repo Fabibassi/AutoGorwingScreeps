@@ -66,6 +66,7 @@ describe("desiredCreeps", () => {
       hauler: 0,
       upgrader: 1,
       builder: 0,
+      filler: 0,
     });
   });
 
@@ -86,6 +87,7 @@ describe("desiredCreeps", () => {
       hauler: 0,
       upgrader: 2,
       builder: 0,
+      filler: 0,
     });
   });
 
@@ -103,6 +105,7 @@ describe("desiredCreeps", () => {
       hauler: 1,
       upgrader: 0,
       builder: 4,
+      filler: 0,
     });
   });
 
@@ -113,6 +116,7 @@ describe("desiredCreeps", () => {
       hauler: 0,
       upgrader: 1,
       builder: 4,
+      filler: 0,
     });
   });
 
@@ -123,6 +127,7 @@ describe("desiredCreeps", () => {
       hauler: 1,
       upgrader: 2,
       builder: 0,
+      filler: 0,
     });
   });
 
@@ -139,6 +144,7 @@ describe("desiredCreeps", () => {
       hauler: 1,
       upgrader: 0,
       builder: 4,
+      filler: 0,
     });
   });
 
@@ -149,6 +155,7 @@ describe("desiredCreeps", () => {
       hauler: 2,
       upgrader: 3,
       builder: 0,
+      filler: 0,
     });
   });
 
@@ -160,6 +167,7 @@ describe("desiredCreeps", () => {
       upgrader: 3,
       // Overnight winner: builderInfra=4 (was 2).
       builder: 4,
+      filler: 0,
     });
   });
 
@@ -175,6 +183,7 @@ describe("desiredCreeps", () => {
       hauler: 2,
       upgrader: 3,
       builder: 2,
+      filler: 0,
     });
   });
 
@@ -185,7 +194,14 @@ describe("desiredCreeps", () => {
       hauler: 2,
       upgrader: 0,
       builder: 4,
+      filler: 0,
     });
+  });
+
+  test("wants one filler once storage exists", () => {
+    expect(
+      desiredCreeps(4, 2, 2, false, { energyIncomePerTick: 6, hasStorage: true }),
+    ).toMatchObject({ filler: 1 });
   });
 
   test("rcl2 zero income keeps haulers to drain trapped container energy", () => {
@@ -197,6 +213,7 @@ describe("desiredCreeps", () => {
       hauler: 2,
       upgrader: 1,
       builder: 0,
+      filler: 0,
     });
   });
 
@@ -265,7 +282,7 @@ describe("spawnPriorityOrder", () => {
         { harvester: 0, miner: 0 },
         316,
       ),
-    ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
+    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
   });
 
   test("miner before hauler when dedicated mining has zero miners", () => {
@@ -291,6 +308,7 @@ describe("spawnPriorityOrder", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 5, spawnFillPct: 0.8 })).toEqual([
       "hauler",
       "miner",
+      "filler",
       "harvester",
       "upgrader",
       "builder",
@@ -301,6 +319,7 @@ describe("spawnPriorityOrder", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 })).toEqual([
       "hauler",
       "miner",
+      "filler",
       "harvester",
       "upgrader",
       "builder",
@@ -310,6 +329,7 @@ describe("spawnPriorityOrder", () => {
   test("hauler first when spawn is nearly empty during zero-income fallback", () => {
     expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.05 })).toEqual([
       "hauler",
+      "filler",
       "harvester",
       "upgrader",
       "builder",
@@ -321,6 +341,7 @@ describe("spawnPriorityOrder", () => {
       "harvester",
       "hauler",
       "miner",
+      "filler",
       "upgrader",
       "builder",
     ]);
@@ -334,7 +355,7 @@ describe("spawnPriorityOrder", () => {
         { harvester: 0, miner: 0 },
         50,
       ),
-    ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
+    ).toEqual(["hauler", "harvester", "miner", "filler", "upgrader", "builder"]);
   });
 
   test("harvester first when empty crew but spawn can afford a worker", () => {
@@ -345,7 +366,7 @@ describe("spawnPriorityOrder", () => {
         { harvester: 0, miner: 0 },
         300,
       ),
-    ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
+    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
   });
 
   test("harvester first when economy creeps are zero but income positive", () => {
@@ -355,7 +376,7 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 0.8, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
       ),
-    ).toEqual(["harvester", "miner", "hauler", "upgrader", "builder"]);
+    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
   });
 
   test("hauler first when soft-locked below bootstrap energy (#36)", () => {
@@ -366,7 +387,7 @@ describe("spawnPriorityOrder", () => {
         { harvester: 0, miner: 0 },
         81,
       ),
-    ).toEqual(["hauler", "harvester", "miner", "upgrader", "builder"]);
+    ).toEqual(["hauler", "harvester", "miner", "filler", "upgrader", "builder"]);
   });
 
   test("builder before upgrader when source-container infrastructure push", () => {
@@ -374,7 +395,7 @@ describe("spawnPriorityOrder", () => {
       spawnPriorityOrder(false, { energyIncomePerTick: 2.7, spawnFillPct: 0.27 }, undefined, undefined, {
         infrastructurePush: true,
       }),
-    ).toEqual(["hauler", "miner", "harvester", "builder", "upgrader"]);
+    ).toEqual(["hauler", "miner", "filler", "harvester", "builder", "upgrader"]);
   });
 
   test("builder before spare harvester when infra builders short and economy floor met", () => {
@@ -390,7 +411,7 @@ describe("spawnPriorityOrder", () => {
           economyFloorMet: true,
         },
       ),
-    ).toEqual(["hauler", "miner", "builder", "harvester", "upgrader"]);
+    ).toEqual(["hauler", "miner", "filler", "builder", "harvester", "upgrader"]);
   });
 });
 
@@ -515,6 +536,7 @@ describe("desiredCreeps extension push under saturated zero-income", () => {
       hauler: 2,
       upgrader: 0,
       builder: 4,
+      filler: 0,
     });
   });
 });
@@ -547,6 +569,10 @@ describe("bodyForRole", () => {
     expect(body.filter((p) => p === "carry").length).toBe(
       body.filter((p) => p === "move").length,
     );
+  });
+
+  test("filler is a small hub hauler capped at 300", () => {
+    expect(bodyForRole("filler", 800)).toEqual(bodyForRole("hauler", 300));
   });
 
   test("worker refuses WORK+MOVE bootstrap (carry-less creeps cannot refill spawn)", () => {

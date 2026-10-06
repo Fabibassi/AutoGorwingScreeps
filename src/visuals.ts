@@ -3,6 +3,7 @@ export const ROLE_ICONS: Readonly<Record<string, string>> = {
   harvester: "⛏",
   miner: "⛏",
   hauler: "📦",
+  filler: "⛽",
   builder: "🔨",
   upgrader: "⚡",
 };

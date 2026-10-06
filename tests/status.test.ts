@@ -20,6 +20,7 @@ const baseSnapshot: PlanSnapshot = {
     hauler: 1,
     upgrader: 1,
     builder: 0,
+  filler: 0,
   },
   want: {
     harvester: 0,
@@ -27,6 +28,7 @@ const baseSnapshot: PlanSnapshot = {
     hauler: 2,
     upgrader: 2,
     builder: 1,
+  filler: 0,
   },
   priority: { kind: "spawn", role: "hauler" },
   energyIncomePerTick: 8.5,
@@ -71,6 +73,7 @@ describe("inferSpawnPriority", () => {
       hauler: 1,
       upgrader: 2,
       builder: 0,
+      filler: 0,
     };
     const want = {
       harvester: 1,
@@ -78,6 +81,7 @@ describe("inferSpawnPriority", () => {
       hauler: 2,
       upgrader: 2,
       builder: 0,
+      filler: 0,
     };
     const order = spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.5 });
     expect(inferSpawnPriority(undefined, counts, want, order)).toEqual({
@@ -93,6 +97,7 @@ describe("inferSpawnPriority", () => {
       hauler: 1,
       upgrader: 2,
       builder: 0,
+      filler: 0,
     };
     const want = {
       harvester: 0,
@@ -100,6 +105,7 @@ describe("inferSpawnPriority", () => {
       hauler: 2,
       upgrader: 2,
       builder: 0,
+      filler: 0,
     };
     expect(inferSpawnPriority(undefined, counts, want, DEFAULT_SPAWN_ORDER)).toEqual({
       kind: "spawn",

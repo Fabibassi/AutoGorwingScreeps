@@ -7,6 +7,7 @@ export function countCreepsByRole(): CreepQuotas {
     hauler: 0,
     upgrader: 0,
     builder: 0,
+    filler: 0,
   };
   for (const name in Game.creeps) {
     const role = Game.creeps[name].memory.role as keyof CreepQuotas | undefined;

@@ -5,6 +5,7 @@ import {
   pickHaulerContainer,
   shouldDeliverNow,
   shouldDepositInStorage,
+  shouldDumpToStorage,
   shouldWithdrawFromStorage,
   type HaulerPickupCandidate,
   type HaulerPickupPeer,
@@ -153,6 +154,33 @@ describe("storage haul policy (absolute spawn energy)", () => {
         extensionsNeedingEnergy: 0,
         storageExists: true,
       }),
+    ).toBe(false);
+  });
+
+  test("dumps whole load to storage when a filler exists and spawn is not urgent", () => {
+    const ctx = {
+      energyIncomePerTick: 5,
+      spawnEnergy: 200,
+      spawnCapacity: 300,
+      extensionsNeedingEnergy: 8,
+      storageExists: true,
+    };
+    expect(shouldDumpToStorage(ctx, true)).toBe(true);
+    expect(shouldDumpToStorage(ctx, false)).toBe(false);
+  });
+
+  test("still fills spawn when urgent even if a filler exists", () => {
+    expect(
+      shouldDumpToStorage(
+        {
+          energyIncomePerTick: 5,
+          spawnEnergy: 80,
+          spawnCapacity: 300,
+          extensionsNeedingEnergy: 0,
+          storageExists: true,
+        },
+        true,
+      ),
     ).toBe(false);
   });
 

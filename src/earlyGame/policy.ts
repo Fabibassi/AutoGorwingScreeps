@@ -21,6 +21,8 @@ export interface CreepQuotas {
   hauler: number;
   upgrader: number;
   builder: number;
+  /** Hub creep: storage → spawn/extensions (0 until storage exists). */
+  filler: number;
 }
 
 export const EARLY_GAME_THRESHOLDS = {
@@ -130,6 +132,8 @@ export interface EconomyContext {
   minerCount?: number;
   /** Approx one-way spawn↔source tiles for hauler throughput. */
   haulRange?: number;
+  /** Owned storage exists — haulers dump here, one filler tops spawn/extensions. */
+  hasStorage?: boolean;
 }
 
 /** Each WORK harvests 2 energy/tick; a source caps at 10 e/t. */
@@ -240,9 +244,29 @@ export function effectiveDedicatedMiners(
   return dedicated && !shouldFallbackToMobileHarvest(dedicated, economy);
 }
 
+function withFillerSlot(
+  order: Array<keyof CreepQuotas>,
+): Array<keyof CreepQuotas> {
+  if (order.includes("filler")) return order;
+  const next = order.slice();
+  const minerIdx = next.indexOf("miner");
+  if (minerIdx >= 0) {
+    next.splice(minerIdx + 1, 0, "filler");
+    return next;
+  }
+  const haulerIdx = next.indexOf("hauler");
+  if (haulerIdx >= 0) {
+    next.splice(haulerIdx + 1, 0, "filler");
+    return next;
+  }
+  next.push("filler");
+  return next;
+}
+
 export const DEFAULT_SPAWN_ORDER: Array<keyof CreepQuotas> = [
   "hauler",
   "miner",
+  "filler",
   "harvester",
   "upgrader",
   "builder",
@@ -332,7 +356,7 @@ export function spawnPriorityOrder(
       order = prioritizeBuilderOverSpareHarvester(order);
     }
   }
-  return order;
+  return withFillerSlot(order);
 }
 
 export function desiredCreeps(
@@ -347,14 +371,19 @@ export function desiredCreeps(
   const sources = Math.max(1, sourceCount);
   const infraBuilders = Math.max(1, exp.builderInfra);
 
+  const fill = (q: Omit<CreepQuotas, "filler">): CreepQuotas => ({
+    ...q,
+    filler: economy?.hasStorage ? 1 : 0,
+  });
+
   if (rcl <= 1) {
-    return {
+    return fill({
       harvester: 2,
       miner: 0,
       hauler: 0,
       upgrader: 1,
       builder: 0,
-    };
+    });
   }
 
   const dedicatedMiners = useDedicatedMiners(rcl, containersAtSources, sources);
@@ -367,14 +396,14 @@ export function desiredCreeps(
   );
 
   if (shouldFallbackToMobileHarvest(dedicatedMiners, economy)) {
-    return {
+    return fill({
       harvester: sources + 1,
       miner: 0,
       // Static mining always had source containers; haulers unlock energy for spawn.
       hauler: sources,
       upgrader: 1,
       builder: infraBuilder ? infraBuilders : 0,
-    };
+    });
   }
 
   const depressed = isEconomyDepressed(economy);
@@ -386,7 +415,7 @@ export function desiredCreeps(
     // Keep mobile harvesters only for sources still missing a container.
     if (readyContainers > 0) {
       const uncovered = Math.max(0, sources - readyContainers);
-      return {
+      return fill({
         // During container push, skip the spare H — convert capacity into builder #2.
         harvester: uncovered <= 0 ? 0 : infraBuilder ? uncovered : uncovered + 1,
         miner: readyContainers,
@@ -403,9 +432,9 @@ export function desiredCreeps(
           : hasConstructionSites && !depressed
             ? 1
             : 0,
-      };
+      });
     }
-    return {
+    return fill({
       // During container push, skip the spare H — convert capacity into builders.
       harvester: infraBuilder ? sources : sources + 1,
       miner: 0,
@@ -435,7 +464,7 @@ export function desiredCreeps(
         : hasConstructionSites && !depressed
           ? 1
           : 0,
-    };
+    });
   }
 
   // After source containers: climb to RCL3 before extension spam — otherwise
@@ -473,6 +502,7 @@ export function desiredCreeps(
         : extensionPush
           ? Math.max(4, infraBuilders)
           : 0,
+    filler: economy?.hasStorage ? 1 : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {
