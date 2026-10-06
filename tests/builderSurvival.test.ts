@@ -445,34 +445,93 @@ describe("recycleExcessHaulers", () => {
     expect(recycled).toBe(true);
   });
 
-  test("skips recycle when haulers are within quota", () => {
+  test("recycles surplus haulers even when infrastructure push is over", () => {
+    vi.stubGlobal("OK", 0);
+    const spawnPos = { x: 10, y: 10 };
+    const hauler = {
+      room: { name: "W21N35" },
+      memory: { role: "hauler" },
+      store: { energy: 0 },
+      pos: {
+        isNearTo: () => true,
+        x: 10,
+        y: 10,
+      },
+      moveTo: () => 0,
+    };
+    let recycled = false;
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: spawnPos,
+      recycleCreep: (c: unknown) => {
+        recycled = c === hauler;
+        return OK;
+      },
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "hauler-1": hauler } };
+    const ok = recycleExcessHaulers(
+      spawn as unknown as StructureSpawn,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 0,
+        builder: 0,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 8,
+        upgrader: 0,
+        builder: 0,
+        filler: 0,
+      },
+      false,
+      { durableHaulers: 8 },
+    );
+    expect(ok).toBe(true);
+    expect(recycled).toBe(true);
+  });
+
+  test("keeps extra haulers while TTL handoff still needs them", () => {
     const spawn = {
       spawning: null,
       room: { name: "W21N35" },
       pos: { x: 10, y: 10 },
       recycleCreep: () => OK,
     };
-    (globalThis as { Game?: unknown }).Game = { creeps: {} };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: {
+        "hauler-1": {
+          room: { name: "W21N35" },
+          memory: { role: "hauler" },
+          pos: { isNearTo: () => true },
+        },
+      },
+    };
     expect(
       recycleExcessHaulers(
         spawn as unknown as StructureSpawn,
         {
-          harvester: 3,
-          miner: 0,
-          hauler: 2,
+          harvester: 0,
+          miner: 2,
+          hauler: 4,
           upgrader: 0,
-          builder: 2,
-        filler: 0,
+          builder: 0,
+          filler: 0,
         },
         {
-          harvester: 3,
-          miner: 0,
-          hauler: 2,
+          harvester: 0,
+          miner: 2,
+          hauler: 5,
           upgrader: 0,
-          builder: 1,
-        filler: 0,
+          builder: 0,
+          filler: 0,
         },
-        true,
+        false,
+        { durableHaulers: 3 },
       ),
     ).toBe(false);
   });

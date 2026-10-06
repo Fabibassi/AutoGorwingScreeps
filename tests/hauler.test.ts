@@ -233,7 +233,8 @@ describe("storage haul policy (absolute spawn energy)", () => {
 });
 
 describe("hauler pickup selection", () => {
-  test("ignores crumb containers when free capacity is large", () => {
+  test("small haulers pick up 25+ piles instead of idling for a 100-energy stack", () => {
+    expect(minWorthwhilePickup(50, 280)).toBe(25);
     expect(minWorthwhilePickup(450, 280)).toBeGreaterThanOrEqual(100);
     expect(minWorthwhilePickup(450, 280)).toBeLessThanOrEqual(450);
   });

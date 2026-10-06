@@ -244,23 +244,47 @@ export function recycleExcessHaulers(
   want: CreepQuotas,
   counts: CreepQuotas,
   reclaimForBuilders: boolean,
+  opts?: { durableHaulers?: number },
 ): boolean {
   if (spawn.spawning) return false;
-  if (!reclaimForBuilders) return false;
-  if (counts.builder >= want.builder) return false;
   if (counts.hauler <= want.hauler) return false;
+  const durable = opts?.durableHaulers ?? counts.hauler;
+  // TTL handoff: one extra live hauler is the incoming replacement.
+  if (durable < want.hauler) return false;
+  if (reclaimForBuilders && counts.builder >= want.builder && want.hauler > 0) {
+    return false;
+  }
 
+  let best: Creep | null = null;
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
     if (creep.room.name !== spawn.room.name) continue;
     if (creep.memory.role !== "hauler") continue;
-    if (creep.pos.isNearTo(spawn)) {
-      return spawn.recycleCreep(creep) === OK;
+    const carried =
+      creep.store?.getUsedCapacity?.(RESOURCE_ENERGY) ??
+      (creep.store as { energy?: number } | undefined)?.energy ??
+      0;
+    const empty = carried <= 0;
+    const near = creep.pos.isNearTo(spawn);
+    if (!best) {
+      best = creep;
+      continue;
     }
-    creep.moveTo(spawn);
-    return true;
+    const bestCarried =
+      best.store?.getUsedCapacity?.(RESOURCE_ENERGY) ??
+      (best.store as { energy?: number } | undefined)?.energy ??
+      0;
+    const bestEmpty = bestCarried <= 0;
+    const bestNear = best.pos.isNearTo(spawn);
+    if (empty && !bestEmpty) best = creep;
+    else if (empty === bestEmpty && near && !bestNear) best = creep;
   }
-  return false;
+  if (!best) return false;
+  if (best.pos.isNearTo(spawn)) {
+    return spawn.recycleCreep(best) === OK;
+  }
+  best.moveTo(spawn);
+  return true;
 }
 
 /**
@@ -517,6 +541,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       want,
       liveCounts,
       infrastructurePush || buildersBelowQuota,
+      { durableHaulers: haulersDurable },
     )
   ) {
     return;

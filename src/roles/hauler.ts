@@ -134,7 +134,10 @@ export function minWorthwhilePickup(
   if (spawnEnergy < HAUL_THRESHOLDS.spawnUrgent) {
     return Math.min(freeCapacity, 25);
   }
-  // At least 100 or 25% of free space (fat haulers ignore <100 containers).
+  // Tiny 1C1M haulers (50) must not wait for a 100-energy pile or they idle at spawn.
+  if (freeCapacity < 100) {
+    return Math.min(freeCapacity, 25);
+  }
   return Math.min(freeCapacity, Math.max(100, Math.floor(freeCapacity * 0.25)));
 }
 
@@ -466,16 +469,20 @@ export function runHauler(creep: Creep): number {
     const source = findEnergySource(creep);
     if (!source) {
       delete creep.memory.pickupId;
+      const anchor = creep.room.find(FIND_SOURCES)[0];
+      if (anchor && !creep.pos.inRangeTo(anchor, 2)) {
+        creep.moveTo(anchor, { reusePath: 5, range: 1 });
+      }
       return 0;
     }
     if (source instanceof Resource) {
       if (creep.pickup(source) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(source, { reusePath: 20 });
+        creep.moveTo(source, { reusePath: 5 });
       }
       return 0;
     }
     if (creep.withdraw(source, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(source, { reusePath: 20 });
+      creep.moveTo(source, { reusePath: 5 });
     }
     return 0;
   }
@@ -485,7 +492,7 @@ export function runHauler(creep: Creep): number {
   if (!target) return 0;
 
   if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-    creep.moveTo(target, { reusePath: 20 });
+    creep.moveTo(target, { reusePath: 5 });
   }
   return 0;
 }
