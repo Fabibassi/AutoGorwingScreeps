@@ -33,7 +33,12 @@ export function runFiller(creep: Creep): void {
 
   if (carried > 0) {
     const target = findFillTarget(creep);
-    if (!target) return;
+    if (!target) {
+      if (storage && !creep.pos.isNearTo(storage)) {
+        creep.moveTo(storage);
+      }
+      return;
+    }
     if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
       creep.moveTo(target);
     }

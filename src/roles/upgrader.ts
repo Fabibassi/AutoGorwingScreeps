@@ -46,6 +46,10 @@ export function runUpgrader(creep: Creep): void {
       if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
         creep.moveTo(storage);
       }
+      return;
+    }
+    if (controller && !creep.pos.inRangeTo(controller, 3)) {
+      creep.moveTo(controller, { range: 3 });
     }
     return;
   }

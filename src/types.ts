@@ -83,6 +83,8 @@ declare global {
     sourceId?: Id<Source>;
     /** Sticky container/storage/drop id while a hauler is collecting. */
     pickupId?: Id<StructureContainer | StructureStorage | StructureExtension | Resource>;
+    /** Walking to spawn to be recycled — do not evict from the hub ring. */
+    recycling?: boolean;
   }
   interface Memory {
     ags?: AgsMemory;

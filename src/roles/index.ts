@@ -2,6 +2,7 @@ import { runBuilder } from "./builder";
 import { runFiller } from "./filler";
 import { runHarvester } from "./harvester";
 import { runHauler } from "./hauler";
+import { evictIdleFromSpawnRing } from "./idlePark";
 import { runMiner } from "./miner";
 import { moveOffSpawn } from "./moveOffSpawn";
 import { runUpgrader } from "./upgrader";
@@ -38,8 +39,8 @@ export function runCreep(creep: Creep): number {
   // Spawn tile is not walkable for work — step off before any role logic.
   if (moveOffSpawn(creep)) return 0;
   const role = creep.memory.role;
-  if (!role) return 0;
-  const runner = roleRunners[role];
-  if (!runner) return 0;
-  return runner(creep);
+  const runner = role ? roleRunners[role] : undefined;
+  const harvested = runner ? runner(creep) : 0;
+  evictIdleFromSpawnRing(creep);
+  return harvested;
 }

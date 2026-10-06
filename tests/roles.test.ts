@@ -232,6 +232,7 @@ describe("runMiner", () => {
 
   test("retreats from source when harvest returns ERR_FULL", () => {
     const moveTo = vi.fn(() => 0);
+    const move = vi.fn(() => 0);
     const source = {
       id: "s1" as Id<Source>,
       pos: { x: 10, y: 10, roomName: "W1N1" },
@@ -239,12 +240,15 @@ describe("runMiner", () => {
     const creep = {
       memory: { sourceId: "s1" as Id<Source> },
       pos: {
+        x: 10,
+        y: 11,
         isEqualTo: () => false,
         isNearTo: () => true,
       },
       harvest: vi.fn(() => -8),
       getActiveBodyparts: () => 2,
       moveTo,
+      move,
       room: {
         find: () => [{ pos: { x: 25, y: 25 } }],
         controller: { pos: { x: 30, y: 30 } },
@@ -256,7 +260,8 @@ describe("runMiner", () => {
     });
 
     expect(runMiner(creep)).toBe(0);
-    expect(moveTo).toHaveBeenCalled();
+    expect(moveTo).not.toHaveBeenCalled();
+    expect(move).toHaveBeenCalled();
   });
 
   test("counts harvest power when mining succeeds", () => {

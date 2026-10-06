@@ -247,7 +247,10 @@ export function recycleExcessHaulers(
   opts?: { durableHaulers?: number },
 ): boolean {
   if (spawn.spawning) return false;
-  if (counts.hauler <= want.hauler) return false;
+  if (counts.hauler <= want.hauler) {
+    clearHaulerRecycling(spawn.room.name);
+    return false;
+  }
   const durable = opts?.durableHaulers ?? counts.hauler;
   // TTL handoff: one extra live hauler is the incoming replacement.
   if (durable < want.hauler) return false;
@@ -280,11 +283,29 @@ export function recycleExcessHaulers(
     else if (empty === bestEmpty && near && !bestNear) best = creep;
   }
   if (!best) return false;
+  markHaulerRecycling(spawn.room.name, best);
   if (best.pos.isNearTo(spawn)) {
     return spawn.recycleCreep(best) === OK;
   }
   best.moveTo(spawn);
   return true;
+}
+
+function clearHaulerRecycling(roomName: string): void {
+  markHaulerRecycling(roomName, null);
+}
+
+function markHaulerRecycling(roomName: string, keep: Creep | null): void {
+  for (const name in Game.creeps ?? {}) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== roomName) continue;
+    if (creep.memory.role !== "hauler") continue;
+    if (keep && creep === keep) {
+      creep.memory.recycling = true;
+    } else {
+      delete creep.memory.recycling;
+    }
+  }
 }
 
 /**
