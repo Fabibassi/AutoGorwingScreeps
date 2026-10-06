@@ -36,18 +36,21 @@ type GlobalMem = {
 
 /** First statement of loop(): keep Memory identity when the global survived. */
 export function applyParsedMemoryReuse(): boolean {
-  const g = globalThis as unknown as GlobalMem;
-  const now = typeof Game === "undefined" ? 0 : Game.time;
-  const raw =
-    typeof RawMemory === "undefined"
-      ? undefined
-      : (RawMemory as unknown as RawWithParsed);
-  const freshlyParsed =
-    typeof Memory === "undefined" ? ({} as Memory) : Memory;
-  const next = restoreParsedMemory(g.__agsMemHack ?? {}, now, freshlyParsed, raw);
-  g.__agsMemHack = { lastTick: next.lastTick, parsed: next.parsed };
-  if (next.reused) {
-    g.Memory = next.parsed;
+  try {
+    const g = globalThis as unknown as GlobalMem;
+    const now = typeof Game === "undefined" ? 0 : Game.time;
+    const raw =
+      typeof RawMemory === "undefined"
+        ? undefined
+        : (RawMemory as unknown as RawWithParsed);
+    const freshlyParsed =
+      typeof Memory === "undefined" ? ({} as Memory) : Memory;
+    const next = restoreParsedMemory(g.__agsMemHack ?? {}, now, freshlyParsed, raw);
+    g.__agsMemHack = { lastTick: next.lastTick, parsed: next.parsed };
+    // Never assign `Memory` — in Screeps it is often a getter-only binding and
+    // throws every tick, killing the loop before telemetry/triage can run.
+    return next.reused;
+  } catch {
+    return false;
   }
-  return next.reused;
 }

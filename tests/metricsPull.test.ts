@@ -166,7 +166,34 @@ describe("planMetricsAction force with missing ags", () => {
     expect(plan.reason).toBe("missing_ags");
   });
 
-  test("PLACEHOLDER_METRICS is stable for force body", () => {
-    expect(PLACEHOLDER_METRICS.tick).toBe(0);
+  test("critical with an open evolve reawakens instead of no-op", () => {
+    const plan = planMetricsAction({
+      forceAction: "none",
+      ags: {
+        ...sampleAgs,
+        metrics: { ...sampleAgs.metrics, errorCount: 12 },
+        health: {
+          tick: 1000,
+          rcl: 4,
+          creepDeficit: 0,
+          understaffed: [],
+          containersAtSources: 2,
+          sourceCount: 2,
+          dedicatedMiners: true,
+          spawnFillPct: 0.2,
+          hasControllerContainer: false,
+          constructionSites: 0,
+          noEconomyCreeps: false,
+          downgradeRisk: false,
+          ticksToDowngrade: 40000,
+          critical: ["runtimeErrors"],
+        },
+      },
+      openEvolveCount: 1,
+      openRollbackCount: 0,
+    });
+    expect(plan.decision?.action).toBe("evolve");
+    expect(plan.reuseOpenIssue).toBe(true);
+    expect(plan.reason).toBe("reawaken_evolve");
   });
 });

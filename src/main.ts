@@ -18,7 +18,6 @@ function clearDeadCreepMemory(): void {
 }
 
 export function loop(): void {
-  applyParsedMemoryReuse();
   let errorsThisTick = 0;
   let energyHarvestedThisTick = 0;
   const roadPolicySticky = Memory.ags?.roadPolicy;
@@ -27,6 +26,7 @@ export function loop(): void {
   const profileSticky = Memory.ags?.profile;
 
   try {
+    applyParsedMemoryReuse();
     clearDeadCreepMemory();
 
     for (const name in Game.rooms) {

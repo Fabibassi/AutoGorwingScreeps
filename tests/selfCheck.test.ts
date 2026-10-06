@@ -181,6 +181,41 @@ describe("downgrade / critical helpers", () => {
     expect(signals).toEqual(["incomeCollapsed"]);
   });
 
+  test("computeCriticalSignals flags runtimeErrors when the error window is full", () => {
+    const signals = computeCriticalSignals({
+      tick: 1,
+      rcl: 4,
+      sourceCount: 2,
+      containersAtSources: 2,
+      hasControllerContainer: true,
+      constructionSites: 0,
+      counts: {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 2,
+        builder: 0,
+        filler: 0,
+      },
+      want: {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 2,
+        builder: 0,
+        filler: 0,
+      },
+      spawnEnergy: 300,
+      spawnCapacity: 300,
+      dedicatedMiners: true,
+      energyIncomePerTick: 5,
+      baselineIncome: 5,
+      ticksToDowngrade: 35_000,
+      errorCount: 10,
+    });
+    expect(signals).toContain("runtimeErrors");
+  });
+
   test("computeCriticalSignals flags softLock when stuck below bootstrap energy", () => {
     const signals = computeCriticalSignals({
       tick: 1,

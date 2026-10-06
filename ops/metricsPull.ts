@@ -10,9 +10,11 @@ import {
 import { fetchMemory, fetchMemoryPath } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 import {
+  commentOnIssue,
   countOpenIssuesWithLabel,
   createIssue,
   dispatchEvolveWorkflow,
+  listOpenIssueNumbersWithLabel,
 } from "./githubIssues";
 
 export type ForceAction = "none" | "evolve" | "rollback";
@@ -73,7 +75,8 @@ export function healthNeedsEvolve(health?: AgsHealthCheck): boolean {
     critical.includes("softLock") ||
     critical.includes("noEconomyCreeps") ||
     critical.includes("downgradeRisk") ||
-    critical.includes("missingSourceContainers")
+    critical.includes("missingSourceContainers") ||
+    critical.includes("runtimeErrors")
   );
 }
 
@@ -163,8 +166,9 @@ export function decideIssue(
     };
   }
 
-  // Critical colony failure → evolve before income-rollback (strategy bug, not revert).
-  if (healthNeedsEvolve(input.health) && input.openEvolveCount === 0) {
+  // Critical colony failure → evolve even if an older evolve issue is still open
+  // (Metrics reawakens that issue instead of no-op).
+  if (healthNeedsEvolve(input.health)) {
     const signals = input.health?.critical?.length
       ? input.health.critical.join(",")
       : input.health?.noEconomyCreeps
@@ -221,6 +225,8 @@ export function planMetricsAction(input: {
   rollback: boolean;
   income: number | string;
   reason?: string;
+  /** True when we should comment+dispatch on the existing evolve issue. */
+  reuseOpenIssue?: boolean;
 } {
   const { forceAction, ags, openEvolveCount, openRollbackCount } = input;
 
@@ -286,14 +292,17 @@ export function planMetricsAction(input: {
     forceAction: "none",
   });
 
+  const reuseOpenIssue =
+    decision?.action === "evolve" && openEvolveCount > 0;
+
   let reason: string | undefined;
-  if (decision?.title.includes("critical")) {
+  if (reuseOpenIssue) {
+    reason = "reawaken_evolve";
+  } else if (decision?.title.includes("critical")) {
     reason = `critical:${(ags.health?.critical ?? []).join(",") || "health"}`;
   } else if (!decision) {
     if (rollback && openRollbackCount > 0) {
       reason = "open_rollback_exists";
-    } else if (healthNeedsEvolve(ags.health) && openEvolveCount > 0) {
-      reason = "open_evolve_exists";
     } else if (!stagnant) {
       reason = windows < 4 ? "need_4_windows" : "not_stagnant";
     } else if (openEvolveCount > 0) {
@@ -309,6 +318,7 @@ export function planMetricsAction(input: {
     rollback,
     income,
     reason,
+    reuseOpenIssue,
   };
 }
 
@@ -576,6 +586,34 @@ export async function main(): Promise<void> {
 
   if (!plan.decision) {
     return;
+  }
+
+  if (plan.reuseOpenIssue) {
+    const open = await listOpenIssueNumbersWithLabel({
+      token: githubToken,
+      repo: githubRepo,
+      label: "evolve",
+    });
+    const issueNumber = open[0];
+    if (issueNumber == null) {
+      console.log("reawaken requested but no open evolve issue — creating new");
+    } else {
+      await commentOnIssue({
+        token: githubToken,
+        repo: githubRepo,
+        issueNumber,
+        body: `## Metrics reawaken\nNew critical signal while this issue was still open.\n\n${plan.decision.body}`,
+      });
+      await dispatchEvolveWorkflow({
+        token: githubToken,
+        repo: githubRepo,
+        issueNumber,
+      });
+      console.log(
+        `reawakened ${plan.decision.action} issue #${issueNumber}: ${plan.decision.title}`,
+      );
+      return;
+    }
   }
 
   const issueNumber = await createIssue({

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  applyParsedMemoryReuse,
   restoreParsedMemory,
   shouldReuseParsedMemory,
 } from "../src/loop/memHack";
@@ -27,5 +28,18 @@ describe("restoreParsedMemory", () => {
     expect(second.reused).toBe(true);
     expect(second.parsed).toBe(parsed);
     expect(raw._parsed).toBe(parsed);
+  });
+});
+
+describe("applyParsedMemoryReuse", () => {
+  test("does not throw when Memory cannot be assigned", () => {
+    const g = globalThis as { Memory?: Memory; __agsMemHack?: unknown };
+    const prevHack = g.__agsMemHack;
+    g.__agsMemHack = {
+      lastTick: 10,
+      parsed: { creeps: {} } as Memory,
+    };
+    expect(() => applyParsedMemoryReuse()).not.toThrow();
+    g.__agsMemHack = prevHack;
   });
 });

@@ -108,7 +108,7 @@ test("evolve on critical noEconomyCreeps before income rollback", () => {
   expect(d?.body).toContain("miner/hauler");
 });
 
-test("critical skipped when evolve already open falls through to rollback", () => {
+test("critical still evolves when an older evolve issue is open (reawaken)", () => {
   expect(
     decideIssue({
       stagnant: false,
@@ -132,7 +132,7 @@ test("critical skipped when evolve already open falls through to rollback", () =
       openEvolveCount: 1,
       openRollbackCount: 0,
     })?.action,
-  ).toBe("rollback");
+  ).toBe("evolve");
 });
 
 test("downgradeRisk alone opens evolve with growth mandate", () => {
@@ -161,6 +161,35 @@ test("downgradeRisk alone opens evolve with growth mandate", () => {
   expect(d?.action).toBe("evolve");
   expect(d?.title).toContain("downgradeRisk");
   expect(d?.body).toContain("Growth mandate");
+});
+
+test("critical evolve still fires when an older evolve issue is already open", () => {
+  const health = {
+    tick: 1000,
+    rcl: 4,
+    creepDeficit: 0,
+    understaffed: [] as string[],
+    containersAtSources: 2,
+    sourceCount: 2,
+    dedicatedMiners: true,
+    spawnFillPct: 0.2,
+    hasControllerContainer: false,
+    constructionSites: 0,
+    noEconomyCreeps: false,
+    downgradeRisk: false,
+    ticksToDowngrade: 40000,
+    critical: ["runtimeErrors"],
+  };
+  const d = decideIssue({
+    stagnant: true,
+    rollback: false,
+    metrics,
+    health,
+    openEvolveCount: 1,
+    openRollbackCount: 0,
+  });
+  expect(d?.action).toBe("evolve");
+  expect(d?.title).toContain("runtimeErrors");
 });
 
 test("none when stagnant but evolve already open", () => {

@@ -11,7 +11,7 @@ import {
   countSourceContainers,
   hasControllerContainer,
 } from "./room/queries";
-import { isIncomeStalled } from "./telemetry";
+import { isIncomeStalled, ROLLBACK_ERROR_COUNT } from "./telemetry";
 import type { AgsHealthCheck, AgsMemory } from "./types";
 
 export const SELF_CHECK_INTERVAL = 100;
@@ -37,7 +37,8 @@ export type CriticalSignal =
   | "incomeCollapsed"
   | "downgradeRisk"
   | "noUpgraders"
-  | "missingSourceContainers";
+  | "missingSourceContainers"
+  | "runtimeErrors";
 
 export interface HealthCheckInput {
   tick: number;
@@ -58,6 +59,8 @@ export interface HealthCheckInput {
   energyIncomePerTick?: number;
   baselineIncome?: number;
   ticksToDowngrade?: number;
+  /** Sum of caught loop errors in the last ~100 ticks. */
+  errorCount?: number;
 }
 
 /** Pure: which critical colony failures are active. */
@@ -93,6 +96,10 @@ export function computeCriticalSignals(input: HealthCheckInput): CriticalSignal[
     input.counts.upgrader,
   );
   if (downgradeRisk) critical.push("downgradeRisk");
+
+  if ((input.errorCount ?? 0) >= ROLLBACK_ERROR_COUNT) {
+    critical.push("runtimeErrors");
+  }
 
   // Surface missing upgraders only when already in a failure mode (avoid spawn flicker).
   if (
@@ -206,6 +213,7 @@ export function buildHealthCheck(
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
     baselineIncome: ags?.baseline?.energyIncomePerTick,
     ticksToDowngrade: controller?.ticksToDowngrade,
+    errorCount: ags?.metrics.errorCount ?? 0,
   });
 }
 

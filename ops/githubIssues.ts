@@ -95,3 +95,39 @@ export async function countOpenIssuesWithLabel(opts: {
   const data = (await res.json()) as { total_count: number };
   return data.total_count;
 }
+
+export async function listOpenIssueNumbersWithLabel(opts: {
+  token: string;
+  repo: string;
+  label: string;
+}): Promise<number[]> {
+  const q = encodeURIComponent(
+    `repo:${opts.repo} is:issue is:open label:${opts.label}`,
+  );
+  const res = await fetch(
+    `https://api.github.com/search/issues?q=${q}&sort=updated&order=desc`,
+    { headers: authHeaders(opts.token) },
+  );
+  if (!res.ok) throw new Error(await res.text());
+  const data = (await res.json()) as { items?: Array<{ number: number }> };
+  return (data.items ?? []).map((i) => i.number);
+}
+
+export async function commentOnIssue(opts: {
+  token: string;
+  repo: string;
+  issueNumber: number;
+  body: string;
+}): Promise<void> {
+  const res = await fetch(
+    `https://api.github.com/repos/${opts.repo}/issues/${opts.issueNumber}/comments`,
+    {
+      method: "POST",
+      headers: authHeaders(opts.token),
+      body: JSON.stringify({ body: opts.body }),
+    },
+  );
+  if (!res.ok) {
+    throw new Error(`commentOnIssue failed: ${res.status} ${await res.text()}`);
+  }
+}
