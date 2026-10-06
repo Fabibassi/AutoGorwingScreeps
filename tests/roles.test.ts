@@ -288,6 +288,55 @@ describe("runMiner", () => {
     expect(runMiner(creep)).toBe(6);
   });
 
+  test("unassigned miner claims the empty far source when the near one is taken", () => {
+    vi.stubGlobal("FIND_SOURCES", 105);
+    const near = {
+      id: "near" as Id<Source>,
+      pos: { x: 10, y: 10, roomName: "W1N1" },
+    };
+    const far = {
+      id: "far" as Id<Source>,
+      pos: { x: 40, y: 40, roomName: "W1N1" },
+    };
+    const moveTo = vi.fn(() => 0);
+    const creep = {
+      name: "miner-b",
+      memory: { role: "miner" },
+      pos: {
+        x: 25,
+        y: 25,
+        getRangeTo: (t: { pos?: { x: number; y: number }; x?: number }) => {
+          const p = "pos" in t && t.pos ? t.pos : (t as { x: number; y: number });
+          return Math.max(Math.abs(25 - p.x), Math.abs(25 - p.y));
+        },
+        isNearTo: () => false,
+      },
+      harvest: vi.fn(),
+      getActiveBodyparts: () => 5,
+      moveTo,
+      room: {
+        name: "W1N1",
+        find: (t: number) => (t === FIND_SOURCES ? [near, far] : []),
+      },
+    } as unknown as Creep;
+
+    vi.stubGlobal("Game", {
+      getObjectById: (id: string) => (id === "near" ? near : id === "far" ? far : null),
+      creeps: {
+        "miner-a": {
+          name: "miner-a",
+          room: { name: "W1N1" },
+          memory: { role: "miner", sourceId: "near" },
+        },
+        "miner-b": creep,
+      },
+    });
+
+    expect(runMiner(creep)).toBe(0);
+    expect(creep.memory.sourceId).toBe("far");
+    expect(moveTo).toHaveBeenCalledWith(far, expect.anything());
+  });
+
   test("incoming replacement waits instead of harvesting while incumbent is on the source", () => {
     const harvest = vi.fn(() => 0);
     const source = {

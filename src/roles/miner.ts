@@ -1,4 +1,7 @@
-import { shouldWaitForIncumbentMiner } from "../earlyGame/minerHandoff";
+import {
+  pickMinerSourceId,
+  shouldWaitForIncumbentMiner,
+} from "../earlyGame/minerHandoff";
 
 const STEP_DELTAS: Array<[number, number, number]> = [
   [0, -1, 1],
@@ -35,18 +38,51 @@ function retreatFromFullSource(creep: Creep, source: Source): void {
   }
 }
 
-export function runMiner(creep: Creep): number {
-  const sourceId = creep.memory.sourceId as Id<Source> | undefined;
-  const source =
-    (sourceId ? Game.getObjectById(sourceId) : null) ??
-    creep.pos.findClosestByRange(FIND_SOURCES) ??
-    creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-
-  if (!source) return 0;
-
-  if (!sourceId) {
-    creep.memory.sourceId = source.id;
+function resolveMinerSource(creep: Creep): Source | null {
+  const sources = creep.room.find(FIND_SOURCES);
+  if (sources.length === 0) {
+    return creep.memory.sourceId
+      ? (Game.getObjectById(creep.memory.sourceId) as Source | null)
+      : null;
   }
+
+  const peers: Array<{ name: string; sourceId?: string }> = [];
+  for (const name in Game.creeps ?? {}) {
+    const other = Game.creeps[name];
+    if (other.name === creep.name) continue;
+    if (other.room.name !== creep.room.name) continue;
+    if (other.memory.role !== "miner") continue;
+    peers.push({ name: other.name, sourceId: other.memory.sourceId });
+  }
+
+  const pickedId = pickMinerSourceId({
+    selfName: creep.name,
+    selfSourceId: creep.memory.sourceId,
+    sourceIds: sources.map((s) => s.id),
+    peers,
+    rangeTo: (sid) => {
+      const src = sources.find((s) => s.id === sid);
+      return src ? creep.pos.getRangeTo(src) : 99;
+    },
+  });
+
+  if (pickedId) {
+    creep.memory.sourceId = pickedId as Id<Source>;
+    return (
+      sources.find((s) => s.id === pickedId) ??
+      (Game.getObjectById(pickedId as Id<Source>) as Source | null)
+    );
+  }
+
+  const sticky = creep.memory.sourceId
+    ? (Game.getObjectById(creep.memory.sourceId) as Source | null)
+    : null;
+  return sticky ?? sources[0] ?? null;
+}
+
+export function runMiner(creep: Creep): number {
+  const source = resolveMinerSource(creep);
+  if (!source) return 0;
 
   if (creep.pos.isNearTo(source)) {
     const peersNearSource: Array<{ name: string; ticksToLive?: number }> = [];

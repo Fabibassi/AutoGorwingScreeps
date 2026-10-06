@@ -6,6 +6,7 @@ import {
   minerMoveTicksPerTile,
   minerNeedsReplacement,
   minerReplacementLeadTime,
+  pickMinerSourceId,
   shouldWaitForIncumbentMiner,
   sourceIdForReplacementMiner,
 } from "../src/earlyGame/minerHandoff";
@@ -183,5 +184,61 @@ describe("minerLiveCap", () => {
   test("live cap is two miners per source including the walking replacement", () => {
     expect(minerLiveCap(2, 2)).toBe(4);
     expect(minerLiveCap(0, 2)).toBe(4);
+  });
+});
+
+describe("pickMinerSourceId", () => {
+  const range = (id: string) => (id === "near" ? 5 : 20);
+
+  test("unassigned miner takes the empty source even when another is closer", () => {
+    expect(
+      pickMinerSourceId({
+        selfName: "miner-b",
+        sourceIds: ["near", "far"],
+        peers: [{ name: "miner-a", sourceId: "near" }],
+        rangeTo: range,
+      }),
+    ).toBe("far");
+  });
+
+  test("keeps sticky source when it is the only miner on that seat", () => {
+    expect(
+      pickMinerSourceId({
+        selfName: "miner-a",
+        selfSourceId: "near",
+        sourceIds: ["near", "far"],
+        peers: [{ name: "miner-b", sourceId: "far" }],
+        rangeTo: range,
+      }),
+    ).toBe("near");
+  });
+
+  test("reassigns when sticky source is already staffed and another is empty", () => {
+    expect(
+      pickMinerSourceId({
+        selfName: "miner-b",
+        selfSourceId: "near",
+        sourceIds: ["near", "far"],
+        peers: [{ name: "miner-a", sourceId: "near" }],
+        rangeTo: range,
+      }),
+    ).toBe("far");
+  });
+
+  test("two unassigned miners split across sources when picking in order", () => {
+    const first = pickMinerSourceId({
+      selfName: "miner-a",
+      sourceIds: ["near", "far"],
+      peers: [{ name: "miner-b" }],
+      rangeTo: range,
+    });
+    const second = pickMinerSourceId({
+      selfName: "miner-b",
+      sourceIds: ["near", "far"],
+      peers: [{ name: "miner-a", sourceId: first ?? undefined }],
+      rangeTo: range,
+    });
+    expect(first).toBe("near");
+    expect(second).toBe("far");
   });
 });

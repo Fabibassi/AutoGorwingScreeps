@@ -13,6 +13,7 @@ import {
   durableMinerCount,
   minerLiveCap,
   minerReplacementLeadTime,
+  pickMinerSourceId,
   sourceIdForReplacementMiner,
 } from "./earlyGame/minerHandoff";
 import { resolveExperiment } from "./earlyGame/experimentPolicy";
@@ -672,11 +673,23 @@ export function runSpawn(spawn: StructureSpawn): void {
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
-      const replacementId = sourceIdForReplacementMiner(
-        minerSnapshots,
-        minerSourceIds,
-        leadTimeFor,
-      );
+      const replacementId =
+        sourceIdForReplacementMiner(
+          minerSnapshots,
+          minerSourceIds,
+          leadTimeFor,
+        ) ??
+        pickMinerSourceId({
+          selfName: name,
+          sourceIds: minerSourceIds,
+          peers: Object.keys(Game.creeps)
+            .map((n) => Game.creeps[n])
+            .filter(
+              (c) =>
+                c.room.name === room.name && c.memory.role === "miner",
+            )
+            .map((c) => ({ name: c.name, sourceId: c.memory.sourceId })),
+        });
       if (replacementId) memory.sourceId = replacementId as Id<Source>;
     }
     const result = spawn.spawnCreep(body, name, { memory });

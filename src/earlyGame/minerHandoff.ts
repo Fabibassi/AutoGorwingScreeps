@@ -99,6 +99,55 @@ export function sourceIdForReplacementMiner(
   return null;
 }
 
+/**
+ * Pick a mining seat: empty sources first (never pile both miners on the near one),
+ * then sticky if sole occupant, then fewest peers / closest.
+ */
+export function pickMinerSourceId(opts: {
+  selfName: string;
+  selfSourceId?: string;
+  sourceIds: string[];
+  peers: Array<{ name: string; sourceId?: string }>;
+  rangeTo?: (sourceId: string) => number;
+}): string | null {
+  if (opts.sourceIds.length === 0) return null;
+  const rangeTo = opts.rangeTo ?? (() => 0);
+  const counts = new Map<string, number>();
+  for (const sid of opts.sourceIds) counts.set(sid, 0);
+  for (const peer of opts.peers) {
+    if (peer.name === opts.selfName) continue;
+    if (!peer.sourceId || !counts.has(peer.sourceId)) continue;
+    counts.set(peer.sourceId, (counts.get(peer.sourceId) ?? 0) + 1);
+  }
+
+  const empty = opts.sourceIds.filter((sid) => (counts.get(sid) ?? 0) === 0);
+  if (empty.length > 0) {
+    if (
+      opts.selfSourceId &&
+      empty.includes(opts.selfSourceId) &&
+      (counts.get(opts.selfSourceId) ?? 0) === 0
+    ) {
+      return opts.selfSourceId;
+    }
+    empty.sort((a, b) => rangeTo(a) - rangeTo(b) || a.localeCompare(b));
+    return empty[0] ?? null;
+  }
+
+  if (opts.selfSourceId && counts.has(opts.selfSourceId)) {
+    return opts.selfSourceId;
+  }
+
+  const ranked = [...opts.sourceIds].sort((a, b) => {
+    const ca = counts.get(a) ?? 0;
+    const cb = counts.get(b) ?? 0;
+    if (ca !== cb) return ca - cb;
+    const ra = rangeTo(a) - rangeTo(b);
+    if (ra !== 0) return ra;
+    return a.localeCompare(b);
+  });
+  return ranked[0] ?? null;
+}
+
 /** Replacement (higher TTL) yields the seat while the incumbent still mines. */
 export function shouldWaitForIncumbentMiner(
   self: { name: string; ticksToLive?: number },
