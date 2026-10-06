@@ -58,7 +58,21 @@ export function durableMinerCount(
     const healthy = here.filter((m) => !minerNeedsReplacement(m.ticksToLive, lead));
     if (healthy.length > 0 || here.length >= 2) n++;
   }
-  return n;
+  const uncovered = Math.max(0, sourceIds.length - n);
+  if (uncovered === 0) return n;
+  const fallbackLead =
+    sourceIds.length > 0 ? leadTimeFor(sourceIds[0]) : 100;
+  const unassignedHealthy = miners.filter(
+    (m) =>
+      !m.sourceId && !minerNeedsReplacement(m.ticksToLive, fallbackLead),
+  ).length;
+  return n + Math.min(uncovered, unassignedHealthy);
+}
+
+/** Never more than one seat plus one walking replacement per source. */
+export function minerLiveCap(wantMiner: number, sourceCount: number): number {
+  const seats = Math.max(wantMiner, sourceCount, 0);
+  return seats * 2;
 }
 
 export function sourceIdForReplacementMiner(
@@ -66,8 +80,15 @@ export function sourceIdForReplacementMiner(
   sourceIds: string[],
   leadTimeFor: (sourceId: string) => number,
 ): string | null {
+  let unassigned = miners.filter((m) => !m.sourceId).length;
   for (const sid of sourceIds) {
-    if (minersOnSource(miners, sid).length === 0) return sid;
+    if (minersOnSource(miners, sid).length === 0) {
+      if (unassigned > 0) {
+        unassigned--;
+        continue;
+      }
+      return sid;
+    }
   }
   for (const sid of sourceIds) {
     const here = minersOnSource(miners, sid);

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   durableCount,
   durableMinerCount,
+  minerLiveCap,
   minerMoveTicksPerTile,
   minerNeedsReplacement,
   minerReplacementLeadTime,
@@ -119,6 +120,32 @@ describe("durableMinerCount / replacement source", () => {
       ),
     ).toBeNull();
   });
+
+  test("unassigned miners cover empty sources so spawn does not flood", () => {
+    expect(
+      durableMinerCount(
+        [{ ticksToLive: 1400 }, { ticksToLive: 1390 }],
+        sources,
+        lead,
+      ),
+    ).toBe(2);
+    expect(
+      sourceIdForReplacementMiner(
+        [{ ticksToLive: 1400 }, { ticksToLive: 1390 }],
+        sources,
+        lead,
+      ),
+    ).toBeNull();
+  });
+
+  test("one unassigned miner fills one empty source and still requests the other", () => {
+    expect(
+      durableMinerCount([{ ticksToLive: 1400 }], sources, lead),
+    ).toBe(1);
+    expect(
+      sourceIdForReplacementMiner([{ ticksToLive: 1400 }], sources, lead),
+    ).toBe("s2");
+  });
 });
 
 describe("shouldWaitForIncumbentMiner", () => {
@@ -149,5 +176,12 @@ describe("durableCount", () => {
         100,
       ),
     ).toBe(1);
+  });
+});
+
+describe("minerLiveCap", () => {
+  test("live cap is two miners per source including the walking replacement", () => {
+    expect(minerLiveCap(2, 2)).toBe(4);
+    expect(minerLiveCap(0, 2)).toBe(4);
   });
 });

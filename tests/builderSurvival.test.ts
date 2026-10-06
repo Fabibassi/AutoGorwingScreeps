@@ -17,6 +17,7 @@ import {
   reassignSpareHarvesterToMiner,
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
+  recycleExcessMiners,
 } from "../src/spawn";
 
 describe("pickBuildSite", () => {
@@ -582,6 +583,42 @@ describe("recycleExcessHaulers", () => {
       true,
     );
     expect(ok).toBe(true);
+    expect(recycled).toBe(true);
+  });
+});
+
+describe("recycleExcessMiners", () => {
+  test("recycles unassigned surplus miners at spawn after seats are covered", () => {
+    vi.stubGlobal("OK", 0);
+    const miner = {
+      room: { name: "W21N35" },
+      memory: { role: "miner" },
+      pos: { isNearTo: () => true },
+      moveTo: () => 0,
+    };
+    let recycled = false;
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: { x: 10, y: 10 },
+      recycleCreep: (c: unknown) => {
+        recycled = c === miner;
+        return OK;
+      },
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "miner-1": miner } };
+    const want = {
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 0,
+      builder: 0,
+      filler: 0,
+    };
+    const live = { ...want, miner: 8 };
+    expect(recycleExcessMiners(spawn as unknown as StructureSpawn, want, live, 2)).toBe(
+      true,
+    );
     expect(recycled).toBe(true);
   });
 });

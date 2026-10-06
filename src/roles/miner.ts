@@ -39,6 +39,7 @@ export function runMiner(creep: Creep): number {
   const sourceId = creep.memory.sourceId as Id<Source> | undefined;
   const source =
     (sourceId ? Game.getObjectById(sourceId) : null) ??
+    creep.pos.findClosestByRange(FIND_SOURCES) ??
     creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
 
   if (!source) return 0;

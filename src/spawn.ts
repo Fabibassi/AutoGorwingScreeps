@@ -11,6 +11,7 @@ import {
 import {
   durableCount,
   durableMinerCount,
+  minerLiveCap,
   minerReplacementLeadTime,
   sourceIdForReplacementMiner,
 } from "./earlyGame/minerHandoff";
@@ -284,6 +285,41 @@ export function recycleExcessHaulers(
   }
   if (!best) return false;
   markHaulerRecycling(spawn.room.name, best);
+  if (best.pos.isNearTo(spawn)) {
+    return spawn.recycleCreep(best) === OK;
+  }
+  best.moveTo(spawn);
+  return true;
+}
+
+/** Recycle leftover miners after TTL handoff (unassigned pile at spawn). */
+export function recycleExcessMiners(
+  spawn: StructureSpawn,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+  durableMiners: number,
+): boolean {
+  if (spawn.spawning) return false;
+  if (counts.miner <= want.miner) return false;
+  if (durableMiners < want.miner) return false;
+
+  let best: Creep | null = null;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.memory.role !== "miner") continue;
+    if (!best) {
+      best = creep;
+      continue;
+    }
+    const unassigned = !creep.memory.sourceId;
+    const bestUnassigned = !best.memory.sourceId;
+    const near = creep.pos.isNearTo(spawn);
+    const bestNear = best.pos.isNearTo(spawn);
+    if (unassigned && !bestUnassigned) best = creep;
+    else if (unassigned === bestUnassigned && near && !bestNear) best = creep;
+  }
+  if (!best) return false;
   if (best.pos.isNearTo(spawn)) {
     return spawn.recycleCreep(best) === OK;
   }
@@ -567,6 +603,9 @@ export function runSpawn(spawn: StructureSpawn): void {
   ) {
     return;
   }
+  if (recycleExcessMiners(spawn, want, liveCounts, minersDurable)) {
+    return;
+  }
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
@@ -589,7 +628,9 @@ export function runSpawn(spawn: StructureSpawn): void {
   for (const role of spawnOrder) {
     const filled =
       role === "miner"
-        ? minersDurable
+        ? minerSourceIds.length === 0
+          ? liveCounts.miner
+          : minersDurable
         : role === "hauler"
           ? // Don't pre-spawn hauler replacements while builders are missing —
             // 100-energy haulers keep spawn under the 200 builder body.
@@ -598,6 +639,12 @@ export function runSpawn(spawn: StructureSpawn): void {
             : haulersDurable
           : liveCounts[role];
     if (filled >= want[role]) continue;
+    if (
+      role === "miner" &&
+      liveCounts.miner >= minerLiveCap(want.miner, minerSourceIds.length)
+    ) {
+      continue;
+    }
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
     // Miner gap: do not spend the bank on hauler@100 / upgrader / builder —
