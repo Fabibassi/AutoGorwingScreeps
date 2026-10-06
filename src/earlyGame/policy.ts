@@ -185,6 +185,37 @@ export function effectiveMinerMinWork(
   );
 }
 
+const SPAWN_STORE_CAPACITY = 300;
+const EXTENSION_STORE_CAPACITY = 50;
+
+/** Finished extensions needed so energyCapacity can fund a W…1M miner body. */
+export function extensionsNeededForMinerWork(workParts: number): number {
+  const need = minerBodyCost(workParts) - SPAWN_STORE_CAPACITY;
+  if (need <= 0) return 0;
+  return Math.ceil(need / EXTENSION_STORE_CAPACITY);
+}
+
+/**
+ * Build extensions in miner-quality stages:
+ * 1) enough for 3W1M → 2) enough for 5W1M → 3) full RCL quota.
+ * Skip the 3W gate once miners already average ≥3 WORK/source.
+ */
+export function stagedExtensionBuildCap(opts: {
+  fullQuota: number;
+  minerWorkParts: number;
+  sourceCount: number;
+}): number {
+  const full = Math.max(0, opts.fullQuota);
+  const sources = Math.max(1, opts.sourceCount);
+  const gate3 = extensionsNeededForMinerWork(3);
+  const gate5 = extensionsNeededForMinerWork(5);
+  if (opts.minerWorkParts >= sources * 5) return full;
+  if (opts.minerWorkParts >= sources * 3) {
+    return Math.min(full, Math.max(gate5, gate3));
+  }
+  return Math.min(full, gate3);
+}
+
 /**
  * Haulers needed to move mined energy to the hub.
  * Throughput ≈ 150 carry / (2×range + 2 intents); clamp to [sources, 2×sources].
@@ -608,11 +639,23 @@ export function constructionPriority(
     sourceContainerSites?: number;
     /** Built towers + tower construction sites. */
     towerCount?: number;
+    /** Live miner WORK sum — gates extension build stages. */
+    minerWorkParts?: number;
     experiment?: ExperimentProfile;
   },
 ): BuildableStructureConstant[] {
   const exp = opts.experiment ?? BASELINE_PROFILE;
   const queue: BuildableStructureConstant[] = [];
+  const fullExtQuota = extensionQuota(rcl);
+  const stagedCap = stagedExtensionBuildCap({
+    fullQuota: fullExtQuota,
+    minerWorkParts: opts.minerWorkParts ?? 0,
+    sourceCount: opts.sourceCount,
+  });
+  const extCap = Math.min(
+    stagedCap,
+    extensionBootstrapCap(exp, rcl, fullExtQuota),
+  );
 
   const missingAll = shouldBuildContainers(rcl)
     ? Math.max(0, opts.sourceCount - opts.sourceContainerCount)
@@ -628,8 +671,7 @@ export function constructionPriority(
   // later: bootstrap extensions before source containers.
   if (laterMode && shouldBuildExtensions(rcl)) {
     const have = opts.extensionCount ?? 0;
-    const cap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
-    const missing = Math.max(0, cap - have);
+    const missing = Math.max(0, extCap - have);
     for (let i = 0; i < missing; i++) queue.push("extension");
   }
 
@@ -653,9 +695,8 @@ export function constructionPriority(
     missingAll === 0
   ) {
     const have = opts.extensionCount ?? 0;
-    // RCL2: experiment caps extensions so climb can finish first.
-    const cap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
-    const missing = Math.max(0, cap - have);
+    // Miner stages (3W→5W→full) further limited by RCL2 experiment bootstrap.
+    const missing = Math.max(0, extCap - have);
     for (let i = 0; i < missing; i++) {
       queue.push("extension");
     }

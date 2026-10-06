@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  allowControllerContainer,
   BASELINE_PROFILE,
   constructionPriority,
   desiredCreeps,
@@ -46,7 +47,7 @@ describe("experimentPolicy", () => {
     expect(queue.filter((s) => s === "extension")).toHaveLength(0);
   });
 
-  test("constructionPriority queues 5 extensions when bootstrap=5", () => {
+  test("constructionPriority queues 5 extensions when bootstrap=5 and 3W miners exist", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -54,12 +55,13 @@ describe("experimentPolicy", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: 0,
+      minerWorkParts: 6,
       experiment: profileForVariant("extensionBootstrap", "5"),
     });
     expect(queue.filter((s) => s === "extension")).toHaveLength(5);
   });
 
-  test("baseline still caps RCL2 extensions at 2", () => {
+  test("baseline RCL2 is gated by the 3W extension stage", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -67,8 +69,9 @@ describe("experimentPolicy", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: 0,
+      minerWorkParts: 2,
     });
-    expect(queue.filter((s) => s === "extension")).toHaveLength(2);
+    expect(queue.filter((s) => s === "extension")).toHaveLength(1);
     expect(extensionQuota(2)).toBe(5);
   });
 
@@ -78,9 +81,10 @@ describe("experimentPolicy", () => {
     expect(sourceContainerQueueCount(p, 1, 1, 0)).toBe(0);
   });
 
-  test("later container timing waits for extensions", () => {
+  test("later container timing waits for one extension", () => {
     const p = profileForVariant("containerTiming", "later");
     expect(sourceContainerQueueCount(p, 2, 0, 0)).toBe(0);
+    expect(sourceContainerQueueCount(p, 2, 0, 1)).toBe(2);
     expect(sourceContainerQueueCount(p, 2, 0, 2)).toBe(2);
   });
 
@@ -115,5 +119,26 @@ describe("experimentPolicy", () => {
       profileForVariant("builderCount", "4"),
     );
     expect(q.builder).toBe(4);
+  });
+
+  test("builderCount applies during RCL2 climb (not capped at 2)", () => {
+    const q = desiredCreeps(
+      2,
+      2,
+      2,
+      true,
+      { energyIncomePerTick: 6 },
+      profileForVariant("builderCount", "4"),
+    );
+    expect(q.builder).toBe(4);
+    expect(q.upgrader).toBe(3);
+  });
+
+  test("controllerContainer early allowed while sources missing", () => {
+    const early = profileForVariant("controllerContainer", "early");
+    const after = profileForVariant("controllerContainer", "after_sources");
+    expect(allowControllerContainer(early, 2, 2)).toBe(true);
+    expect(allowControllerContainer(after, 2, 2)).toBe(false);
+    expect(allowControllerContainer(after, 2, 0)).toBe(true);
   });
 });

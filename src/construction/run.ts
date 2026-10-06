@@ -3,6 +3,7 @@ import {
   extensionQuota,
   shouldBuildRoads,
   shouldBuildWalls,
+  stagedExtensionBuildCap,
 } from "../earlyGame";
 import {
   allowControllerContainer,
@@ -83,7 +84,20 @@ export function runConstruction(room: Room): void {
     (s) => s.structureType === STRUCTURE_EXTENSION,
   ).length;
   const extensionCount = extensionBuilt + extensionSites;
-  const extCap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
+  let minerWorkParts = 0;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
+    minerWorkParts += creep.getActiveBodyparts(WORK);
+  }
+  const extCap = Math.min(
+    stagedExtensionBuildCap({
+      fullQuota: extensionQuota(rcl),
+      minerWorkParts,
+      sourceCount,
+    }),
+    extensionBootstrapCap(exp, rcl, extensionQuota(rcl)),
+  );
   const needExtensions = extensionCount < extCap;
   // Only starve roads during RCL2 extension bootstrap. At RCL3+ unfinished
   // extensions must not permanently block source roads (live W21N35 symptom).
@@ -220,6 +234,7 @@ export function runConstruction(room: Room): void {
     extensionBuilt,
     sourceContainerSites,
     towerCount,
+    minerWorkParts,
     experiment: exp,
   });
 

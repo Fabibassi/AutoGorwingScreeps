@@ -7,10 +7,12 @@ import {
   effectiveMinerMinWork,
   estimateMiningPerTick,
   extensionQuota,
+  extensionsNeededForMinerWork,
   haulerCountForMining,
   isSoftLocked,
   minerTargetWorkParts,
   shouldBankForBetterMiners,
+  stagedExtensionBuildCap,
   shouldBuildContainers,
   shouldBuildRoads,
   shouldBuildStorage,
@@ -67,6 +69,35 @@ describe("miner quality banking", () => {
     expect(minerTargetWorkParts(300)).toBe(2);
     expect(minerTargetWorkParts(550)).toBe(5);
     expect(minerTargetWorkParts(800)).toBe(5);
+  });
+
+  test("extension build stages unlock 3W then 5W then full quota", () => {
+    expect(extensionsNeededForMinerWork(3)).toBe(1);
+    expect(extensionsNeededForMinerWork(5)).toBe(5);
+    // Before 3W miners: only enough extensions for a 3W body.
+    expect(
+      stagedExtensionBuildCap({
+        fullQuota: 10,
+        minerWorkParts: 2,
+        sourceCount: 2,
+      }),
+    ).toBe(1);
+    // 3W seats filled → open the 5W capacity gate.
+    expect(
+      stagedExtensionBuildCap({
+        fullQuota: 10,
+        minerWorkParts: 6,
+        sourceCount: 2,
+      }),
+    ).toBe(5);
+    // 5W seats filled → remaining RCL quota.
+    expect(
+      stagedExtensionBuildCap({
+        fullQuota: 10,
+        minerWorkParts: 10,
+        sourceCount: 2,
+      }),
+    ).toBe(10);
   });
 
   test("banks when capacity allows fat miners but live WORK is thin", () => {
@@ -537,7 +568,7 @@ describe("constructionPriority", () => {
     expect(queue.filter((s) => s === "container")).toHaveLength(1);
   });
 
-  test("extensions deferred at RCL2 so climb can finish first", () => {
+  test("extensions start at the 3W gate before miners are upgraded", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -545,9 +576,10 @@ describe("constructionPriority", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: 0,
+      minerWorkParts: 2,
     });
-    // Bootstrap capacity for fatter upgraders — not the full RCL2 quota.
-    expect(queue.filter((s) => s === "extension")).toHaveLength(2);
+    // Stage 1: one extension unlocks 3W1M (350), not the full RCL2 quota.
+    expect(queue.filter((s) => s === "extension")).toHaveLength(1);
   });
 
   test("tower leads at RCL3 once every source has a container", () => {
@@ -559,10 +591,25 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
       towerCount: 0,
+      minerWorkParts: 10,
     });
     expect(queue[0]).toBe("tower");
     expect(queue.filter((s) => s === "tower")).toHaveLength(1);
     expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(3));
+  });
+
+  test("RCL3 with thin miners only queues the 3W extension gate", () => {
+    const queue = constructionPriority(3, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+      towerCount: 1,
+      minerWorkParts: 2,
+    });
+    expect(queue.filter((s) => s === "extension")).toHaveLength(1);
   });
 
   test("storage after tower and full extensions at RCL 4", () => {
