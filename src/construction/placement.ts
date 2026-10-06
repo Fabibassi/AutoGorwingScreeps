@@ -195,7 +195,8 @@ export function countFreeSpawnExits(
 }
 
 /**
- * Tear down illegal spawn-ring blockers (extensions/storage/etc.).
+ * Tear down illegal blockers on the diamond walk network:
+ * spawn exit ring (range 1) and N/S/E/W hub rays (range 2–4).
  * Roads/containers stay (walkable). Storage with energy is deferred until empty
  * unless the ring is fully sealed (0 free exits).
  */
@@ -206,12 +207,15 @@ export function clearSpawnExitRing(
   let removedSites = 0;
   let destroyedStructures = 0;
 
-  const ringTiles: RoomPosition[] = [];
-  for (const [dx, dy] of ADJACENT_DELTAS) {
-    ringTiles.push(new RoomPosition(spawnPos.x + dx, spawnPos.y + dy, room.name));
+  const corridorTiles: RoomPosition[] = [];
+  for (const [dx, dy] of HUB_ROAD_STAMP) {
+    const x = spawnPos.x + dx;
+    const y = spawnPos.y + dy;
+    if (x < 0 || x > 49 || y < 0 || y > 49) continue;
+    corridorTiles.push(new RoomPosition(x, y, room.name));
   }
 
-  for (const pos of ringTiles) {
+  for (const pos of corridorTiles) {
     for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES)) {
       if (!blocksSpawnLanding(site.structureType)) continue;
       if (site.remove() === OK) removedSites++;
@@ -219,7 +223,7 @@ export function clearSpawnExitRing(
   }
 
   const freeBefore = countFreeSpawnExits(room, spawnPos);
-  for (const pos of ringTiles) {
+  for (const pos of corridorTiles) {
     for (const s of pos.lookFor(LOOK_STRUCTURES)) {
       const type = s.structureType;
       if (!blocksSpawnLanding(type)) continue;

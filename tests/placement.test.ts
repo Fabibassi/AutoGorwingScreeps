@@ -262,6 +262,24 @@ describe("diamond hub stamp", () => {
     );
   });
 
+  test("clearSpawnExitRing destroys a north-ray extension that would seal the road", () => {
+    const room = makeRoom({
+      structures: [
+        { x: 25, y: 23, structureType: "extension" },
+        { x: 27, y: 26, structureType: "extension" },
+      ],
+    });
+    const spawnPos = new RoomPosition(25, 25, room.name);
+    expect(isHubCorridor(spawnPos, 25, 23)).toBe(true);
+    expect(isHubCorridor(spawnPos, 27, 26)).toBe(false);
+    const cleared = clearSpawnExitRing(room, spawnPos);
+    expect(cleared.destroyedStructures).toBe(1);
+    const north = new RoomPosition(25, 23, room.name).lookFor(LOOK_STRUCTURES);
+    const pocket = new RoomPosition(27, 26, room.name).lookFor(LOOK_STRUCTURES);
+    expect(north).toHaveLength(0);
+    expect(pocket).toHaveLength(1);
+  });
+
   test("clearBlockingSitesOnRoads removes extension sites on corridors", () => {
     const room = makeRoom({
       sites: [{ x: 25, y: 27, structureType: "extension" }],
