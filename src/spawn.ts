@@ -8,6 +8,7 @@ import {
   useDedicatedMiners,
   type CreepQuotas,
 } from "./earlyGame";
+import { resolveExperiment } from "./earlyGame/experimentPolicy";
 import {
   countCreepsByRole,
   countSourceContainers,
@@ -334,11 +335,28 @@ export function runSpawn(spawn: StructureSpawn): void {
   const spawnFillPct =
     spawn.store.getUsedCapacity(RESOURCE_ENERGY) / spawnCapacity;
   const energyAvailable = room.energyAvailable;
+  let minerWorkParts = 0;
+  let haulRangeSum = 0;
+  const sourceList = room.find(FIND_SOURCES);
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
+    minerWorkParts += creep.getActiveBodyparts(WORK);
+  }
+  for (const source of sourceList) {
+    // Path length ≈ chebyshev×1.5 (diagonal bias); floor for throughput math.
+    haulRangeSum += Math.ceil(spawn.pos.getRangeTo(source) * 1.5);
+  }
   const economy = {
     energyIncomePerTick: Memory.ags?.metrics.energyIncomePerTick ?? 0,
     baselineIncome: Memory.ags?.baseline?.energyIncomePerTick,
     spawnFillPct,
     energyAvailable,
+    minerWorkParts,
+    haulRange:
+      sourceList.length > 0
+        ? Math.max(8, Math.round(haulRangeSum / sourceList.length))
+        : 20,
   };
   const infrastructureDedicated = useDedicatedMiners(
     rcl,
@@ -355,12 +373,14 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
   }
 
+  const exp = resolveExperiment(Memory.ags);
   const want = desiredCreeps(
     rcl,
     sourceCount,
     containersAtSources,
     hasConstructionSites,
     economy,
+    exp,
   );
   const counts = countCreepsByRole();
   // Rebalance even while spawn is busy — otherwise dead miners leave builders
@@ -422,6 +442,8 @@ export function runSpawn(spawn: StructureSpawn): void {
   const buildersBelowQuota = liveCounts.builder < want.builder;
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
+  const minersBelowQuota =
+    infrastructureDedicated && liveCounts.miner < want.miner;
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
@@ -430,17 +452,30 @@ export function runSpawn(spawn: StructureSpawn): void {
     { infrastructurePush, buildersBelowQuota, economyFloorMet },
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
+  // Experiment haulerCap (thin) also caps when economy is healthy.
   const haulerMaxCost =
     hasNoEconomyCreeps(liveCounts) ||
     (liveCounts.miner === 0 && infrastructureDedicated)
       ? 100
-      : undefined;
+      : exp.haulerMaxCost;
 
   for (const role of spawnOrder) {
     if (liveCounts[role] >= want[role]) continue;
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
-    const body = bodyForRole(role, energyAvailable, { haulerMaxCost });
+    // Miner gap: do not spend the bank on hauler@100 / upgrader / builder —
+    // that permanently keeps spawn under the 150 miner body cost.
+    if (
+      minersBelowQuota &&
+      role !== "miner" &&
+      role !== "harvester"
+    ) {
+      continue;
+    }
+    const body = bodyForRole(role, energyAvailable, {
+      haulerMaxCost,
+      minerMinWork: exp.minerMinWork,
+    });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };

@@ -124,6 +124,38 @@ export interface EconomyContext {
   spawnFillPct?: number;
   /** Room energyAvailable (spawn + extensions). */
   energyAvailable?: number;
+  /** Sum of WORK parts on live miners (for hauler sizing). */
+  minerWorkParts?: number;
+  /** Approx one-way spawn↔source tiles for hauler throughput. */
+  haulRange?: number;
+}
+
+/** Each WORK harvests 2 energy/tick; a source caps at 10 e/t. */
+export function estimateMiningPerTick(
+  minerWorkParts: number,
+  sourceCount: number,
+): number {
+  const sources = Math.max(1, sourceCount);
+  return Math.min(Math.max(0, minerWorkParts) * 2, sources * 10);
+}
+
+/**
+ * Haulers needed to move mined energy to the hub.
+ * Throughput ≈ 150 carry / (2×range + 2 intents); clamp to [sources, 2×sources].
+ */
+export function haulerCountForMining(
+  sourceCount: number,
+  minerWorkParts: number,
+  opts?: { haulRange?: number },
+): number {
+  const sources = Math.max(1, sourceCount);
+  const mining = estimateMiningPerTick(minerWorkParts, sources);
+  if (mining <= 0) return sources;
+
+  const range = Math.max(8, opts?.haulRange ?? 20);
+  const throughput = 150 / (2 * range + 2);
+  const needed = Math.ceil(mining / Math.max(1, throughput));
+  return Math.max(sources, Math.min(sources * 2, needed));
 }
 
 /** Source containers missing — static mining stays locked off. */
@@ -408,11 +440,16 @@ export function desiredCreeps(
   // 45k controller progress never finishes under a 4-builder extension push.
   const climbingToRcl3 = rcl < 3;
   const extensionPush = hasConstructionSites && !depressed && !climbingToRcl3;
+  // Fallback assume 1 WORK/source until spawn passes live miner WORK counts.
+  const minerWorkParts = economy?.minerWorkParts ?? sources;
+  const haulers = haulerCountForMining(sources, minerWorkParts, {
+    haulRange: economy?.haulRange,
+  });
 
   const quotas: CreepQuotas = {
     harvester: 0,
     miner: sources,
-    hauler: sources,
+    hauler: haulers,
     upgrader: climbingToRcl3
       ? exp.upgraderQuotaClimb
       : extensionPush

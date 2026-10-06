@@ -46,26 +46,44 @@ describe("pickClosestLogisticsEnergy", () => {
     // Extension sites sit on the spawn — walking to source containers starves builds.
     expect(
       pickClosestLogisticsEnergy([
-        { id: "container-far", energy: 500, range: 20 },
-        { id: "storage", energy: 1650, range: 12 },
-        { id: "spawn", energy: 300, range: 1 },
+        { id: "container-far", energy: 500, range: 20, kind: "container" },
+        { id: "storage", energy: 1650, range: 12, kind: "storage" },
+        { id: "spawn", energy: 300, range: 1, kind: "spawn" },
       ]),
     ).toBe("spawn");
     expect(
       pickClosestLogisticsEnergy([
-        { id: "container-far", energy: 500, range: 20 },
-        { id: "storage", energy: 1650, range: 3 },
+        { id: "container-far", energy: 500, range: 20, kind: "container" },
+        { id: "storage", energy: 1650, range: 3, kind: "storage" },
       ]),
     ).toBe("storage");
+  });
+
+  test("prefers hub spawn over a closer thin mining container", () => {
+    expect(
+      pickClosestLogisticsEnergy([
+        { id: "thin-source", energy: 80, range: 2, kind: "container" },
+        { id: "spawn", energy: 200, range: 5, kind: "spawn" },
+      ]),
+    ).toBe("spawn");
   });
 
   test("skips empty stores and returns null when nothing has energy", () => {
     expect(
       pickClosestLogisticsEnergy([
-        { id: "spawn", energy: 0, range: 1 },
-        { id: "storage", energy: 0, range: 2 },
+        { id: "spawn", energy: 0, range: 1, kind: "spawn" },
+        { id: "storage", energy: 0, range: 2, kind: "storage" },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("canWithdrawFromSpawn logistics refill", () => {
+  test("allows spawn at 50% when logistics refill is active", () => {
+    expect(canWithdrawFromSpawn(150, 300, true)).toBe(false);
+    expect(
+      canWithdrawFromSpawn(150, 300, true, { logisticsRefill: true }),
+    ).toBe(true);
   });
 });
 

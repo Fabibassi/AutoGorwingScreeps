@@ -4,7 +4,9 @@ import {
   constructionPriority,
   desiredCreeps,
   EARLY_GAME_THRESHOLDS,
+  estimateMiningPerTick,
   extensionQuota,
+  haulerCountForMining,
   isSoftLocked,
   shouldBuildContainers,
   shouldBuildRoads,
@@ -47,6 +49,15 @@ describe("dedicated miners", () => {
   });
 });
 
+describe("haulerCountForMining", () => {
+  test("scales with miner WORK and caps at 2 per source", () => {
+    expect(estimateMiningPerTick(10, 2)).toBe(20);
+    expect(estimateMiningPerTick(1, 2)).toBe(2);
+    expect(haulerCountForMining(2, 2, { haulRange: 20 })).toBe(2);
+    expect(haulerCountForMining(2, 10, { haulRange: 20 })).toBe(4);
+  });
+});
+
 describe("desiredCreeps", () => {
   test("rcl1 bootstrap stays lean without builders", () => {
     expect(desiredCreeps(1, 2, 0, true)).toEqual({
@@ -56,6 +67,16 @@ describe("desiredCreeps", () => {
       upgrader: 1,
       builder: 0,
     });
+  });
+
+  test("fat miners raise hauler quota under dedicated mining", () => {
+    expect(
+      desiredCreeps(4, 2, 2, false, {
+        energyIncomePerTick: 10,
+        minerWorkParts: 10,
+        haulRange: 20,
+      }),
+    ).toMatchObject({ miner: 2, hauler: 4 });
   });
 
   test("rcl2 without containers keeps mobile harvesters", () => {

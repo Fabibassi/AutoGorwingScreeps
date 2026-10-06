@@ -9,7 +9,12 @@ export function canWithdrawFromSpawn(
   spawnEnergy: number,
   spawnCapacity: number,
   hasEconomyCreeps: boolean,
-  opts?: { infrastructurePush?: boolean; buildersBelowQuota?: boolean },
+  opts?: {
+    infrastructurePush?: boolean;
+    buildersBelowQuota?: boolean;
+    /** Prefer hub refill over remote source containers. */
+    logisticsRefill?: boolean;
+  },
 ): boolean {
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
@@ -22,6 +27,8 @@ export function canWithdrawFromSpawn(
   // ~35%: allow builders to finish source containers while spawn still banks a
   // cheap refill (hauler/partial). Do not use this path while buildersBelowQuota.
   if (opts?.infrastructurePush) return ratio >= 0.35;
+  // Logistics mode: use spawn at half-full instead of hiking to source containers.
+  if (opts?.logisticsRefill) return ratio >= 0.5;
   return ratio >= 0.85;
 }
 
@@ -36,14 +43,28 @@ export function preferLogisticsRefill(
   return containersAtSources >= Math.max(1, sourceCount);
 }
 
-/** Closest store with energy — avoids walking to far source containers while spawn/storage sit full. */
+export type LogisticsKind = "spawn" | "storage" | "container";
+
+/**
+ * Prefer hub energy (spawn/storage) over remote mining containers.
+ * Score = kind bonus + energy − range; skip crumb containers far away.
+ */
 export function pickClosestLogisticsEnergy(
-  candidates: Array<{ id: string; energy: number; range: number }>,
+  candidates: Array<{
+    id: string;
+    energy: number;
+    range: number;
+    kind?: LogisticsKind;
+  }>,
 ): string | null {
-  let best: { id: string; range: number } | null = null;
+  let best: { id: string; score: number } | null = null;
   for (const c of candidates) {
     if (c.energy <= 0) continue;
-    if (!best || c.range < best.range) best = { id: c.id, range: c.range };
+    const kind = c.kind ?? "container";
+    if (kind === "container" && c.energy < 100 && c.range > 6) continue;
+    const kindBonus = kind === "spawn" ? 80 : kind === "storage" ? 60 : 0;
+    const score = kindBonus + Math.min(c.energy, 500) / 25 - c.range * 2;
+    if (!best || score > best.score) best = { id: c.id, score };
   }
   return best?.id ?? null;
 }
@@ -108,7 +129,13 @@ function refillFromLogistics(creep: Creep): boolean {
 
   type StoreStruct = StructureContainer | StructureStorage | StructureSpawn;
   const byId = new Map<string, StoreStruct>();
-  const ranked: Array<{ id: string; energy: number; range: number }> = [];
+  type Ranked = {
+    id: string;
+    energy: number;
+    range: number;
+    kind: LogisticsKind;
+  };
+  const rankedTyped: Ranked[] = [];
 
   const containers = creep.room.find(FIND_STRUCTURES, {
     filter: (s): s is StructureContainer =>
@@ -116,20 +143,22 @@ function refillFromLogistics(creep: Creep): boolean {
   });
   for (const c of containers) {
     byId.set(c.id, c);
-    ranked.push({
+    rankedTyped.push({
       id: c.id,
       energy: c.store[RESOURCE_ENERGY],
       range: creep.pos.getRangeTo(c),
+      kind: "container",
     });
   }
 
   const storage = creep.room.storage;
   if (storage && storage.store[RESOURCE_ENERGY] > 0) {
     byId.set(storage.id, storage);
-    ranked.push({
+    rankedTyped.push({
       id: storage.id,
       energy: storage.store[RESOURCE_ENERGY],
       range: creep.pos.getRangeTo(storage),
+      kind: "storage",
     });
   }
 
@@ -154,22 +183,28 @@ function refillFromLogistics(creep: Creep): boolean {
       !infrastructurePush &&
       hasSites &&
       preferLogisticsRefill(containersAtSources, sourceCount);
+    const logisticsRefill = preferLogisticsRefill(
+      containersAtSources,
+      sourceCount,
+    );
     if (
       canWithdrawFromSpawn(energy, capacity, economyCreeps > 0, {
         infrastructurePush: infrastructurePush || extensionPush,
         buildersBelowQuota: infrastructurePush && builders < 2,
+        logisticsRefill,
       })
     ) {
       byId.set(spawn.id, spawn);
-      ranked.push({
+      rankedTyped.push({
         id: spawn.id,
         energy,
         range: creep.pos.getRangeTo(spawn),
+        kind: "spawn",
       });
     }
   }
 
-  const bestId = pickClosestLogisticsEnergy(ranked);
+  const bestId = pickClosestLogisticsEnergy(rankedTyped);
   if (!bestId) return false;
   const target = byId.get(bestId);
   if (!target) return false;
