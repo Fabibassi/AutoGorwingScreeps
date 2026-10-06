@@ -7,6 +7,18 @@ import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { loadDistModules, simServerDir } from "./loadModules";
 
+/** Controller progressTotal mirrors (approx Screeps World). */
+export const PROGRESS_TOTAL: Record<number, number> = {
+  1: 200,
+  2: 45_000,
+  3: 135_000,
+  4: 405_000,
+  5: 1_215_000,
+  6: 3_645_000,
+  7: 10_935_000,
+  8: 0,
+};
+
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const LIVE_DIR = path.join(ROOT, ".sim-learn", "live");
 
@@ -18,6 +30,13 @@ export type LiveStatus = {
   spawnEnergy: number;
   storageEnergy: number;
   roles: Record<string, number>;
+  rcl?: number;
+  progress?: number;
+  progressTotal?: number;
+  containers?: number;
+  roads?: number;
+  sites?: number;
+  extensions?: number;
   done?: boolean;
   ok?: boolean;
   reason?: string;
@@ -50,6 +69,8 @@ const { ScreepsServer, TerrainMatrix } = require("screeps-server-mockup") as {
 export type SimBot = {
   id: string;
   on: (ev: string, cb: (...args: unknown[]) => void) => void;
+  console: (cmd: string) => Promise<unknown>;
+  memory: Promise<string>;
 };
 
 export type SimServer = {
@@ -99,6 +120,13 @@ export type RoomSummary = {
   spawnEnergy: number;
   storageEnergy: number;
   roles: Record<string, number>;
+  rcl: number;
+  progress: number;
+  progressTotal: number;
+  containers: number;
+  roads: number;
+  sites: number;
+  extensions: number;
 };
 
 export type SimResult = {
@@ -166,6 +194,102 @@ export async function addBotWithModules(
   return bot;
 }
 
+function ensureAgsPreamble(): string {
+  return `Memory.ags = Memory.ags || { metrics: { tick: 0, rcl: 1, energyIncomePerTick: 0, errorCount: 0, cpuUsedAvg: 0, updatedAt: 0 }, incomeSamples: [], incomeWindows: [], errorSamples: [], lastErrors: 0 };`;
+}
+
+/** Inject road-policy experiment knob into bot Memory (survives via main sticky). */
+export async function setBotRoadPolicy(
+  bot: SimBot,
+  policy: string,
+): Promise<void> {
+  const safe = policy.replace(/[^a-z0-9_]/gi, "");
+  await bot.console(
+    `${ensureAgsPreamble()} Memory.ags.roadPolicy = "${safe}";`,
+  );
+}
+
+/** Inject early-game A/B knob+variant (and optional named profile). */
+export async function setBotExperiment(
+  bot: SimBot,
+  opts: {
+    knob?: string;
+    variant?: string;
+    profile?: string;
+    roadPolicy?: string;
+  },
+): Promise<void> {
+  const parts = [ensureAgsPreamble()];
+  if (opts.roadPolicy) {
+    const safe = opts.roadPolicy.replace(/[^a-z0-9_]/gi, "");
+    parts.push(`Memory.ags.roadPolicy = "${safe}";`);
+  }
+  if (opts.knob) {
+    const safe = opts.knob.replace(/[^a-zA-Z0-9_]/g, "");
+    parts.push(`Memory.ags.abKnob = "${safe}";`);
+  }
+  if (opts.variant != null) {
+    const safe = String(opts.variant).replace(/[^a-zA-Z0-9_]/g, "");
+    parts.push(`Memory.ags.abVariant = "${safe}";`);
+  }
+  if (opts.profile) {
+    const safe = opts.profile.replace(/[^a-zA-Z0-9_]/g, "");
+    parts.push(`Memory.ags.profile = "${safe}";`);
+  }
+  await bot.console(parts.join(" "));
+}
+
+/** Inject A/B knob + variant (or named profile) into bot Memory. */
+export async function setBotAbExperiment(
+  bot: SimBot,
+  opts: { abKnob?: string; abVariant?: string; profile?: string },
+): Promise<void> {
+  return setBotExperiment(bot, {
+    knob: opts.abKnob,
+    variant: opts.abVariant,
+    profile: opts.profile,
+  });
+}
+
+/** Mockup often leaves progressTotal stuck after natural level-ups — repair it. */
+export async function syncControllerProgress(server: SimServer): Promise<void> {
+  const objects = await server.common.storage.db["rooms.objects"].find({
+    room: ROOM,
+    type: "controller",
+  });
+  const c = objects[0];
+  if (!c) return;
+  let level = Number(c.level ?? 1);
+  let progress = Number(c.progress ?? 0);
+  let progressTotal = Number(c.progressTotal ?? 0);
+  let changed = false;
+
+  const expected = PROGRESS_TOTAL[level];
+  if (level < 8 && expected != null && progressTotal !== expected) {
+    progressTotal = expected;
+    changed = true;
+  }
+
+  while (level < 8 && progressTotal > 0 && progress >= progressTotal) {
+    progress -= progressTotal;
+    level += 1;
+    progressTotal = PROGRESS_TOTAL[level] ?? 0;
+    changed = true;
+    if (level >= 8) {
+      level = 8;
+      progress = 0;
+      progressTotal = 0;
+      break;
+    }
+  }
+
+  if (!changed) return;
+  await server.common.storage.db["rooms.objects"].update(
+    { room: ROOM, type: "controller" },
+    { $set: { level, progress, progressTotal } },
+  );
+}
+
 /** addBot forces RCL1 — restore controller level + spawn energy. */
 export async function patchControllerAndSpawn(
   server: SimServer,
@@ -178,7 +302,10 @@ export async function patchControllerAndSpawn(
       $set: {
         level: opts.rcl,
         progress: 0,
-        progressTotal: opts.progressTotal ?? (opts.rcl <= 1 ? 200 : 45000),
+        progressTotal:
+          opts.progressTotal ??
+          PROGRESS_TOTAL[opts.rcl] ??
+          (opts.rcl <= 1 ? 200 : 45000),
       },
     },
   );
@@ -201,6 +328,13 @@ export async function readRoomSummary(server: SimServer): Promise<RoomSummary> {
   let creeps = 0;
   let spawnEnergy = 0;
   let storageEnergy = 0;
+  let rcl = 1;
+  let progress = 0;
+  let progressTotal = 0;
+  let containers = 0;
+  let roads = 0;
+  let sites = 0;
+  let extensions = 0;
   const roles: Record<string, number> = {};
   for (const o of objects) {
     if (o.type === "creep") {
@@ -214,9 +348,61 @@ export async function readRoomSummary(server: SimServer): Promise<RoomSummary> {
     } else if (o.type === "storage") {
       const store = o.store as Record<string, number> | undefined;
       storageEnergy += store?.energy ?? 0;
+    } else if (o.type === "controller") {
+      rcl = Number(o.level ?? 1);
+      progress = Number(o.progress ?? 0);
+      progressTotal = Number(o.progressTotal ?? 0);
+    } else if (o.type === "container") {
+      containers++;
+    } else if (o.type === "road") {
+      roads++;
+    } else if (o.type === "extension") {
+      extensions++;
+    } else if (o.type === "constructionSite") {
+      sites++;
     }
   }
-  return { gameTime, creeps, spawnEnergy, storageEnergy, roles };
+  return {
+    gameTime,
+    creeps,
+    spawnEnergy,
+    storageEnergy,
+    roles,
+    rcl,
+    progress,
+    progressTotal,
+    containers,
+    roads,
+    sites,
+    extensions,
+  };
+}
+
+/** Map room summary fields onto a live-status publish payload. */
+export function liveFromSummary(
+  instance: string,
+  ticksCap: number,
+  final: RoomSummary,
+  extra?: Partial<LiveStatus>,
+): LiveStatus {
+  return {
+    instance,
+    tick: final.gameTime,
+    ticksCap,
+    creeps: final.creeps,
+    spawnEnergy: final.spawnEnergy,
+    storageEnergy: final.storageEnergy,
+    roles: final.roles,
+    rcl: final.rcl,
+    progress: final.progress,
+    progressTotal: final.progressTotal,
+    containers: final.containers,
+    roads: final.roads,
+    sites: final.sites,
+    extensions: final.extensions,
+    updatedAt: new Date().toISOString(),
+    ...extra,
+  };
 }
 
 export async function runTicks(
@@ -229,17 +415,7 @@ export async function runTicks(
   await server.tick();
   let final = await readRoomSummary(server);
   const publish = (extra?: Partial<LiveStatus>) => {
-    writeLiveStatus({
-      instance,
-      tick: final.gameTime,
-      ticksCap: ticks,
-      creeps: final.creeps,
-      spawnEnergy: final.spawnEnergy,
-      storageEnergy: final.storageEnergy,
-      roles: final.roles,
-      updatedAt: new Date().toISOString(),
-      ...extra,
-    });
+    writeLiveStatus(liveFromSummary(instance, ticks, final, extra));
   };
   console.log(`[sim|${instance}] t0`, final);
   publish();

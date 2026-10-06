@@ -96,6 +96,21 @@ describe("canWithdrawFromSpawn", () => {
     expect(canWithdrawFromSpawn(300, 300, false)).toBe(false);
   });
 
+  test("miners below quota block spawn siphon until spawn is comfortable", () => {
+    expect(
+      canWithdrawFromSpawn(150, 300, true, {
+        logisticsRefill: true,
+        minersBelowQuota: true,
+      }),
+    ).toBe(false);
+    expect(
+      canWithdrawFromSpawn(250, 300, true, {
+        logisticsRefill: true,
+        minersBelowQuota: true,
+      }),
+    ).toBe(true);
+  });
+
   test("blocks spawn drain while spawn is below comfortable absolute energy", () => {
     expect(canWithdrawFromSpawn(100, 300, true)).toBe(false);
     expect(canWithdrawFromSpawn(249, 300, true)).toBe(false);

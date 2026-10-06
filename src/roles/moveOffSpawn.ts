@@ -1,16 +1,9 @@
-const EXIT_DIRS: DirectionConstant[] = [
-  TOP,
-  TOP_RIGHT,
-  RIGHT,
-  BOTTOM_RIGHT,
-  BOTTOM,
-  BOTTOM_LEFT,
-  LEFT,
-  TOP_LEFT,
-];
+const EXIT_DIRS: DirectionConstant[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
 /** True when the creep is standing on a spawn tile (newborn / jammed). */
 export function isOnSpawnTile(creep: Creep): boolean {
+  const find = creep.room?.find;
+  if (typeof find !== "function") return false;
   return creep.room
     .find(FIND_MY_SPAWNS)
     .some((s) => s.pos.isEqualTo(creep.pos));

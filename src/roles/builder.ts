@@ -29,10 +29,15 @@ export function canWithdrawFromSpawn(
     buildersBelowQuota?: boolean;
     /** Prefer hub refill over remote source containers. */
     logisticsRefill?: boolean;
+    /** Miners missing — never siphon spawn under a 1W1M miner body. */
+    minersBelowQuota?: boolean;
   },
 ): boolean {
   if (!hasEconomyCreeps) return false;
   if (spawnCapacity <= 0) return false;
+  if (opts?.minersBelowQuota) {
+    return spawnEnergy >= BUILDER_SPAWN_THRESHOLDS.default;
+  }
   // 2nd infra builder missing: keep a full WORK+CARRY+MOVE body (+1 CARRY slack)
   // so spawnCreep can claim it before we siphon the bank back under 200.
   if (opts?.buildersBelowQuota) {
@@ -184,10 +189,12 @@ function refillFromLogistics(creep: Creep): boolean {
     const energy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
     let economyCreeps = 0;
     let builders = 0;
+    let miners = 0;
     for (const name in Game.creeps) {
       const role = Game.creeps[name].memory.role;
       if (role === "harvester" || role === "miner") economyCreeps++;
       if (role === "builder") builders++;
+      if (role === "miner") miners++;
     }
     const sourceCount = creep.room.find(FIND_SOURCES).length;
     const containersAtSources = countSourceContainers(creep.room);
@@ -208,6 +215,9 @@ function refillFromLogistics(creep: Creep): boolean {
         infrastructurePush: infrastructurePush || extensionPush,
         buildersBelowQuota: infrastructurePush && builders < 2,
         logisticsRefill,
+        minersBelowQuota:
+          preferLogisticsRefill(containersAtSources, sourceCount) &&
+          miners < sourceCount,
       })
     ) {
       byId.set(spawn.id, spawn);

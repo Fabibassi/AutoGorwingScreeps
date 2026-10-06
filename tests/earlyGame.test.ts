@@ -163,6 +163,21 @@ describe("desiredCreeps", () => {
     });
   });
 
+  test("rcl2 with containers but no live miners keeps a bridge harvester", () => {
+    expect(
+      desiredCreeps(2, 2, 2, true, {
+        energyIncomePerTick: 6,
+        minerCount: 0,
+      }),
+    ).toEqual({
+      harvester: 2,
+      miner: 2,
+      hauler: 2,
+      upgrader: 3,
+      builder: 2,
+    });
+  });
+
   test("dedicated mining defers upgraders and boosts builders while extension sites exist", () => {
     expect(desiredCreeps(4, 2, 2, true, { energyIncomePerTick: 6 })).toEqual({
       harvester: 0,

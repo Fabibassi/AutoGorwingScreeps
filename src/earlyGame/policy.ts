@@ -126,6 +126,8 @@ export interface EconomyContext {
   energyAvailable?: number;
   /** Sum of WORK parts on live miners (for hauler sizing). */
   minerWorkParts?: number;
+  /** Live miner count — containers ≠ staffed miners. */
+  minerCount?: number;
   /** Approx one-way spawn↔source tiles for hauler throughput. */
   haulRange?: number;
 }
@@ -442,12 +444,15 @@ export function desiredCreeps(
   const extensionPush = hasConstructionSites && !depressed && !climbingToRcl3;
   // Fallback assume 1 WORK/source until spawn passes live miner WORK counts.
   const minerWorkParts = economy?.minerWorkParts ?? sources;
+  const liveMiners = economy?.minerCount;
+  // Unknown live count (pure tests) → assume staffed. Explicit 0 → keep a bridge harvester.
+  const minersStaffed = liveMiners == null || liveMiners >= sources;
   const haulers = haulerCountForMining(sources, minerWorkParts, {
     haulRange: economy?.haulRange,
   });
 
   const quotas: CreepQuotas = {
-    harvester: 0,
+    harvester: minersStaffed ? 0 : Math.max(1, sources - liveMiners),
     miner: sources,
     hauler: haulers,
     upgrader: climbingToRcl3
@@ -459,8 +464,9 @@ export function desiredCreeps(
           : 2,
     builder: climbingToRcl3
       ? hasConstructionSites
-        ? // Honour builderCount A/B (was capped at 2, which made variant 4 a no-op).
-          Math.max(1, infraBuilders)
+        ? minersStaffed
+          ? Math.max(1, infraBuilders)
+          : Math.min(2, Math.max(1, infraBuilders))
         : 0
       : infraBuilder
         ? infraBuilders

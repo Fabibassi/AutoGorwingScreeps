@@ -165,7 +165,11 @@ export function reassignSpareHarvesterToInfraBuilder(
   if (counts.builder >= want.builder) return false;
   // Keep mobile harvesters only for sources still missing a container
   // (container-ready sources are covered by miners).
-  const harvestFloor = Math.max(0, sourceCount - containersAtSources);
+  const harvestFloor = Math.max(
+    0,
+    sourceCount - containersAtSources,
+    want.miner - counts.miner,
+  );
   if (counts.harvester <= harvestFloor) return false;
 
   for (const name in Game.creeps) {
@@ -336,12 +340,14 @@ export function runSpawn(spawn: StructureSpawn): void {
     spawn.store.getUsedCapacity(RESOURCE_ENERGY) / spawnCapacity;
   const energyAvailable = room.energyAvailable;
   let minerWorkParts = 0;
+  let minerCount = 0;
   let haulRangeSum = 0;
   const sourceList = room.find(FIND_SOURCES);
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
     if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
     minerWorkParts += creep.getActiveBodyparts(WORK);
+    minerCount++;
   }
   for (const source of sourceList) {
     // Path length ≈ chebyshev×1.5 (diagonal bias); floor for throughput math.
@@ -353,6 +359,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     spawnFillPct,
     energyAvailable,
     minerWorkParts,
+    minerCount,
     haulRange:
       sourceList.length > 0
         ? Math.max(8, Math.round(haulRangeSum / sourceList.length))

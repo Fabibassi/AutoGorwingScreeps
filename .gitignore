@@ -7,3 +7,5 @@ coverage/
 .ags-agent-timestamps.json
 .sim-servers/
 .sim-learn/
+ops/_probe*.txt
+ops/_last-probe*
