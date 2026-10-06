@@ -103,18 +103,22 @@ export function runConstruction(room: Room): void {
     minerWorkParts,
     sourceCount,
   });
-  // Enough finished extensions for this miner stage but bodies still thin:
-  // drop open extension sites so energy goes into upgrades, not 3k builds.
-  if (bankForMiners && extensionBuilt >= stagedCap && extensionSites > 0) {
+  // Cap open extension sites at the 5W gate (drop surplus / already-satisfied stage).
+  const stageTarget = Math.min(stagedCap, bootstrapCap);
+  if (extensionSites > 0 && extensionCount > stageTarget) {
+    let excess = extensionCount - stageTarget;
     for (const site of existingSites) {
-      if (site.structureType === STRUCTURE_EXTENSION) site.remove();
+      if (excess <= 0) break;
+      if (site.structureType !== STRUCTURE_EXTENSION) continue;
+      site.remove();
+      excess -= 1;
     }
     return;
   }
   const extCap =
     bankForMiners && extensionBuilt >= stagedCap
       ? extensionBuilt
-      : Math.min(stagedCap, bootstrapCap);
+      : stageTarget;
   const needExtensions = extensionCount < extCap;
   // Only starve roads during RCL2 extension bootstrap. At RCL3+ unfinished
   // extensions must not permanently block source roads (live W21N35 symptom).

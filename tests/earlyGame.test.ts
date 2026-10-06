@@ -71,7 +71,7 @@ describe("miner quality banking", () => {
     expect(minerTargetWorkParts(800)).toBe(5);
   });
 
-  test("extension build stages unlock 3W then 5W then full quota", () => {
+  test("extension build stages unlock 3W then 5W and stop there", () => {
     expect(extensionsNeededForMinerWork(3)).toBe(1);
     expect(extensionsNeededForMinerWork(5)).toBe(5);
     // Before 3W miners: only enough extensions for a 3W body.
@@ -90,14 +90,14 @@ describe("miner quality banking", () => {
         sourceCount: 2,
       }),
     ).toBe(5);
-    // 5W seats filled → remaining RCL quota.
+    // 5W seats filled → stay at the 5W gate (no RCL-quota spam).
     expect(
       stagedExtensionBuildCap({
         fullQuota: 10,
         minerWorkParts: 10,
         sourceCount: 2,
       }),
-    ).toBe(10);
+    ).toBe(5);
   });
 
   test("banks when capacity allows fat miners but live WORK is thin", () => {
@@ -595,7 +595,8 @@ describe("constructionPriority", () => {
     });
     expect(queue[0]).toBe("tower");
     expect(queue.filter((s) => s === "tower")).toHaveLength(1);
-    expect(queue.filter((s) => s === "extension")).toHaveLength(extensionQuota(3));
+    // Fat miners still only queue the 5W capacity gate (5), not full RCL3 quota.
+    expect(queue.filter((s) => s === "extension")).toHaveLength(5);
   });
 
   test("RCL3 with thin miners only queues the 3W extension gate", () => {

@@ -196,9 +196,9 @@ export function extensionsNeededForMinerWork(workParts: number): number {
 }
 
 /**
- * Build extensions in miner-quality stages:
- * 1) enough for 3W1M → 2) enough for 5W1M → 3) full RCL quota.
- * Skip the 3W gate once miners already average ≥3 WORK/source.
+ * Build extensions in miner-quality stages only:
+ * 1) enough for 3W1M → 2) enough for 5W1M (5×50 + spawn 300 = 550).
+ * Never push past the 5W gate — spare energy upgrades bodies, not empty shells.
  */
 export function stagedExtensionBuildCap(opts: {
   fullQuota: number;
@@ -209,7 +209,6 @@ export function stagedExtensionBuildCap(opts: {
   const sources = Math.max(1, opts.sourceCount);
   const gate3 = extensionsNeededForMinerWork(3);
   const gate5 = extensionsNeededForMinerWork(5);
-  if (opts.minerWorkParts >= sources * 5) return full;
   if (opts.minerWorkParts >= sources * 3) {
     return Math.min(full, Math.max(gate5, gate3));
   }
@@ -708,7 +707,7 @@ export function constructionPriority(
     missingAll === 0
   ) {
     const have = opts.extensionCount ?? 0;
-    // Miner stages (3W→5W→full) further limited by RCL2 experiment bootstrap.
+    // Miner stages (3W→5W cap) further limited by RCL2 experiment bootstrap.
     const missing = Math.max(0, extCap - have);
     for (let i = 0; i < missing; i++) {
       queue.push("extension");
