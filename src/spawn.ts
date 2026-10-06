@@ -640,6 +640,13 @@ export function runSpawn(spawn: StructureSpawn): void {
           : liveCounts[role];
     if (filled >= want[role]) continue;
     if (
+      role === "harvester" &&
+      liveCounts.miner > 0 &&
+      containersAtSources >= sourceCount
+    ) {
+      continue;
+    }
+    if (
       role === "miner" &&
       liveCounts.miner >= minerLiveCap(want.miner, minerSourceIds.length)
     ) {

@@ -502,13 +502,14 @@ export function desiredCreeps(
   const minerWorkParts = economy?.minerWorkParts ?? sources;
   const liveMiners = economy?.minerCount;
   // Unknown live count (pure tests) → assume staffed. Explicit 0 → keep a bridge harvester.
+  // Any live miner: missing seats are miners, never a mobile WCM harvester.
   const minersStaffed = liveMiners == null || liveMiners >= sources;
   const haulers = haulerCountForMining(sources, minerWorkParts, {
     haulRange: economy?.haulRange,
   });
 
   const quotas: CreepQuotas = {
-    harvester: minersStaffed ? 0 : Math.max(1, sources - liveMiners),
+    harvester: liveMiners === 0 ? Math.max(1, sources) : 0,
     miner: sources,
     hauler: haulers,
     upgrader: climbingToRcl3

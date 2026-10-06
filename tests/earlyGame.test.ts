@@ -187,6 +187,16 @@ describe("desiredCreeps", () => {
     });
   });
 
+  test("partial miner staffing does not spawn a mobile harvester", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 6,
+        minerCount: 1,
+        minerWorkParts: 5,
+      }),
+    ).toMatchObject({ harvester: 0, miner: 2 });
+  });
+
   test("dedicated mining defers upgraders and boosts builders while extension sites exist", () => {
     expect(desiredCreeps(4, 2, 2, true, { energyIncomePerTick: 6 })).toEqual({
       harvester: 0,
