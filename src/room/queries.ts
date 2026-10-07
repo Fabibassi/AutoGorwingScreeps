@@ -41,15 +41,44 @@ export function countCreepsByRole(): CreepQuotas {
   return counts;
 }
 
+/**
+ * How close a container may sit to count as a source-mining seat.
+ * Range 1 is ideal; range 2 still covers real rooms where the only free tile
+ * ended up one step farther (live W21N35 falsely reported 1/2 containers).
+ */
+export const SOURCE_CONTAINER_RANGE = 2;
+
+/** Chebyshev distance — same metric as Screeps findInRange. */
+export function chebyshevDist(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): number {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/** Pure: how many sources have at least one container within `range`. */
+export function countSourcesWithNearbyContainers(
+  sources: Array<{ x: number; y: number }>,
+  containers: Array<{ x: number; y: number }>,
+  range: number = SOURCE_CONTAINER_RANGE,
+): number {
+  let count = 0;
+  for (const source of sources) {
+    if (containers.some((c) => chebyshevDist(source, c) <= range)) count++;
+  }
+  return count;
+}
+
 export function countSourceContainers(
   room: Room,
-  opts: { includeSites?: boolean } = {},
+  opts: { includeSites?: boolean; range?: number } = {},
 ): number {
   const includeSites = opts.includeSites ?? false;
+  const range = opts.range ?? SOURCE_CONTAINER_RANGE;
   let count = 0;
   for (const source of room.find(FIND_SOURCES)) {
     const hasStructure =
-      source.pos.findInRange(FIND_STRUCTURES, 1, {
+      source.pos.findInRange(FIND_STRUCTURES, range, {
         filter: (s) => s.structureType === STRUCTURE_CONTAINER,
       }).length > 0;
     if (hasStructure) {
@@ -58,13 +87,34 @@ export function countSourceContainers(
     }
     if (includeSites) {
       const hasSite =
-        source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
+        source.pos.findInRange(FIND_CONSTRUCTION_SITES, range, {
           filter: (s) => s.structureType === STRUCTURE_CONTAINER,
         }).length > 0;
       if (hasSite) count++;
     }
   }
   return count;
+}
+
+/** Sum energy stored in finished containers near sources. */
+export function sumSourceContainerEnergy(room: Room): number {
+  let total = 0;
+  const seen = new Set<Id<StructureContainer>>();
+  for (const source of room.find(FIND_SOURCES)) {
+    for (const struct of source.pos.findInRange(
+      FIND_STRUCTURES,
+      SOURCE_CONTAINER_RANGE,
+      {
+        filter: (s): s is StructureContainer =>
+          s.structureType === STRUCTURE_CONTAINER,
+      },
+    )) {
+      if (seen.has(struct.id)) continue;
+      seen.add(struct.id);
+      total += struct.store[RESOURCE_ENERGY] ?? 0;
+    }
+  }
+  return total;
 }
 
 export function hasControllerContainer(room: Room): boolean {
@@ -79,10 +129,10 @@ export function hasControllerContainer(room: Room): boolean {
 export function sourceMissingContainer(room: Room): Source | null {
   for (const source of room.find(FIND_SOURCES)) {
     const has =
-      source.pos.findInRange(FIND_STRUCTURES, 1, {
+      source.pos.findInRange(FIND_STRUCTURES, SOURCE_CONTAINER_RANGE, {
         filter: (s) => s.structureType === STRUCTURE_CONTAINER,
       }).length > 0 ||
-      source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
+      source.pos.findInRange(FIND_CONSTRUCTION_SITES, SOURCE_CONTAINER_RANGE, {
         filter: (s) => s.structureType === STRUCTURE_CONTAINER,
       }).length > 0;
     if (!has) return source;
@@ -90,30 +140,59 @@ export function sourceMissingContainer(room: Room): Source | null {
   return null;
 }
 
-/** Sources that already have a finished adjacent container (ready for static miners). */
+/** Sources that already have a finished nearby container (ready for static miners). */
 export function findSourcesWithContainers(room: Room): Source[] {
   return room.find(FIND_SOURCES).filter(
     (source) =>
-      source.pos.findInRange(FIND_STRUCTURES, 1, {
+      source.pos.findInRange(FIND_STRUCTURES, SOURCE_CONTAINER_RANGE, {
         filter: (s) => s.structureType === STRUCTURE_CONTAINER,
       }).length > 0,
   );
 }
 
-/** Container construction sites adjacent to a source (not controller/storage). */
+/** Container construction sites near a source (not controller/storage). */
 export function findSourceContainerSites(room: Room): ConstructionSite[] {
   const sites: ConstructionSite[] = [];
   const seen = new Set<Id<ConstructionSite>>();
   for (const source of room.find(FIND_SOURCES)) {
-    for (const site of source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
-      filter: (s) => s.structureType === STRUCTURE_CONTAINER,
-    })) {
+    for (const site of source.pos.findInRange(
+      FIND_CONSTRUCTION_SITES,
+      SOURCE_CONTAINER_RANGE,
+      {
+        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+      },
+    )) {
       if (seen.has(site.id)) continue;
       seen.add(site.id);
       sites.push(site);
     }
   }
   return sites;
+}
+
+/**
+ * Cancel container sites next to a source that already has a finished container.
+ * Live symptom: bot counted range-1 only → thought a source was bare → kept a
+ * duplicate site (e.g. W21N35 @ 14,32) while both seats already stood.
+ */
+export function removeRedundantSourceContainerSites(room: Room): number {
+  let removed = 0;
+  for (const source of room.find(FIND_SOURCES)) {
+    const finished = source.pos.findInRange(FIND_STRUCTURES, SOURCE_CONTAINER_RANGE, {
+      filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+    });
+    if (finished.length === 0) continue;
+    for (const site of source.pos.findInRange(
+      FIND_CONSTRUCTION_SITES,
+      SOURCE_CONTAINER_RANGE,
+      {
+        filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+      },
+    )) {
+      if (site.remove() === OK) removed++;
+    }
+  }
+  return removed;
 }
 
 export function countStructures(room: Room, type: StructureConstant): number {

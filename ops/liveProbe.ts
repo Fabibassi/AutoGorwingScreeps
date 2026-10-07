@@ -106,6 +106,16 @@ function summarizeObjects(objects: unknown[]): {
   /** Adjacent spawn tiles free for newborn creeps (max 8). */
   freeSpawnExits: number;
   spawnAdjacentBlocked: Array<{ x: number; y: number; by: string }>;
+  /** Source↔container pairing (debug false 1/2 container counts). */
+  sourceContainerMap: Array<{
+    x: number;
+    y: number;
+    nearestContainerDist: number | null;
+    nearestContainer: { x: number; y: number; energy: number } | null;
+    coveredRange1: boolean;
+    coveredRange2: boolean;
+  }>;
+  containers: Array<{ x: number; y: number; energy: number }>;
 } {
   const creeps: Record<string, number> = {};
   const creepDetails: Array<{
@@ -129,6 +139,8 @@ function summarizeObjects(objects: unknown[]): {
   let droppedEnergy = 0;
   let spawnEnergy = 0;
   const dropPiles: Array<{ amount: number; x: number; y: number }> = [];
+  const sourcePositions: Array<{ x: number; y: number }> = [];
+  const containers: Array<{ x: number; y: number; energy: number }> = [];
   let controller:
     | {
         level?: number;
@@ -186,7 +198,11 @@ function summarizeObjects(objects: unknown[]): {
     } else if (type === "storage") {
       storageEnergy += energyFrom(o);
     } else if (type === "container") {
-      containerEnergy += energyFrom(o);
+      const energy = energyFrom(o);
+      containerEnergy += energy;
+      if (typeof o.x === "number" && typeof o.y === "number") {
+        containers.push({ x: o.x, y: o.y, energy });
+      }
     } else if (type === "energy" || type === "tombstone" || type === "ruin") {
       let amt = energyFrom(o);
       if (typeof o.resourceType === "string" && o.resourceType === "energy") {
@@ -201,6 +217,9 @@ function summarizeObjects(objects: unknown[]): {
       }
     } else if (type === "source") {
       sources++;
+      if (typeof o.x === "number" && typeof o.y === "number") {
+        sourcePositions.push({ x: o.x, y: o.y });
+      }
     } else if (type === "controller") {
       controller = {
         level: o.level as number | undefined,
@@ -294,6 +313,26 @@ function summarizeObjects(objects: unknown[]): {
     }
   }
 
+  const sourceContainerMap = sourcePositions.map((src) => {
+    let nearest: { x: number; y: number; energy: number } | null = null;
+    let nearestDist: number | null = null;
+    for (const c of containers) {
+      const d = Math.max(Math.abs(src.x - c.x), Math.abs(src.y - c.y));
+      if (nearestDist == null || d < nearestDist) {
+        nearestDist = d;
+        nearest = c;
+      }
+    }
+    return {
+      x: src.x,
+      y: src.y,
+      nearestContainerDist: nearestDist,
+      nearestContainer: nearest,
+      coveredRange1: nearestDist != null && nearestDist <= 1,
+      coveredRange2: nearestDist != null && nearestDist <= 2,
+    };
+  });
+
   return {
     creeps,
     creepDetails,
@@ -313,6 +352,8 @@ function summarizeObjects(objects: unknown[]): {
     energyNearSpawn,
     freeSpawnExits,
     spawnAdjacentBlocked,
+    sourceContainerMap,
+    containers,
   };
 }
 
