@@ -64,6 +64,15 @@ export function runConstruction(room: Room): void {
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   if (!spawn || !room.controller?.my) return;
 
+  // Before any early-return cleanup: drop ghost / orphan container sites
+  // (live W21N35 @ 14,32 kept growing while spawn-exit clears returned every tick).
+  if (
+    removeRedundantSourceContainerSites(room) > 0 ||
+    removeOrphanContainerSites(room) > 0
+  ) {
+    return;
+  }
+
   // Priority 0: never seal the spawn — creeps cannot walk through structures.
   const cleared = clearSpawnExitRing(room, spawn.pos);
   if (cleared.removedSites > 0 || cleared.destroyedStructures > 0) return;
@@ -72,13 +81,6 @@ export function runConstruction(room: Room): void {
 
   const policy = parseRoadPolicy(Memory.ags?.roadPolicy);
   const exp = resolveExperiment(Memory.ags);
-  // Drop ghost / orphan container sites (live W21N35 @ 14,32 while both seats stood).
-  if (
-    removeRedundantSourceContainerSites(room) > 0 ||
-    removeOrphanContainerSites(room) > 0
-  ) {
-    return;
-  }
 
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
   const nonRoadSites = existingSites.filter((s) => s.structureType !== STRUCTURE_ROAD);
