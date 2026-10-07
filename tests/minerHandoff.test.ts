@@ -6,6 +6,7 @@ import {
   minerMoveTicksPerTile,
   minerNeedsReplacement,
   minerReplacementLeadTime,
+  minerSpawnSeatsWanted,
   pickMinerSourceId,
   shouldWaitForIncumbentMiner,
   sourceIdForReplacementMiner,
@@ -184,6 +185,30 @@ describe("minerLiveCap", () => {
   test("live cap is two miners per source including the walking replacement", () => {
     expect(minerLiveCap(2, 2)).toBe(4);
     expect(minerLiveCap(0, 2)).toBe(4);
+  });
+});
+
+describe("minerSpawnSeatsWanted", () => {
+  test("never wants more miners than mining seats (partial containers)", () => {
+    // want.miner=2 sources but only 1 container seat → do not stack a second miner.
+    expect(minerSpawnSeatsWanted(2, 1)).toBe(1);
+    expect(minerSpawnSeatsWanted(2, 2)).toBe(2);
+    expect(minerSpawnSeatsWanted(2, 0)).toBe(2);
+  });
+});
+
+describe("sourceIdForReplacementMiner stacking", () => {
+  test("does not request a second miner while the seat is still healthy", () => {
+    expect(
+      sourceIdForReplacementMiner(
+        [
+          { sourceId: "s1", ticksToLive: 800 },
+          { sourceId: "s1", ticksToLive: 900 },
+        ],
+        ["s1"],
+        () => 100,
+      ),
+    ).toBeNull();
   });
 });
 

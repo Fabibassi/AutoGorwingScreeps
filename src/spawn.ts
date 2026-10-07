@@ -17,7 +17,7 @@ import {
   durableMinerCount,
   minerLiveCap,
   minerReplacementLeadTime,
-  pickMinerSourceId,
+  minerSpawnSeatsWanted,
   sourceIdForReplacementMiner,
 } from "./earlyGame/minerHandoff";
 import { resolveExperiment } from "./earlyGame/experimentPolicy";
@@ -617,8 +617,15 @@ export function runSpawn(spawn: StructureSpawn): void {
       ticksToLive: creep.ticksToLive,
     });
   }
-  const containerSources = findSourcesWithContainers(room);
-  const minerSourceIds = containerSources.map((s) => s.id);
+  // Drop-miners may seat on every source; otherwise only finished containers.
+  const minerSeatSources = exp.allowDropMiners
+    ? sourceList
+    : findSourcesWithContainers(room);
+  const minerSourceIds = minerSeatSources.map((s) => s.id);
+  const minerSeatWant = minerSpawnSeatsWanted(
+    want.miner,
+    minerSourceIds.length,
+  );
   const nextMinerBody = bodyForRole("miner", energyAvailable, {
     minerMinWork,
   });
@@ -696,7 +703,14 @@ export function runSpawn(spawn: StructureSpawn): void {
   ) {
     return;
   }
-  if (recycleExcessMiners(spawn, want, liveCounts, minersDurable)) {
+  if (
+    recycleExcessMiners(
+      spawn,
+      { ...want, miner: minerSeatWant },
+      liveCounts,
+      minersDurable,
+    )
+  ) {
     return;
   }
   const targetMinerWork = minerTargetWorkParts(energyCapacityAvailable);
@@ -714,7 +728,7 @@ export function runSpawn(spawn: StructureSpawn): void {
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
-    infrastructureDedicated && liveCounts.miner < want.miner;
+    infrastructureDedicated && liveCounts.miner < minerSeatWant;
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
@@ -736,6 +750,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       : exp.haulerMaxCost;
 
   for (const role of spawnOrder) {
+    const roleWant = role === "miner" ? minerSeatWant : want[role];
     const filled =
       role === "miner"
         ? minerSourceIds.length === 0
@@ -748,7 +763,7 @@ export function runSpawn(spawn: StructureSpawn): void {
             ? liveCounts.hauler
             : haulersDurable
           : liveCounts[role];
-    if (filled >= want[role]) continue;
+    if (filled >= roleWant) continue;
     if (
       role === "harvester" &&
       liveCounts.miner > 0 &&
@@ -758,7 +773,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
     if (
       role === "miner" &&
-      liveCounts.miner >= minerLiveCap(want.miner, minerSourceIds.length)
+      liveCounts.miner >= minerLiveCap(minerSeatWant, minerSourceIds.length)
     ) {
       continue;
     }
@@ -782,24 +797,14 @@ export function runSpawn(spawn: StructureSpawn): void {
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
-      const replacementId =
-        sourceIdForReplacementMiner(
-          minerSnapshots,
-          minerSourceIds,
-          leadTimeFor,
-        ) ??
-        pickMinerSourceId({
-          selfName: name,
-          sourceIds: minerSourceIds,
-          peers: Object.keys(Game.creeps)
-            .map((n) => Game.creeps[n])
-            .filter(
-              (c) =>
-                c.room.name === room.name && c.memory.role === "miner",
-            )
-            .map((c) => ({ name: c.name, sourceId: c.memory.sourceId })),
-        });
-      if (replacementId) memory.sourceId = replacementId as Id<Source>;
+      // Only empty seats or true TTL handoff — never stack onto a healthy miner.
+      const seatId = sourceIdForReplacementMiner(
+        minerSnapshots,
+        minerSourceIds,
+        leadTimeFor,
+      );
+      if (!seatId && minerSourceIds.length > 0) continue;
+      if (seatId) memory.sourceId = seatId as Id<Source>;
     }
     const result = spawn.spawnCreep(body, name, { memory });
     if (result !== OK && Memory.ags) {

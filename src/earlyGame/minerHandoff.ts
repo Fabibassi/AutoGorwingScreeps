@@ -75,6 +75,18 @@ export function minerLiveCap(wantMiner: number, sourceCount: number): number {
   return seats * 2;
 }
 
+/**
+ * Spawn quota for miners is per mining seat, not per room source count.
+ * Partial containers / drop-mine seat lists must not stack extras on one source.
+ */
+export function minerSpawnSeatsWanted(
+  wantMiner: number,
+  seatCount: number,
+): number {
+  if (seatCount <= 0) return Math.max(0, wantMiner);
+  return Math.min(Math.max(0, wantMiner), seatCount);
+}
+
 export function sourceIdForReplacementMiner(
   miners: MinerHandoffSnapshot[],
   sourceIds: string[],
