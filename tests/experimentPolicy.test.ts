@@ -81,10 +81,10 @@ describe("experimentPolicy", () => {
     expect(sourceContainerQueueCount(p, 1, 1, 0)).toBe(0);
   });
 
-  test("later container timing waits for one extension", () => {
+  test("later container timing waits for bootstrap extensions", () => {
     const p = profileForVariant("containerTiming", "later");
     expect(sourceContainerQueueCount(p, 2, 0, 0)).toBe(0);
-    expect(sourceContainerQueueCount(p, 2, 0, 1)).toBe(2);
+    expect(sourceContainerQueueCount(p, 2, 0, 1)).toBe(0);
     expect(sourceContainerQueueCount(p, 2, 0, 2)).toBe(2);
   });
 
