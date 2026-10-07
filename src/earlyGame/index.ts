@@ -56,6 +56,8 @@ export {
   missingSourceContainers,
   needsBootstrapHarvester,
   needsInfrastructureBuilder,
+  needsIncomeRescueHauler,
+  infraPushUpgraderQuota,
   shouldBuildContainers,
   shouldBuildExtensions,
   shouldFallbackToMobileHarvest,
