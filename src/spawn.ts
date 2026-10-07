@@ -3,6 +3,7 @@ import {
   desiredCreeps,
   effectiveMinerMinWork,
   hasNoEconomyCreeps,
+  isEconomyDepressed,
   minerBodyCost,
   minerTargetWorkParts,
   needsInfrastructureBuilder,
@@ -729,6 +730,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
     infrastructureDedicated && liveCounts.miner < minerSeatWant;
+  const economyDepressed = isEconomyDepressed(economy);
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
@@ -738,6 +740,8 @@ export function runSpawn(spawn: StructureSpawn): void {
       infrastructurePush,
       buildersBelowQuota,
       economyFloorMet,
+      upgradersBelowQuota: liveCounts.upgrader < want.upgrader,
+      economyDepressed,
       spawnChain: exp.spawnChain,
     },
   );
@@ -779,6 +783,14 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
+    // Collapse: never spawn another builder while the emergency upgrader seat is empty.
+    if (
+      role === "builder" &&
+      economyDepressed &&
+      liveCounts.upgrader < want.upgrader
+    ) {
+      continue;
+    }
     // Miner gap: do not spend the bank on hauler@100 / upgrader / builder —
     // that permanently keeps spawn under the 150 miner body cost.
     if (

@@ -205,7 +205,33 @@ describe("desiredCreeps", () => {
       miner: 0,
       hauler: 1,
       upgrader: 1,
-      builder: 4,
+      builder: 2,
+      filler: 0,
+    });
+  });
+
+  test("issue #42: stalled income keeps hauler + caps builders at RCL4", () => {
+    const control = profileForVariant("bootstrapStrategy", "control");
+    expect(
+      desiredCreeps(
+        4,
+        2,
+        0,
+        true,
+        {
+          energyIncomePerTick: 1,
+          baselineIncome: 5,
+          spawnFillPct: 0.23,
+          energyAvailable: 68,
+        },
+        control,
+      ),
+    ).toEqual({
+      harvester: 2,
+      miner: 0,
+      hauler: 1,
+      upgrader: 1,
+      builder: 2,
       filler: 0,
     });
   });
@@ -547,6 +573,35 @@ describe("spawnPriorityOrder", () => {
         },
       ),
     ).toEqual(["hauler", "miner", "filler", "builder", "harvester", "upgrader"]);
+  });
+
+  test("upgrader before builder when income collapsed and no live upgraders (#42)", () => {
+    expect(
+      spawnPriorityOrder(
+        false,
+        {
+          energyIncomePerTick: 1,
+          baselineIncome: 5,
+          spawnFillPct: 0.23,
+        },
+        { harvester: 2, miner: 0, hauler: 1, upgrader: 0, builder: 1 },
+        68,
+        {
+          infrastructurePush: true,
+          buildersBelowQuota: true,
+          economyFloorMet: true,
+          upgradersBelowQuota: true,
+          economyDepressed: true,
+        },
+      ),
+    ).toEqual([
+      "hauler",
+      "harvester",
+      "miner",
+      "filler",
+      "upgrader",
+      "builder",
+    ]);
   });
 
   test("builder before hauler when extension builders missing and miners staffed", () => {
