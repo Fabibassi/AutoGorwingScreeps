@@ -2,7 +2,7 @@ import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
-import { healCreepRoles } from "./room/queries";
+import { healCreepRoles, pickHomeRoom } from "./room/queries";
 import { runCreep } from "./roles";
 import { maybeUpdateHealthCheck } from "./selfCheck";
 import { runSpawn } from "./spawn";
@@ -25,6 +25,7 @@ export function loop(): void {
   const abKnobSticky = Memory.ags?.abKnob;
   const abVariantSticky = Memory.ags?.abVariant;
   const profileSticky = Memory.ags?.profile;
+  const rcl5ModeSticky = Memory.ags?.rcl5Mode;
 
   try {
     applyParsedMemoryReuse();
@@ -74,7 +75,9 @@ export function loop(): void {
       }
     }
 
-    const room = Object.values(Game.rooms)[0];
+    // Never use Game.rooms[0] — adjacent vision can make health report another room's
+    // containersAtSources (live false 1/2 while W21N35 already had both seats).
+    const room = pickHomeRoom(Game.rooms, Game.spawns);
     const rcl = room?.controller?.level ?? 1;
     Memory.ags = tickTelemetry({
       tick: Game.time,
@@ -89,11 +92,13 @@ export function loop(): void {
     if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
     if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
     if (profileSticky) Memory.ags.profile = profileSticky;
+    if (rcl5ModeSticky) Memory.ags.rcl5Mode = rcl5ModeSticky;
     Memory.ags = maybeUpdateHealthCheck(room, Memory.ags) ?? Memory.ags;
     if (roadPolicySticky) Memory.ags.roadPolicy = roadPolicySticky;
     if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
     if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
     if (profileSticky) Memory.ags.profile = profileSticky;
+    if (rcl5ModeSticky) Memory.ags.rcl5Mode = rcl5ModeSticky;
 
     logPlanStatusIfDue(room, Memory.ags);
   } catch (e) {

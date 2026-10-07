@@ -252,7 +252,7 @@ export function formatHealthCheck(health: AgsHealthCheck): string {
   return parts.join(" ") || "ok";
 }
 
-/** Persist health every interval, or every tick while critical signals are active. */
+/** Persist health every interval, or every tick while critical / infra count changed. */
 export function maybeUpdateHealthCheck(
   room: Room | undefined,
   ags: AgsMemory | undefined,
@@ -262,6 +262,10 @@ export function maybeUpdateHealthCheck(
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   const health = buildHealthCheck(room, spawn, ags);
   const hasCritical = (health.critical?.length ?? 0) > 0;
-  if (!hasCritical && Game.time % interval !== 0) return ags;
+  const infraChanged =
+    ags.health != null &&
+    (ags.health.containersAtSources !== health.containersAtSources ||
+      ags.health.sourceCount !== health.sourceCount);
+  if (!hasCritical && !infraChanged && Game.time % interval !== 0) return ags;
   return { ...ags, health };
 }

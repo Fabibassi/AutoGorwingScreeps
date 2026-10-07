@@ -24,6 +24,7 @@ import {
   countStructures,
   findSourceContainerSites,
   hasControllerContainer,
+  removeOrphanContainerSites,
   removeRedundantSourceContainerSites,
   sourceMissingContainer,
 } from "../room/queries";
@@ -71,9 +72,13 @@ export function runConstruction(room: Room): void {
 
   const policy = parseRoadPolicy(Memory.ags?.roadPolicy);
   const exp = resolveExperiment(Memory.ags);
-  // Drop ghost container sites when the source already has a finished seat
-  // (false "1/2 containers" used to keep building a duplicate nearby).
-  if (removeRedundantSourceContainerSites(room) > 0) return;
+  // Drop ghost / orphan container sites (live W21N35 @ 14,32 while both seats stood).
+  if (
+    removeRedundantSourceContainerSites(room) > 0 ||
+    removeOrphanContainerSites(room) > 0
+  ) {
+    return;
+  }
 
   const existingSites = room.find(FIND_CONSTRUCTION_SITES);
   const nonRoadSites = existingSites.filter((s) => s.structureType !== STRUCTURE_ROAD);

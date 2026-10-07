@@ -75,6 +75,11 @@ export interface AgsMemory {
   /** Named profile: baseline (default) | optimized (merged winners). */
   profile?: string;
   /**
+   * RCL4→5 home spend mode (set by sim harness).
+   * hub_spend | upgrade_rush | fat_first | build_heavy
+   */
+  rcl5Mode?: string;
+  /**
    * Active hauler pickup reservations (haulerName → order).
    * See src/logistics/haulOrders.ts.
    */

@@ -115,6 +115,9 @@ function summarizeObjects(objects: unknown[]): {
     coveredRange1: boolean;
     coveredRange2: boolean;
   }>;
+  /** Independent of Memory.ags.health — recount from room-objects. */
+  containersAtSourcesRange1: number;
+  containersAtSourcesRange2: number;
   containers: Array<{ x: number; y: number; energy: number }>;
 } {
   const creeps: Record<string, number> = {};
@@ -353,6 +356,10 @@ function summarizeObjects(objects: unknown[]): {
     freeSpawnExits,
     spawnAdjacentBlocked,
     sourceContainerMap,
+    containersAtSourcesRange1: sourceContainerMap.filter((s) => s.coveredRange1)
+      .length,
+    containersAtSourcesRange2: sourceContainerMap.filter((s) => s.coveredRange2)
+      .length,
     containers,
   };
 }
@@ -379,6 +386,29 @@ export async function main(): Promise<void> {
   const summary = summarizeObjects(objects);
   console.log("## Room objects summary");
   console.log(JSON.stringify(summary, null, 2));
+
+  const memHealth =
+    ags && typeof ags === "object"
+      ? (ags as { health?: { containersAtSources?: number; sourceCount?: number } })
+          .health
+      : undefined;
+  if (memHealth) {
+    console.log("## containersAtSources cross-check");
+    console.log(
+      JSON.stringify(
+        {
+          memoryHealth: `${memHealth.containersAtSources ?? "?"}/${memHealth.sourceCount ?? "?"}`,
+          roomObjectsRange1: `${summary.containersAtSourcesRange1}/${summary.sources}`,
+          roomObjectsRange2: `${summary.containersAtSourcesRange2}/${summary.sources}`,
+          mismatch:
+            (memHealth.containersAtSources ?? -1) !==
+            summary.containersAtSourcesRange1,
+        },
+        null,
+        2,
+      ),
+    );
+  }
 }
 
 function isExecutedAsCli(): boolean {

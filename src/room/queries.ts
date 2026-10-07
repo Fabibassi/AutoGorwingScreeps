@@ -195,6 +195,44 @@ export function removeRedundantSourceContainerSites(room: Room): number {
   return removed;
 }
 
+/**
+ * Cancel container sites that sit near neither a source nor the controller.
+ * Live W21N35 kept building (14,32) — far from both sources — while both seats
+ * already stood at (23,9) and (42,23).
+ */
+export function removeOrphanContainerSites(room: Room): number {
+  let removed = 0;
+  const sources = room.find(FIND_SOURCES);
+  const controller = room.controller;
+  for (const site of room.find(FIND_CONSTRUCTION_SITES, {
+    filter: (s) => s.structureType === STRUCTURE_CONTAINER,
+  })) {
+    const nearSource = sources.some((src) =>
+      site.pos.inRangeTo(src.pos, SOURCE_CONTAINER_RANGE),
+    );
+    if (nearSource) continue;
+    if (controller && site.pos.inRangeTo(controller.pos, 2)) continue;
+    if (site.remove() === OK) removed++;
+  }
+  return removed;
+}
+
+/** Primary owned room (spawn first) — never a random vision room from Game.rooms. */
+export function pickHomeRoom(
+  rooms: Record<string, Room>,
+  spawns: Record<string, StructureSpawn>,
+): Room | undefined {
+  for (const name in spawns) {
+    const room = spawns[name].room;
+    if (room.controller?.my) return room;
+  }
+  for (const name in rooms) {
+    const room = rooms[name];
+    if (room.controller?.my) return room;
+  }
+  return undefined;
+}
+
 export function countStructures(room: Room, type: StructureConstant): number {
   return room.find(FIND_MY_STRUCTURES, { filter: (s) => s.structureType === type })
     .length;
