@@ -168,6 +168,17 @@ describe("desiredCreeps", () => {
     });
   });
 
+  test("rcl4 stalled income during missing source containers keeps one upgrader (#42)", () => {
+    expect(
+      desiredCreeps(4, 2, 0, true, {
+        energyIncomePerTick: 1,
+        baselineIncome: 4,
+        spawnFillPct: 0.23,
+        energyAvailable: 68,
+      }),
+    ).toMatchObject({ upgrader: 1, hauler: 1, builder: 4 });
+  });
+
   test("rcl4 zero income wants hauler to break soft-lock even during infra push", () => {
     expect(
       desiredCreeps(4, 2, 0, true, {
@@ -180,7 +191,7 @@ describe("desiredCreeps", () => {
       harvester: 2,
       miner: 0,
       hauler: 1,
-      upgrader: 0,
+      upgrader: 1,
       builder: 4,
       filler: 0,
     });
@@ -219,7 +230,7 @@ describe("desiredCreeps", () => {
       harvester: 1,
       miner: 1,
       hauler: 1,
-      upgrader: 0,
+      upgrader: 1,
       builder: 4,
       filler: 0,
     });

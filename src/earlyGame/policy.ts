@@ -258,6 +258,22 @@ export function needsInfrastructureBuilder(
   return missingSourceContainers(rcl, containersAtSources, sourceCount);
 }
 
+/** One upgrader during source-container push — RCL3+ still needs controller progress. */
+export function infraPushUpgraderQuota(experiment?: ExperimentProfile): number {
+  const exp = experiment ?? BASELINE_PROFILE;
+  return Math.min(1, exp.upgraderQuotaClimb);
+}
+
+/** Hauler to drain trapped energy while spawn is thin (income collapse / stall). */
+export function needsIncomeRescueHauler(economy?: EconomyContext): boolean {
+  if (!economy) return false;
+  const income = economy.energyIncomePerTick ?? 0;
+  if ((economy.energyAvailable ?? 300) >= 200) return false;
+  if (income <= 0) return true;
+  if (isIncomeStalled(income, economy.baselineIncome)) return true;
+  return (economy.spawnFillPct ?? 1) < 0.35;
+}
+
 /** Income collapsed or spawn nearly empty — defer builders and trim upgraders. */
 export function isEconomyDepressed(ctx?: EconomyContext): boolean {
   if (!ctx) return false;
@@ -518,9 +534,7 @@ export function desiredCreeps(
         miner: readyContainers,
         hauler: readyContainers,
         upgrader: infraBuilder
-          ? rcl < 3
-            ? Math.min(1, exp.upgraderQuotaClimb)
-            : 0
+          ? infraPushUpgraderQuota(exp)
           : depressed
             ? 1
             : 2,
@@ -538,8 +552,7 @@ export function desiredCreeps(
       // Soft-lock / empty income: always want a hauler to drain storage/containers
       // into spawn — even during infra push (otherwise sites starve forever).
       hauler:
-        (economy?.energyIncomePerTick ?? 1) <= 0 &&
-        (economy?.energyAvailable ?? 300) < 200
+        needsIncomeRescueHauler(economy)
           ? 1
           : infraBuilder
             ? 0
@@ -549,9 +562,7 @@ export function desiredCreeps(
                 : 1
               : 0,
       upgrader: infraBuilder
-        ? rcl < 3
-          ? Math.min(1, exp.upgraderQuotaClimb)
-          : 0
+        ? infraPushUpgraderQuota(exp)
         : depressed
           ? 1
           : 2,

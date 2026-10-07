@@ -49,7 +49,7 @@ export const BASELINE_PROFILE: ExperimentProfile = {
   containerTiming: "immediate",
   upgraderQuotaClimb: 3,
   extensionBootstrap: 2,
-  builderInfra: 2,
+  builderInfra: 4,
   minerMinWork: 1,
   haulerMaxCost: undefined,
   controllerContainer: "after_sources",
@@ -164,9 +164,8 @@ export function sourceContainerQueueCount(
     return openSites > 0 ? 0 : 1;
   }
   if (profile.containerTiming === "later") {
-    // Extensions-first: wait until bootstrap extensions exist, then containers.
-    const need = Math.min(2, profile.extensionBootstrap);
-    if (extensionBuilt < need) return 0;
+    // Extensions-first: wait until at least one extension exists, then containers.
+    if (extensionBuilt < 1) return 0;
     return missing;
   }
   return missing;
