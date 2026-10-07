@@ -216,6 +216,48 @@ describe("downgrade / critical helpers", () => {
     expect(signals).toContain("runtimeErrors");
   });
 
+  test("issue #42 snapshot: missing containers and collapsed income surface criticals", () => {
+    const signals = computeCriticalSignals({
+      tick: 83440905,
+      rcl: 4,
+      sourceCount: 2,
+      containersAtSources: 0,
+      hasControllerContainer: false,
+      constructionSites: 2,
+      counts: {
+        harvester: 2,
+        miner: 0,
+        hauler: 0,
+        upgrader: 0,
+        builder: 2,
+        filler: 0,
+      },
+      want: {
+        harvester: 2,
+        miner: 0,
+        hauler: 1,
+        upgrader: 1,
+        builder: 2,
+        filler: 0,
+      },
+      spawnEnergy: 68,
+      spawnCapacity: 300,
+      energyAvailable: 68,
+      hasCarryCreep: true,
+      dedicatedMiners: false,
+      energyIncomePerTick: 1,
+      baselineIncome: 5,
+      ticksToDowngrade: 38867,
+    });
+    expect(signals).toEqual(
+      expect.arrayContaining([
+        "incomeCollapsed",
+        "missingSourceContainers",
+        "noUpgraders",
+      ]),
+    );
+  });
+
   test("computeCriticalSignals flags softLock when stuck below bootstrap energy", () => {
     const signals = computeCriticalSignals({
       tick: 1,

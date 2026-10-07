@@ -258,6 +258,35 @@ export function needsInfrastructureBuilder(
   return missingSourceContainers(rcl, containersAtSources, sourceCount);
 }
 
+/** Source-container infra push: never drop upgraders to zero at high RCL (#42). */
+export function upgraderQuotaInfraPush(
+  _rcl: number,
+  exp: ExperimentProfile,
+): number {
+  return Math.min(1, exp.upgraderQuotaClimb);
+}
+
+/**
+ * Cheap hauler to pull energy into spawn while income metrics look dead
+ * (including trace income with an empty spawn bank).
+ */
+export function wantsInfraRecoveryHauler(economy?: EconomyContext): boolean {
+  if (!economy) return false;
+  const avail = economy.energyAvailable ?? 300;
+  const fill = economy.spawnFillPct ?? 1;
+  if (
+    avail >= EARLY_GAME_THRESHOLDS.minBootstrapEnergy &&
+    fill >= 0.35
+  ) {
+    return false;
+  }
+  const income = economy.energyIncomePerTick ?? 0;
+  if (income <= 0) return true;
+  if (isEconomyDepressed(economy)) return true;
+  if (isIncomeStalled(income, economy.baselineIncome)) return true;
+  return income < 2 && fill < 0.35;
+}
+
 /** Income collapsed or spawn nearly empty — defer builders and trim upgraders. */
 export function isEconomyDepressed(ctx?: EconomyContext): boolean {
   if (!ctx) return false;
@@ -440,6 +469,12 @@ export function spawnPriorityOrder(
     order = ["hauler", "harvester", "upgrader", "builder"];
   } else if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
     order = ["harvester", "hauler", "miner", "upgrader", "builder"];
+  } else if (
+    opts?.infrastructurePush &&
+    ctx &&
+    wantsInfraRecoveryHauler(ctx)
+  ) {
+    order = ["hauler", "harvester", "miner", "upgrader", "builder"];
   } else {
     order = DEFAULT_SPAWN_ORDER;
   }
@@ -518,9 +553,7 @@ export function desiredCreeps(
         miner: readyContainers,
         hauler: readyContainers,
         upgrader: infraBuilder
-          ? rcl < 3
-            ? Math.min(1, exp.upgraderQuotaClimb)
-            : 0
+          ? upgraderQuotaInfraPush(rcl, exp)
           : depressed
             ? 1
             : 2,
@@ -538,8 +571,7 @@ export function desiredCreeps(
       // Soft-lock / empty income: always want a hauler to drain storage/containers
       // into spawn — even during infra push (otherwise sites starve forever).
       hauler:
-        (economy?.energyIncomePerTick ?? 1) <= 0 &&
-        (economy?.energyAvailable ?? 300) < 200
+        wantsInfraRecoveryHauler(economy)
           ? 1
           : infraBuilder
             ? 0
@@ -549,9 +581,7 @@ export function desiredCreeps(
                 : 1
               : 0,
       upgrader: infraBuilder
-        ? rcl < 3
-          ? Math.min(1, exp.upgraderQuotaClimb)
-          : 0
+        ? upgraderQuotaInfraPush(rcl, exp)
         : depressed
           ? 1
           : 2,
