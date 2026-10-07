@@ -15,6 +15,7 @@ import {
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
   reassignSpareHarvesterToMiner,
+  reassignSurplusBuilderToUpgrader,
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
   recycleExcessMiners,
@@ -171,6 +172,35 @@ describe("hasNoEconomyCreeps", () => {
 
   test("false when a miner remains", () => {
     expect(hasNoEconomyCreeps({ harvester: 0, miner: 1 })).toBe(false);
+  });
+});
+
+describe("reassignSurplusBuilderToUpgrader", () => {
+  test("converts a surplus builder when no upgraders remain", () => {
+    const builder = { room: { name: "W21N35" }, memory: { role: "builder" } };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "builder-1": builder } };
+    expect(
+      reassignSurplusBuilderToUpgrader(
+        { name: "W21N35" } as Room,
+        {
+          harvester: 2,
+          miner: 0,
+          hauler: 1,
+          upgrader: 1,
+          builder: 2,
+          filler: 0,
+        },
+        {
+          harvester: 2,
+          miner: 0,
+          hauler: 1,
+          upgrader: 0,
+          builder: 2,
+          filler: 0,
+        },
+      ),
+    ).toBe(true);
+    expect(builder.memory.role).toBe("upgrader");
   });
 });
 

@@ -258,6 +258,39 @@ export function needsInfrastructureBuilder(
   return missingSourceContainers(rcl, containersAtSources, sourceCount);
 }
 
+/** One upgrader minimum while source containers are still missing (any RCL ≥ 2). */
+export function infraPushUpgraderQuota(
+  rcl: number,
+  experiment: ExperimentProfile,
+): number {
+  if (rcl < EARLY_GAME_THRESHOLDS.minRclForContainers) return 0;
+  return Math.min(1, experiment.upgraderQuotaClimb);
+}
+
+/**
+ * During depressed economy with zero finished source containers, cap builders so
+ * spawn budget stays available for harvesters, haulers, and the upgrader floor.
+ */
+export function infraPushBuilderQuota(
+  infraBuilders: number,
+  containersAtSources: number,
+  sourceCount: number,
+  depressed: boolean,
+): number {
+  const sources = Math.max(1, sourceCount);
+  if (depressed && containersAtSources < sources) {
+    return Math.min(infraBuilders, 2);
+  }
+  return infraBuilders;
+}
+
+function incomeEffectivelyDead(ctx?: EconomyContext): boolean {
+  if (!ctx) return false;
+  const income = ctx.energyIncomePerTick ?? 0;
+  if (income <= 0) return true;
+  return isIncomeStalled(income, ctx.baselineIncome);
+}
+
 /** Income collapsed or spawn nearly empty — defer builders and trim upgraders. */
 export function isEconomyDepressed(ctx?: EconomyContext): boolean {
   if (!ctx) return false;
@@ -368,6 +401,18 @@ function prioritizeInfrastructureBuilder(
   return next;
 }
 
+/** When infra push left zero upgraders, spawn one before the next builder body. */
+function prioritizeUpgraderBeforeBuilder(
+  order: Array<keyof CreepQuotas>,
+): Array<keyof CreepQuotas> {
+  const withoutUpgrader = order.filter((role) => role !== "upgrader");
+  const builderIdx = withoutUpgrader.indexOf("builder");
+  if (builderIdx === -1) return [...withoutUpgrader, "upgrader"];
+  const next = withoutUpgrader.slice();
+  next.splice(builderIdx, 0, "upgrader");
+  return next;
+}
+
 /** Prefer spending a banked worker body on the missing infra builder. */
 function prioritizeBuilderOverSpareHarvester(
   order: Array<keyof CreepQuotas>,
@@ -412,6 +457,8 @@ export function spawnPriorityOrder(
     buildersBelowQuota?: boolean;
     /** At least one harvester/miner per source — spare H can wait. */
     economyFloorMet?: boolean;
+    /** Live upgraders below quota (critical noUpgraders recovery). */
+    upgradersBelowQuota?: boolean;
   },
 ): Array<keyof CreepQuotas> {
   let order: Array<keyof CreepQuotas>;
@@ -445,10 +492,14 @@ export function spawnPriorityOrder(
   }
 
   if (opts?.infrastructurePush) {
-    order = prioritizeInfrastructureBuilder(order);
-    // With sources covered, spend the next 200 on builder #2 — not the spare harvester.
-    if (opts.buildersBelowQuota && opts.economyFloorMet) {
-      order = prioritizeBuilderOverSpareHarvester(order);
+    if (opts.upgradersBelowQuota) {
+      order = prioritizeUpgraderBeforeBuilder(order);
+    } else {
+      order = prioritizeInfrastructureBuilder(order);
+      // With sources covered, spend the next 200 on builder #2 — not the spare harvester.
+      if (opts.buildersBelowQuota && opts.economyFloorMet) {
+        order = prioritizeBuilderOverSpareHarvester(order);
+      }
     }
   } else if (opts?.buildersBelowQuota && opts.economyFloorMet) {
     order = prioritizeBuilderAfterEconomy(order);
@@ -518,19 +569,23 @@ export function desiredCreeps(
         miner: readyContainers,
         hauler: readyContainers,
         upgrader: infraBuilder
-          ? rcl < 3
-            ? Math.min(1, exp.upgraderQuotaClimb)
-            : 0
+          ? infraPushUpgraderQuota(rcl, exp)
           : depressed
             ? 1
             : 2,
         builder: infraBuilder
-          ? infraBuilders
+          ? infraPushBuilderQuota(
+              infraBuilders,
+              containersAtSources,
+              sources,
+              depressed,
+            )
           : hasConstructionSites && !depressed
             ? 1
             : 0,
       });
     }
+    const incomeDead = incomeEffectivelyDead(economy);
     return fill({
       // During container push, skip the spare H — convert capacity into builders.
       harvester: infraBuilder ? sources : sources + 1,
@@ -538,8 +593,7 @@ export function desiredCreeps(
       // Soft-lock / empty income: always want a hauler to drain storage/containers
       // into spawn — even during infra push (otherwise sites starve forever).
       hauler:
-        (economy?.energyIncomePerTick ?? 1) <= 0 &&
-        (economy?.energyAvailable ?? 300) < 200
+        incomeDead && (economy?.energyAvailable ?? 300) < 200
           ? 1
           : infraBuilder
             ? 0
@@ -549,15 +603,18 @@ export function desiredCreeps(
                 : 1
               : 0,
       upgrader: infraBuilder
-        ? rcl < 3
-          ? Math.min(1, exp.upgraderQuotaClimb)
-          : 0
+        ? infraPushUpgraderQuota(rcl, exp)
         : depressed
           ? 1
           : 2,
       // Infra builders finish source containers under source contention.
       builder: infraBuilder
-        ? infraBuilders
+        ? infraPushBuilderQuota(
+            infraBuilders,
+            containersAtSources,
+            sources,
+            depressed,
+          )
         : hasConstructionSites && !depressed
           ? 1
           : 0,
@@ -605,7 +662,12 @@ export function desiredCreeps(
           : Math.min(2, Math.max(1, infraBuilders))
         : 0
       : infraBuilder
-        ? infraBuilders
+        ? infraPushBuilderQuota(
+            infraBuilders,
+            containersAtSources,
+            sources,
+            depressed,
+          )
         : extensionPush
           ? bankForMiners
             ? Math.min(2, Math.max(1, infraBuilders))
