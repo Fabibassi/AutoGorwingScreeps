@@ -77,10 +77,12 @@ export function buildPlanSnapshot(
     energyAvailable: room.energyAvailable,
     hasStorage: room.storage !== undefined,
   };
+  const exp = resolveExperiment(ags);
   const infrastructureDedicated = useDedicatedMiners(
     rcl,
     containersAtSources,
     sourceCount,
+    exp,
   );
   const want = desiredCreeps(
     rcl,
@@ -88,7 +90,7 @@ export function buildPlanSnapshot(
     containersAtSources,
     hasConstructionSites,
     economy,
-    resolveExperiment(ags),
+    exp,
   );
   const counts = countCreepsByRole();
   const spawnOrder = spawnPriorityOrder(
@@ -96,6 +98,7 @@ export function buildPlanSnapshot(
     economy,
     counts,
     room.energyAvailable,
+    { spawnChain: exp.spawnChain },
   );
   const priority = inferSpawnPriority(spawn, counts, want, spawnOrder);
 

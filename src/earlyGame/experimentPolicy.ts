@@ -12,9 +12,28 @@ export const AB_KNOBS = [
   "haulerCap",
   "controllerContainer",
   "spawnBuffer",
+  "bootstrapStrategy",
 ] as const;
 
 export type AbKnob = (typeof AB_KNOBS)[number];
+
+/**
+ * Composite early-game strategies for 9×N benches:
+ * 1 control + 4 Overmind-like (B) + 4 universal-like (C).
+ */
+export const BOOTSTRAP_STRATEGIES = [
+  "control",
+  "b_drop",
+  "b_cap550",
+  "b_chain",
+  "b_wait3w",
+  "c_universal",
+  "c_hybrid",
+  "c_build",
+  "c_lean",
+] as const;
+
+export type BootstrapStrategy = (typeof BOOTSTRAP_STRATEGIES)[number];
 
 export const AB_VARIANTS: Record<AbKnob, readonly string[]> = {
   containerTiming: ["immediate", "one_source", "later"],
@@ -25,6 +44,7 @@ export const AB_VARIANTS: Record<AbKnob, readonly string[]> = {
   haulerCap: ["thin", "fat"],
   controllerContainer: ["early", "after_sources", "defer_rcl4"],
   spawnBuffer: ["50", "200", "300"],
+  bootstrapStrategy: BOOTSTRAP_STRATEGIES,
 };
 
 export type ContainerTiming = "immediate" | "one_source" | "later";
@@ -42,18 +62,42 @@ export interface ExperimentProfile {
   controllerContainer: ControllerContainerTiming;
   /** Spawn energy reserved before roads / non-critical spend. */
   spawnBuffer: number;
+  /**
+   * Allow static miners before every source has a container (drop mining).
+   * Overmind-style early mode.
+   */
+  allowDropMiners: boolean;
+  /**
+   * Prefer mobile harvesters (universal-style) until room capacity reaches this.
+   * 0 = off.
+   */
+  universalUntilCapacity: number;
+  /**
+   * Do not enqueue source containers until this many extensions are finished.
+   * 0 = use containerTiming only.
+   */
+  containersAfterExtensions: number;
+  /** Prefer miner → hauler spawn order when economy is healthy. */
+  spawnChain: "default" | "miner_hauler";
 }
 
-/** Current production defaults (parallel roads assumed elsewhere). */
+/**
+ * Production defaults = strategy-bench winner `b_chain`
+ * (6/6 OK, median rcl3@19426; see `.sim-learn/strategy-bench.json`).
+ */
 export const BASELINE_PROFILE: ExperimentProfile = {
-  containerTiming: "immediate",
+  containerTiming: "one_source",
   upgraderQuotaClimb: 3,
-  extensionBootstrap: 2,
+  extensionBootstrap: 5,
   builderInfra: 2,
-  minerMinWork: 1,
+  minerMinWork: 2,
   haulerMaxCost: undefined,
   controllerContainer: "after_sources",
   spawnBuffer: 200,
+  allowDropMiners: true,
+  universalUntilCapacity: 0,
+  containersAfterExtensions: 0,
+  spawnChain: "miner_hauler",
 };
 
 export function isAbKnob(raw: string | undefined): raw is AbKnob {
@@ -68,16 +112,127 @@ export function parseAbVariant(
   if (raw && (variants as readonly string[]).includes(raw)) return raw;
   // Baseline variant per knob.
   const baseline: Record<AbKnob, string> = {
-    containerTiming: "immediate",
+    containerTiming: "one_source",
     upgraderQuota: "3",
-    extensionBootstrap: "2",
+    extensionBootstrap: "5",
     builderCount: "2",
-    minerBody: "early_1w",
+    minerBody: "wait_2w",
     haulerCap: "fat",
     controllerContainer: "after_sources",
     spawnBuffer: "200",
+    bootstrapStrategy: "b_chain",
   };
   return baseline[knob];
+}
+
+/** Apply a composite bootstrap strategy (B/C family) onto a profile. */
+export function applyBootstrapStrategy(
+  p: ExperimentProfile,
+  strategy: BootstrapStrategy,
+): ExperimentProfile {
+  switch (strategy) {
+    case "control":
+      // Frozen pre-bench baseline — keep A/B contrast against strategy winners.
+      p.allowDropMiners = false;
+      p.containerTiming = "immediate";
+      p.extensionBootstrap = 2;
+      p.containersAfterExtensions = 0;
+      p.spawnChain = "default";
+      p.minerMinWork = 1;
+      p.builderInfra = 4;
+      p.universalUntilCapacity = 0;
+      return p;
+    case "b_drop":
+      // Overmind-like: drop-mine early, containers after first ext, cap at 5W gate.
+      p.allowDropMiners = true;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 1;
+      p.spawnChain = "miner_hauler";
+      p.minerMinWork = 1;
+      p.builderInfra = 2;
+      p.universalUntilCapacity = 0;
+      return p;
+    case "b_cap550":
+      // Wait for full 5W capacity before source containers.
+      p.allowDropMiners = true;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 5;
+      p.spawnChain = "miner_hauler";
+      p.minerMinWork = 3;
+      p.builderInfra = 2;
+      p.universalUntilCapacity = 0;
+      return p;
+    case "b_chain":
+      // Drop miners + serialize one container at a time + strict spawn chain.
+      p.allowDropMiners = true;
+      p.containerTiming = "one_source";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 0;
+      p.spawnChain = "miner_hauler";
+      p.minerMinWork = 2;
+      p.builderInfra = 2;
+      p.universalUntilCapacity = 0;
+      return p;
+    case "b_wait3w":
+      // Drop miners, but refuse thin bodies until 3W is fundable.
+      p.allowDropMiners = true;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 1;
+      p.spawnChain = "miner_hauler";
+      p.minerMinWork = 3;
+      p.builderInfra = 2;
+      p.universalUntilCapacity = 0;
+      return p;
+    case "c_universal":
+      // TooAngel-like: harvester/universal until capacity funds 5W.
+      p.allowDropMiners = false;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 1;
+      p.spawnChain = "default";
+      p.minerMinWork = 1;
+      p.builderInfra = 4;
+      p.universalUntilCapacity = 550;
+      return p;
+    case "c_hybrid":
+      // Short universal window, then Overmind drop mining.
+      p.allowDropMiners = true;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 1;
+      p.spawnChain = "miner_hauler";
+      p.minerMinWork = 1;
+      p.builderInfra = 3;
+      p.universalUntilCapacity = 350;
+      return p;
+    case "c_build":
+      // Universal longer + heavy builders (infra-first climb).
+      p.allowDropMiners = false;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 1;
+      p.spawnChain = "default";
+      p.minerMinWork = 1;
+      p.builderInfra = 4;
+      p.upgraderQuotaClimb = 2;
+      p.universalUntilCapacity = 550;
+      return p;
+    case "c_lean":
+      // Universal with thin logistics — fewer builders, capped haulers.
+      p.allowDropMiners = false;
+      p.containerTiming = "later";
+      p.extensionBootstrap = 5;
+      p.containersAfterExtensions = 1;
+      p.spawnChain = "default";
+      p.minerMinWork = 1;
+      p.builderInfra = 2;
+      p.haulerMaxCost = 200;
+      p.universalUntilCapacity = 550;
+      return p;
+  }
 }
 
 /** Apply a single knob/variant on top of baseline. */
@@ -112,6 +267,8 @@ export function profileForVariant(
     case "spawnBuffer":
       p.spawnBuffer = Number(v);
       break;
+    case "bootstrapStrategy":
+      return applyBootstrapStrategy(p, v as BootstrapStrategy);
   }
   return p;
 }
@@ -125,14 +282,32 @@ export function resolveExperiment(ags?: {
     return OPTIMIZED_PROFILE;
   }
   if (!isAbKnob(ags?.abKnob)) return { ...BASELINE_PROFILE };
-  return profileForVariant(ags.abKnob, ags.abVariant);
+  return profileForVariant(ags.abKnob, ags.abVariant ?? "");
 }
 
 /**
- * Merged A/B winners. Until the suite finishes this matches baseline;
- * update after writing `.sim-learn/bench-summary.json`.
+ * Selective merge after full-winner stack lost rcl3@ to baseline
+ * (see `.sim-learn/overnight-report.md`). Keep only the strongest
+ * single-knob win (builderInfra=4); full-merge kept as FULL_MERGE_PROFILE.
  */
-export const OPTIMIZED_PROFILE: ExperimentProfile = { ...BASELINE_PROFILE };
+export const FULL_MERGE_PROFILE: ExperimentProfile = {
+  containerTiming: "one_source",
+  upgraderQuotaClimb: 2,
+  extensionBootstrap: 2,
+  builderInfra: 4,
+  minerMinWork: 1,
+  haulerMaxCost: 200,
+  controllerContainer: "defer_rcl4",
+  spawnBuffer: 200,
+  allowDropMiners: false,
+  universalUntilCapacity: 0,
+  containersAfterExtensions: 0,
+  spawnChain: "default",
+};
+
+export const OPTIMIZED_PROFILE: ExperimentProfile = {
+  ...BASELINE_PROFILE,
+};
 
 /** Tag for GUI / live reason strings. */
 export function experimentTag(ags?: {
@@ -163,9 +338,19 @@ export function sourceContainerQueueCount(
   if (profile.containerTiming === "one_source") {
     return openSites > 0 ? 0 : 1;
   }
+  if (profile.containersAfterExtensions > 0) {
+    if (extensionBuilt < profile.containersAfterExtensions) return 0;
+  }
   if (profile.containerTiming === "later") {
-    // Extensions-first: wait until bootstrap extensions exist, then containers.
-    const need = Math.min(2, profile.extensionBootstrap);
+    // Extensions-first: wait for one finished bootstrap extension, then containers.
+    // Requiring 2 often never finishes under parallel-road builder contention
+    // (bench: later timed out at 50k with 0 containers).
+    const need =
+      profile.containersAfterExtensions > 0
+        ? 0
+        : profile.extensionBootstrap <= 0
+          ? 0
+          : 1;
     if (extensionBuilt < need) return 0;
     return missing;
   }

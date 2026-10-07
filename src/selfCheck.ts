@@ -4,6 +4,7 @@ import {
   hasNoEconomyCreeps,
   isSoftLocked,
   missingSourceContainers,
+  resolveExperiment,
   type CreepQuotas,
 } from "./earlyGame";
 import {
@@ -209,6 +210,7 @@ export function buildHealthCheck(
         baselineIncome: ags?.baseline?.energyIncomePerTick,
         spawnFillPct,
       },
+      resolveExperiment(ags),
     ),
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
     baselineIncome: ags?.baseline?.energyIncomePerTick,

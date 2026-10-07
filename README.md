@@ -116,7 +116,8 @@ npm run sim:boot                            # Empty-Room Boot (RCL2, Spawn voll)
 npm run sim:farm -- --workers 8 --quiet     # Sweet-Spot laut Bench (~max jobs/s bei guter Eff.)
 npm run sim:farm -- --scenario boot --workers 8 --quiet
 npm run sim:learn                           # Run → Score (Default 8 Worker)
-npm run sim:watch                           # Live-Dashboard (2. Terminal neben Learn/Farm)
+npm run sim:watch                           # Terminal-Live-Tabelle
+npm run sim:gui                             # Browser-Dashboard http://127.0.0.1:8787
 npm run sim:climb                           # RCL1→8 Fast-Forward (Economy muss halten)
 npm run sim:master                          # Master: Sims→Fix→bis RCL8-Suite grün
 ```

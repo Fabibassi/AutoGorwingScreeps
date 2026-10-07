@@ -112,12 +112,13 @@ export function useDedicatedMiners(
   rcl: number,
   containersAtSources: number,
   sourceCount: number,
+  experiment?: ExperimentProfile,
 ): boolean {
   const sources = Math.max(1, sourceCount);
-  return (
-    rcl >= EARLY_GAME_THRESHOLDS.minRclForDedicatedMiners &&
-    containersAtSources >= sources
-  );
+  if (rcl < EARLY_GAME_THRESHOLDS.minRclForDedicatedMiners) return false;
+  // Overmind-style early: static miners may drop-mine before containers exist.
+  if (experiment?.allowDropMiners) return true;
+  return containersAtSources >= sources;
 }
 
 export interface EconomyContext {
@@ -316,8 +317,14 @@ export function effectiveDedicatedMiners(
   containersAtSources: number,
   sourceCount: number,
   economy?: EconomyContext,
+  experiment?: ExperimentProfile,
 ): boolean {
-  const dedicated = useDedicatedMiners(rcl, containersAtSources, sourceCount);
+  const dedicated = useDedicatedMiners(
+    rcl,
+    containersAtSources,
+    sourceCount,
+    experiment,
+  );
   return dedicated && !shouldFallbackToMobileHarvest(dedicated, economy);
 }
 
@@ -412,6 +419,8 @@ export function spawnPriorityOrder(
     buildersBelowQuota?: boolean;
     /** At least one harvester/miner per source — spare H can wait. */
     economyFloorMet?: boolean;
+    /** Experiment spawn-chain preference. */
+    spawnChain?: ExperimentProfile["spawnChain"];
   },
 ): Array<keyof CreepQuotas> {
   let order: Array<keyof CreepQuotas>;
@@ -440,6 +449,8 @@ export function spawnPriorityOrder(
     order = ["hauler", "harvester", "upgrader", "builder"];
   } else if (needsBootstrapHarvester(dedicatedMiners, ctx)) {
     order = ["harvester", "hauler", "miner", "upgrader", "builder"];
+  } else if (opts?.spawnChain === "miner_hauler" && dedicatedMiners) {
+    order = ["miner", "hauler", "upgrader", "builder", "harvester"];
   } else {
     order = DEFAULT_SPAWN_ORDER;
   }
@@ -468,10 +479,15 @@ export function desiredCreeps(
   const sources = Math.max(1, sourceCount);
   const infraBuilders = Math.max(1, exp.builderInfra);
 
-  const fill = (q: Omit<CreepQuotas, "filler">): CreepQuotas => ({
-    ...q,
-    filler: economy?.hasStorage ? 1 : 0,
-  });
+  const fill = (q: Omit<CreepQuotas, "filler">): CreepQuotas => {
+    const out: CreepQuotas = {
+      ...q,
+      filler: economy?.hasStorage ? 1 : 0,
+    };
+    // RCL2+: never park the downgrade timer (wipe / infra / extension push).
+    if (rcl >= 2) out.upgrader = Math.max(1, out.upgrader);
+    return out;
+  };
 
   if (rcl <= 1) {
     return fill({
@@ -483,7 +499,27 @@ export function desiredCreeps(
     });
   }
 
-  const dedicatedMiners = useDedicatedMiners(rcl, containersAtSources, sources);
+  // TooAngel-style universal window: mobile harvesters until capacity gate.
+  const capacity = economy?.energyCapacityAvailable ?? 0;
+  if (
+    exp.universalUntilCapacity > 0 &&
+    capacity < exp.universalUntilCapacity
+  ) {
+    return fill({
+      harvester: sources + 2,
+      miner: 0,
+      hauler: 1,
+      upgrader: Math.min(2, exp.upgraderQuotaClimb),
+      builder: hasConstructionSites ? infraBuilders : 0,
+    });
+  }
+
+  const dedicatedMiners = useDedicatedMiners(
+    rcl,
+    containersAtSources,
+    sources,
+    exp,
+  );
 
   const infraBuilder = needsInfrastructureBuilder(
     rcl,
@@ -618,6 +654,9 @@ export function desiredCreeps(
     quotas.harvester = 1;
   }
 
+  if (rcl >= 2) {
+    quotas.upgrader = Math.max(1, quotas.upgrader);
+  }
   return quotas;
 }
 

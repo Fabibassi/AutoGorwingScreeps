@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  AB_VARIANTS,
   allowControllerContainer,
   BASELINE_PROFILE,
   constructionPriority,
@@ -16,6 +17,17 @@ describe("experimentPolicy", () => {
   test("defaults to baseline when Memory unset", () => {
     expect(resolveExperiment(undefined)).toEqual(BASELINE_PROFILE);
     expect(resolveExperiment({})).toEqual(BASELINE_PROFILE);
+  });
+
+  test("baseline matches strategy-bench winner b_chain", () => {
+    const chain = profileForVariant("bootstrapStrategy", "b_chain");
+    expect(BASELINE_PROFILE).toEqual(chain);
+    expect(BASELINE_PROFILE.allowDropMiners).toBe(true);
+    expect(BASELINE_PROFILE.containerTiming).toBe("one_source");
+    expect(BASELINE_PROFILE.spawnChain).toBe("miner_hauler");
+    expect(BASELINE_PROFILE.minerMinWork).toBe(2);
+    expect(BASELINE_PROFILE.builderInfra).toBe(2);
+    expect(BASELINE_PROFILE.extensionBootstrap).toBe(5);
   });
 
   test("extensionBootstrap variants set RCL2 cap", () => {
@@ -140,5 +152,49 @@ describe("experimentPolicy", () => {
     expect(allowControllerContainer(early, 2, 2)).toBe(true);
     expect(allowControllerContainer(after, 2, 2)).toBe(false);
     expect(allowControllerContainer(after, 2, 0)).toBe(true);
+  });
+
+  test("bootstrapStrategy has 1 control + 4B + 4C", () => {
+    const all = AB_VARIANTS.bootstrapStrategy;
+    expect(all).toHaveLength(9);
+    expect(all.filter((v) => v === "control")).toHaveLength(1);
+    expect(all.filter((v) => v.startsWith("b_"))).toHaveLength(4);
+    expect(all.filter((v) => v.startsWith("c_"))).toHaveLength(4);
+  });
+
+  test("bootstrapStrategy composites B/C profiles", () => {
+    const b = profileForVariant("bootstrapStrategy", "b_drop");
+    expect(b.allowDropMiners).toBe(true);
+    expect(b.spawnChain).toBe("miner_hauler");
+    expect(b.extensionBootstrap).toBe(5);
+
+    const wait = profileForVariant("bootstrapStrategy", "b_wait3w");
+    expect(wait.minerMinWork).toBe(3);
+    expect(wait.allowDropMiners).toBe(true);
+
+    const c = profileForVariant("bootstrapStrategy", "c_universal");
+    expect(c.universalUntilCapacity).toBe(550);
+    expect(c.allowDropMiners).toBe(false);
+
+    const lean = profileForVariant("bootstrapStrategy", "c_lean");
+    expect(lean.haulerMaxCost).toBe(200);
+    expect(lean.builderInfra).toBe(2);
+
+    const q = desiredCreeps(
+      2,
+      2,
+      0,
+      true,
+      { energyCapacityAvailable: 300 },
+      c,
+    );
+    expect(q.miner).toBe(0);
+    expect(q.harvester).toBeGreaterThanOrEqual(4);
+  });
+
+  test("containersAfterExtensions gates source-container queue", () => {
+    const p = profileForVariant("bootstrapStrategy", "b_cap550");
+    expect(sourceContainerQueueCount(p, 2, 0, 4)).toBe(0);
+    expect(sourceContainerQueueCount(p, 2, 0, 5)).toBe(2);
   });
 });

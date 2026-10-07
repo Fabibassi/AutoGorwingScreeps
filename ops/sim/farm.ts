@@ -4,6 +4,8 @@
  *   npx tsx ops/sim/farm.ts --workers 20 --ticks 80
  *   npx tsx ops/sim/farm.ts --scenario boot --workers 20
  *   npx tsx ops/sim/farm.ts --scenario softlock --workers 20 --concurrency 10
+ *   npx tsx ops/sim/farm.ts --scenario real --road-policies parallel,source_first
+ *   npx tsx ops/sim/farm.ts --scenario real --ab-knob extensionBootstrap --ab-variants 0,2,5
  */
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -18,6 +20,7 @@ const SCENARIOS: Record<string, string> = {
   surround: "ops/sim/surround.ts",
   miners: "ops/sim/miners.ts",
   containers: "ops/sim/containers.ts",
+  real: "ops/sim/realClimb.ts",
 };
 
 function parseArgs(argv: string[]) {
@@ -28,6 +31,11 @@ function parseArgs(argv: string[]) {
   /** Max simultaneous mockup processes (RAM/CPU throttle). 0 = all at once. */
   let concurrency = 0;
   let quiet = false;
+  /** Comma-separated road policies; worker i gets policies[i % len]. */
+  let roadPolicies = "";
+  let abKnob = "";
+  let abVariants = "";
+  let profile = "";
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--workers" && argv[i + 1]) workers = Number(argv[++i]);
@@ -35,10 +43,37 @@ function parseArgs(argv: string[]) {
     else if (a === "--base-port" && argv[i + 1]) basePort = Number(argv[++i]);
     else if (a === "--scenario" && argv[i + 1]) scenario = argv[++i];
     else if (a === "--concurrency" && argv[i + 1]) concurrency = Number(argv[++i]);
+    else if (a === "--road-policies" && argv[i + 1]) roadPolicies = argv[++i];
+    else if (a === "--ab-knob" && argv[i + 1]) abKnob = argv[++i];
+    else if (a === "--ab-variants" && argv[i + 1]) abVariants = argv[++i];
+    else if (a === "--profile" && argv[i + 1]) profile = argv[++i];
     else if (a === "--quiet") quiet = true;
   }
+  const policies = roadPolicies
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const variants = abVariants
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // When A/B variants are set, default workers to variant count unless overridden.
+  if (variants.length > 0 && !argv.includes("--workers")) {
+    workers = variants.length;
+  }
   if (concurrency <= 0) concurrency = workers;
-  return { workers, ticks, basePort, scenario, concurrency, quiet };
+  return {
+    workers,
+    ticks,
+    basePort,
+    scenario,
+    concurrency,
+    quiet,
+    policies,
+    abKnob,
+    variants,
+    profile,
+  };
 }
 
 function runOne(
@@ -47,28 +82,43 @@ function runOne(
   port: number,
   ticks: number,
   quiet: boolean,
+  opts: {
+    roadPolicy?: string;
+    abKnob?: string;
+    abVariant?: string;
+    profile?: string;
+  },
 ): Promise<{ instance: string; code: number; ms: number; tail: string }> {
   const started = Date.now();
   return new Promise((resolve) => {
-    const child = spawn(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        path.join(ROOT, script),
-        "--instance",
-        instance,
-        "--port",
-        String(port),
-        "--ticks",
-        String(ticks),
-      ],
-      {
-        cwd: ROOT,
-        stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env },
-      },
-    );
+    const args = [
+      "--import",
+      "tsx",
+      path.join(ROOT, script),
+      "--instance",
+      instance,
+      "--port",
+      String(port),
+      "--ticks",
+      String(ticks),
+    ];
+    if (opts.roadPolicy) {
+      args.push("--road-policy", opts.roadPolicy);
+    }
+    if (opts.abKnob) {
+      args.push("--ab-knob", opts.abKnob);
+    }
+    if (opts.abVariant != null && opts.abVariant !== "") {
+      args.push("--ab-variant", opts.abVariant);
+    }
+    if (opts.profile) {
+      args.push("--profile", opts.profile);
+    }
+    const child = spawn(process.execPath, args, {
+      cwd: ROOT,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env },
+    });
     let out = "";
     child.stdout?.on("data", (b) => {
       out += String(b);
@@ -113,9 +163,18 @@ async function mapPool<T, R>(
 }
 
 async function main() {
-  const { workers, ticks, basePort, scenario, concurrency, quiet } = parseArgs(
-    process.argv.slice(2),
-  );
+  const {
+    workers,
+    ticks,
+    basePort,
+    scenario,
+    concurrency,
+    quiet,
+    policies,
+    abKnob,
+    variants,
+    profile,
+  } = parseArgs(process.argv.slice(2));
   const script = SCENARIOS[scenario];
   if (!script) {
     console.error(
@@ -125,12 +184,35 @@ async function main() {
   }
   const t0 = Date.now();
   console.log(
-    `[farm] scenario=${scenario} workers=${workers} concurrency=${concurrency} ticks=${ticks} basePort=${basePort}`,
+    `[farm] scenario=${scenario} workers=${workers} concurrency=${concurrency} ticks=${ticks} basePort=${basePort}` +
+      (policies.length ? ` policies=${policies.join("|")}` : "") +
+      (abKnob ? ` ab=${abKnob}[${variants.join("|")}]` : "") +
+      (profile ? ` profile=${profile}` : ""),
   );
   const indices = Array.from({ length: workers }, (_, i) => i);
-  const results = await mapPool(indices, concurrency, (i) =>
-    runOne(script, `${scenario}-${i}`, basePort + i, ticks, quiet),
-  );
+  const results = await mapPool(indices, concurrency, (i) => {
+    const roadPolicy = policies.length ? policies[i % policies.length] : undefined;
+    const abVariant = variants.length ? variants[i % variants.length] : undefined;
+    // Prefer profile over roadPolicy so baseline/optimized compares don't collide as real-parallel.
+    const label = abKnob && abVariant != null
+      ? `${abKnob}.${abVariant}`
+      : profile
+        ? profile
+        : roadPolicy
+          ? roadPolicy
+          : String(i);
+    // Unique instance dirs when several workers share the same variant label.
+    const name =
+      workers > Math.max(1, variants.length || policies.length || 1)
+        ? `${scenario}-${label}-w${i}`
+        : `${scenario}-${label}`;
+    return runOne(script, name, basePort + i, ticks, quiet, {
+      roadPolicy: roadPolicy ?? "parallel",
+      abKnob: abKnob || undefined,
+      abVariant,
+      profile: profile || undefined,
+    });
+  });
   const failed = results.filter((r) => r.code !== 0).length;
   const ok = workers - failed;
   const ms = Date.now() - t0;

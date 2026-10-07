@@ -1,5 +1,45 @@
 import { shouldBankForBetterMiners } from "../earlyGame/policy";
+import {
+  availableContainerEnergy,
+  claimHaulOrder,
+  estimateHaulTripTicks,
+  settleHaulOrder,
+  shouldAssignHaulOrder,
+  sweepHaulOrders,
+  type HaulOrderBook,
+} from "../logistics/haulOrders";
+import { pickIdleStand } from "./idlePark";
 import { isIncomeStalled } from "../telemetry";
+
+const HAUL_ORDER_MAX_AGE = 1500;
+const HAUL_TTL_MARGIN = 20;
+
+function haulOrderBook(): HaulOrderBook {
+  if (!Memory.ags) return {};
+  if (!Memory.ags.haulOrders) Memory.ags.haulOrders = {};
+  return Memory.ags.haulOrders as HaulOrderBook;
+}
+
+function sweepHaulOrderBook(): void {
+  const book = haulOrderBook();
+  const live = new Set<string>();
+  for (const name in Game.creeps) {
+    if (Game.creeps[name].memory.role === "hauler") live.add(name);
+  }
+  sweepHaulOrders(book, {
+    liveHaulerNames: live,
+    tick: Game.time,
+    maxAge: HAUL_ORDER_MAX_AGE,
+  });
+}
+
+function closeHaulOrder(creep: Creep): void {
+  settleHaulOrder(haulOrderBook(), creep.name, {
+    withdrawn: creep.memory.haulWithdrawn ?? 0,
+  });
+  delete creep.memory.haulWithdrawn;
+  delete creep.memory.pickupId;
+}
 
 type HaulTarget =
   | StructureSpawn
@@ -397,6 +437,7 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
 
   const freeCapacity = creep.store.getFreeCapacity(RESOURCE_ENERGY);
   const controller = creep.room.controller;
+  const book = haulOrderBook();
   const containers = creep.room.find(FIND_STRUCTURES, {
     filter: (s): s is StructureContainer =>
       s.structureType === STRUCTURE_CONTAINER &&
@@ -411,7 +452,8 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
       if (other.room.name !== creep.room.name) continue;
       if (other.memory.role !== "hauler") continue;
       if ((other.store.getFreeCapacity(RESOURCE_ENERGY) ?? 0) <= 0) continue;
-      const targetId = other.memory.pickupId;
+      // Book already accounts for claimed orders — only soft-claim unassigned peers.
+      const targetId = book[other.name] ? undefined : other.memory.pickupId;
       peers.push({
         id: other.id,
         freeCapacity: other.store.getFreeCapacity(RESOURCE_ENERGY) ?? 0,
@@ -425,23 +467,54 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
       });
     }
 
+    // Visible energy minus durable reservations (except self).
     const candidates: HaulerPickupCandidate[] = containers.map((c) => ({
       id: c.id,
-      energy: c.store[RESOURCE_ENERGY] ?? 0,
+      energy: availableContainerEnergy(
+        c.store[RESOURCE_ENERGY] ?? 0,
+        c.id,
+        book,
+        creep.name,
+      ),
       range: creep.pos.getRangeTo(c),
     }));
 
-    // Honour sticky target if it still has worthwhile energy.
+    // Honour sticky target if reserved energy remains worthwhile.
     const sticky = creep.memory.pickupId;
     if (sticky) {
       const still = containers.find((c) => c.id === sticky);
       const minE = minWorthwhilePickup(freeCapacity, ctx.spawnEnergy);
-      if (still && (still.store[RESOURCE_ENERGY] ?? 0) >= minE) {
-        return still;
+      const avail = still
+        ? availableContainerEnergy(
+            still.store[RESOURCE_ENERGY] ?? 0,
+            still.id,
+            book,
+            creep.name,
+          )
+        : 0;
+      if (
+        still &&
+        (avail > 0 || (still.store[RESOURCE_ENERGY] ?? 0) >= minE)
+      ) {
+        // Re-check/adjust reservation every tick (store + freeCapacity may change).
+        const claimed = claimHaulOrder(book, {
+          haulerName: creep.name,
+          containerId: still.id,
+          freeCapacity,
+          containerEnergy: still.store[RESOURCE_ENERGY] ?? 0,
+          tick: Game.time,
+        });
+        if (!claimed) {
+          closeHaulOrder(creep);
+        } else {
+          creep.memory.haulWithdrawn = claimed.withdrawn;
+          return still;
+        }
       }
-      delete creep.memory.pickupId;
+      closeHaulOrder(creep);
     }
 
+    const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
     const pickedId = pickHaulerContainer({
       haulerId: creep.id,
       freeCapacity,
@@ -452,7 +525,31 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
     if (pickedId) {
       const picked = containers.find((c) => c.id === pickedId) ?? null;
       if (picked) {
+        const tripTicks = estimateHaulTripTicks({
+          rangeToPickup: creep.pos.getRangeTo(picked),
+          rangeToDropoff: spawn ? creep.pos.getRangeTo(spawn) : 25,
+        });
+        if (
+          !shouldAssignHaulOrder({
+            ticksToLive: creep.ticksToLive,
+            tripTicks,
+            safetyMargin: HAUL_TTL_MARGIN,
+          })
+        ) {
+          creep.memory.haulRetire = true;
+          return null;
+        }
+        const order = claimHaulOrder(book, {
+          haulerName: creep.name,
+          containerId: picked.id,
+          freeCapacity,
+          containerEnergy: picked.store[RESOURCE_ENERGY] ?? 0,
+          tick: Game.time,
+        });
+        if (!order) return null;
         creep.memory.pickupId = picked.id;
+        creep.memory.haulWithdrawn = 0;
+        delete creep.memory.haulRetire;
         return picked;
       }
     }
@@ -478,14 +575,31 @@ function findEnergySource(creep: Creep): StructureContainer | StructureStorage |
 }
 
 export function runHauler(creep: Creep): number {
+  sweepHaulOrderBook();
   const carried = creep.store[RESOURCE_ENERGY] ?? 0;
   const freeCapacity = creep.store.getFreeCapacity();
   const ctx = haulContext(creep);
 
+  // TTL too short for another round-trip — park away from the spawn ring.
+  if (creep.memory.haulRetire && carried <= 0) {
+    closeHaulOrder(creep);
+    const stand = pickIdleStand(creep);
+    if (stand) creep.moveTo(stand as unknown as RoomPosition, { reusePath: 10 });
+    return 0;
+  }
+
   if (!shouldDeliverNow(carried, freeCapacity, ctx)) {
     const source = findEnergySource(creep);
     if (!source) {
-      delete creep.memory.pickupId;
+      if (creep.memory.haulRetire) {
+        closeHaulOrder(creep);
+        const stand = pickIdleStand(creep);
+        if (stand) {
+          creep.moveTo(stand as unknown as RoomPosition, { reusePath: 10 });
+        }
+        return 0;
+      }
+      closeHaulOrder(creep);
       const anchor = creep.room.find(FIND_SOURCES)[0];
       if (anchor && !creep.pos.inRangeTo(anchor, 2)) {
         creep.moveTo(anchor, { reusePath: 5, range: 1 });
@@ -498,13 +612,24 @@ export function runHauler(creep: Creep): number {
       }
       return 0;
     }
-    if (creep.withdraw(source, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+    const before = creep.store[RESOURCE_ENERGY] ?? 0;
+    const code = creep.withdraw(source, RESOURCE_ENERGY);
+    if (code === ERR_NOT_IN_RANGE) {
       creep.moveTo(source, { reusePath: 5 });
+      return 0;
+    }
+    if (code === OK) {
+      const gained = (creep.store[RESOURCE_ENERGY] ?? 0) - before;
+      if (gained > 0) {
+        creep.memory.haulWithdrawn = (creep.memory.haulWithdrawn ?? 0) + gained;
+        const order = haulOrderBook()[creep.name];
+        if (order) order.withdrawn = creep.memory.haulWithdrawn;
+      }
     }
     return 0;
   }
 
-  delete creep.memory.pickupId;
+  closeHaulOrder(creep);
   const target = findEnergyTarget(creep);
   if (!target) return 0;
 

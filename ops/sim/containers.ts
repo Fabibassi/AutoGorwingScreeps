@@ -8,6 +8,7 @@ import {
   ROOM,
   addBotWithModules,
   createMockupServer,
+  liveFromSummary,
   patchControllerAndSpawn,
   readRoomSummary,
   resetEmptyRoom,
@@ -24,7 +25,7 @@ const SOURCES: Array<[number, number]> = [
 
 function parseArgs(argv: string[]) {
   let instance = "containers-0";
-  let ticks = 400;
+  let ticks = 2000;
   let port = 21030;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -77,88 +78,52 @@ export async function runContainersScenario(opts: {
     await server.start();
     await server.tick();
     let final = await readRoomSummary(server);
-    writeLiveStatus({
-      instance: opts.instance,
-      tick: final.gameTime,
-      ticksCap: opts.ticks,
-      creeps: final.creeps,
-      spawnEnergy: final.spawnEnergy,
-      storageEnergy: final.storageEnergy,
-      roles: final.roles,
-      updatedAt: new Date().toISOString(),
-    });
+    writeLiveStatus(liveFromSummary(opts.instance, opts.ticks, final));
 
     for (let i = 0; i < opts.ticks; i++) {
       await server.tick();
       final = await readRoomSummary(server);
       if (i < 3 || i % 25 === 0) {
         console.log(`[sim|${opts.instance}] t${i + 1}`, final);
-        writeLiveStatus({
-          instance: opts.instance,
-          tick: final.gameTime,
-          ticksCap: opts.ticks,
-          creeps: final.creeps,
-          spawnEnergy: final.spawnEnergy,
-          storageEnergy: final.storageEnergy,
-          roles: final.roles,
-          updatedAt: new Date().toISOString(),
-        });
+        writeLiveStatus(liveFromSummary(opts.instance, opts.ticks, final));
       }
 
       const miners = final.roles.miner ?? 0;
       if (miners >= 1) {
         const reason = "miner after container unlock";
-        writeLiveStatus({
-          instance: opts.instance,
-          tick: final.gameTime,
-          ticksCap: opts.ticks,
-          creeps: final.creeps,
-          spawnEnergy: final.spawnEnergy,
-          storageEnergy: final.storageEnergy,
-          roles: final.roles,
-          done: true,
-          ok: true,
-          reason,
-          updatedAt: new Date().toISOString(),
-        });
+        writeLiveStatus(
+          liveFromSummary(opts.instance, opts.ticks, final, {
+            done: true,
+            ok: true,
+            reason,
+          }),
+        );
         return { ok: true, ticksRun: i + 1, final, reason };
       }
 
       const containers = await countSourceContainers(server);
       if (containers >= 2) {
         const reason = "both source containers built";
-        writeLiveStatus({
-          instance: opts.instance,
-          tick: final.gameTime,
-          ticksCap: opts.ticks,
-          creeps: final.creeps,
-          spawnEnergy: final.spawnEnergy,
-          storageEnergy: final.storageEnergy,
-          roles: final.roles,
-          done: true,
-          ok: true,
-          reason,
-          updatedAt: new Date().toISOString(),
-        });
+        writeLiveStatus(
+          liveFromSummary(opts.instance, opts.ticks, final, {
+            done: true,
+            ok: true,
+            reason,
+          }),
+        );
         return { ok: true, ticksRun: i + 1, final, reason };
       }
     }
 
     const containers = await countSourceContainers(server);
     const reason = `no unlock; sourceContainers=${containers}`;
-    writeLiveStatus({
-      instance: opts.instance,
-      tick: final.gameTime,
-      ticksCap: opts.ticks,
-      creeps: final.creeps,
-      spawnEnergy: final.spawnEnergy,
-      storageEnergy: final.storageEnergy,
-      roles: final.roles,
-      done: true,
-      ok: false,
-      reason,
-      updatedAt: new Date().toISOString(),
-    });
+    writeLiveStatus(
+      liveFromSummary(opts.instance, opts.ticks, final, {
+        done: true,
+        ok: false,
+        reason,
+      }),
+    );
     return { ok: false, ticksRun: opts.ticks, final, reason };
   } finally {
     stopServer(server);

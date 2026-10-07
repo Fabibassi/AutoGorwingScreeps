@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { runMiner } from "../src/roles/miner";
 import {
+  findHarvesterDeliveryTarget,
   needsSpawnBankForInfraBuilder,
   runHarvester,
   shouldBuildSourceContainers,
@@ -33,6 +34,54 @@ describe("needsSpawnBankForInfraBuilder", () => {
   });
 });
 
+describe("findHarvesterDeliveryTarget", () => {
+  beforeEach(() => {
+    vi.stubGlobal("FIND_MY_STRUCTURES", 108);
+    vi.stubGlobal("STRUCTURE_EXTENSION", "extension");
+    vi.stubGlobal("RESOURCE_ENERGY", "energy");
+  });
+
+  test("prefers spawn while it still has free capacity", () => {
+    const spawn = {
+      store: { getFreeCapacity: () => 50 },
+    } as unknown as StructureSpawn;
+    const ext = {
+      structureType: "extension",
+      store: { getFreeCapacity: () => 50 },
+    };
+    const creep = {
+      pos: {
+        findClosestByPath: (t: unknown) => (Array.isArray(t) ? t[0] : t),
+        findClosestByRange: (t: unknown) => (Array.isArray(t) ? t[0] : t),
+      },
+      room: {
+        find: () => [ext],
+      },
+    } as unknown as Creep;
+    expect(findHarvesterDeliveryTarget(creep, spawn)).toBe(spawn);
+  });
+
+  test("fills hungry extensions when spawn is full (wipe recovery)", () => {
+    const spawn = {
+      store: { getFreeCapacity: () => 0 },
+    } as unknown as StructureSpawn;
+    const ext = {
+      structureType: "extension",
+      store: { getFreeCapacity: () => 50 },
+    };
+    const creep = {
+      pos: {
+        findClosestByPath: (t: unknown) => (Array.isArray(t) ? t[0] : t),
+        findClosestByRange: (t: unknown) => (Array.isArray(t) ? t[0] : t),
+      },
+      room: {
+        find: (type: number) => (type === FIND_MY_STRUCTURES ? [ext] : []),
+      },
+    } as unknown as Creep;
+    expect(findHarvesterDeliveryTarget(creep, spawn)).toBe(ext);
+  });
+});
+
 describe("runHarvester source-container push", () => {
   beforeEach(() => {
     vi.stubGlobal("OK", 0);
@@ -40,9 +89,11 @@ describe("runHarvester source-container push", () => {
     vi.stubGlobal("FIND_SOURCES", 105);
     vi.stubGlobal("FIND_SOURCES_ACTIVE", 104);
     vi.stubGlobal("FIND_MY_SPAWNS", 106);
+    vi.stubGlobal("FIND_MY_STRUCTURES", 108);
     vi.stubGlobal("FIND_STRUCTURES", 107);
     vi.stubGlobal("FIND_CONSTRUCTION_SITES", 111);
     vi.stubGlobal("STRUCTURE_CONTAINER", "container");
+    vi.stubGlobal("STRUCTURE_EXTENSION", "extension");
     vi.stubGlobal("RESOURCE_ENERGY", "energy");
     vi.stubGlobal("WORK", "work");
   });
@@ -188,6 +239,86 @@ describe("runHarvester source-container push", () => {
     expect(runHarvester(creep)).toBe(0);
     expect(build).not.toHaveBeenCalled();
     expect(transfer).toHaveBeenCalledWith(spawn, "energy");
+  });
+
+  test("fills empty extensions when spawn is full before remote container work", () => {
+    const site = {
+      id: "site1",
+      structureType: "container",
+      pos: { x: 20, y: 20, roomName: "W1N1" },
+    };
+    const source = {
+      id: "s1",
+      pos: {
+        x: 10,
+        y: 10,
+        roomName: "W1N1",
+        findInRange: () => [],
+      },
+    };
+    const ext = {
+      structureType: "extension",
+      store: {
+        getFreeCapacity: () => 50,
+        getUsedCapacity: () => 0,
+      },
+    };
+    const build = vi.fn(() => 0);
+    const transfer = vi.fn(() => 0);
+    const spawn = {
+      store: {
+        getUsedCapacity: () => 300,
+        getCapacity: () => 300,
+        getFreeCapacity: () => 0,
+      },
+    };
+    const creep = {
+      store: {
+        energy: 50,
+        getCapacity: () => 50,
+        getFreeCapacity: () => 0,
+      },
+      pos: {
+        getRangeTo: () => 10,
+        findClosestByPath: (target: unknown) =>
+          Array.isArray(target) ? target[0] : target,
+        findClosestByRange: (target: unknown) =>
+          Array.isArray(target) ? target[0] : target,
+      },
+      build,
+      harvest: vi.fn(),
+      transfer,
+      moveTo: vi.fn(),
+      getActiveBodyparts: () => 1,
+      room: {
+        name: "W1N1",
+        find: (constType: number) => {
+          if (constType === FIND_SOURCES || constType === FIND_SOURCES_ACTIVE) {
+            return [source];
+          }
+          if (constType === FIND_MY_SPAWNS) return [spawn];
+          if (constType === FIND_MY_STRUCTURES) return [ext];
+          if (constType === FIND_CONSTRUCTION_SITES) return [site];
+          return [];
+        },
+      },
+    } as unknown as Creep;
+    vi.stubGlobal("Game", {
+      creeps: {
+        "builder-1": {
+          room: { name: "W1N1" },
+          memory: { role: "builder" },
+        },
+        "builder-2": {
+          room: { name: "W1N1" },
+          memory: { role: "builder" },
+        },
+      },
+    });
+
+    expect(runHarvester(creep)).toBe(0);
+    expect(transfer).toHaveBeenCalledWith(ext, "energy");
+    expect(build).not.toHaveBeenCalled();
   });
 });
 

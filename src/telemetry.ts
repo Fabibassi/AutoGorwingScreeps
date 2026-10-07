@@ -118,5 +118,6 @@ export function tickTelemetry(opts: {
     lastSpawnFail: prev.lastSpawnFail,
     zombieDebug: prev.zombieDebug,
     zombieSpawnSeen: prev.zombieSpawnSeen,
+    haulOrders: prev.haulOrders,
   };
 }

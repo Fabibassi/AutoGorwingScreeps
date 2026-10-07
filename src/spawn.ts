@@ -128,6 +128,33 @@ export function reassignUpgraderToExtensionBuilder(
 }
 
 /**
+ * Instant controller keep-alive after a wipe: promote a WORK body to upgrader
+ * instead of waiting a full spawn cycle while ticksToDowngrade bleeds.
+ */
+export function reassignForControllerSurvival(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+): boolean {
+  if (want.upgrader < 1) return false;
+  if (counts.upgrader >= want.upgrader) return false;
+
+  const donors: Array<"builder" | "harvester"> = ["builder", "harvester"];
+  for (const role of donors) {
+    for (const name in Game.creeps) {
+      const creep = Game.creeps[name];
+      if (creep.room.name !== room.name) continue;
+      if (creep.memory.role !== role) continue;
+      if (creep.getActiveBodyparts(WORK) < 1) continue;
+      creep.memory.role = "upgrader";
+      delete creep.memory.sourceId;
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Restore missing static miners from surplus harvesters (e.g. after a false
  * income-collapse demotion while spawn was full).
  */
@@ -332,35 +359,55 @@ export function recycleExcessMiners(
   return true;
 }
 
-/** Recycle underpowered miners once the room can afford capacity-sized bodies. */
+/**
+ * Recycle underpowered miners once the room can afford capacity-sized bodies.
+ * Never wipe source coverage: only recycle when a fat replacement already lives
+ * or there is a true surplus miner. Walking to spawn must not block spawning.
+ */
 export function recycleWeakMiners(
   spawn: StructureSpawn,
   targetWork: number,
   energyAvailable: number,
+  opts?: { sourceCount?: number },
 ): boolean {
   if (spawn.spawning) return false;
   if (targetWork <= 1) return false;
   if (energyAvailable < minerBodyCost(targetWork)) return false;
 
+  const sources = Math.max(1, opts?.sourceCount ?? 1);
+  let minerCount = 0;
+  let strongCount = 0;
   let best: Creep | null = null;
   let bestWork = Infinity;
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
     if (creep.room.name !== spawn.room.name) continue;
     if (creep.memory.role !== "miner") continue;
+    minerCount += 1;
     const work = creep.getActiveBodyparts(WORK);
-    if (work >= targetWork) continue;
-    if (!best || work < bestWork || (work === bestWork && creep.pos.isNearTo(spawn))) {
+    if (work >= targetWork) {
+      strongCount += 1;
+      continue;
+    }
+    if (
+      !best ||
+      work < bestWork ||
+      (work === bestWork && creep.pos.isNearTo(spawn))
+    ) {
       best = creep;
       bestWork = work;
     }
   }
   if (!best) return false;
+  // Keep one miner per source until a capacity-sized body is already online
+  // (or a surplus seat exists from prespawn).
+  if (strongCount === 0 && minerCount <= sources) return false;
+
   if (best.pos.isNearTo(spawn)) {
     return spawn.recycleCreep(best) === OK;
   }
   best.moveTo(spawn);
-  return true;
+  return false;
 }
 
 function clearHaulerRecycling(roomName: string): void {
@@ -501,10 +548,12 @@ export function runSpawn(spawn: StructureSpawn): void {
         : 20,
     hasStorage: room.storage !== undefined,
   };
+  const exp = resolveExperiment(Memory.ags);
   const infrastructureDedicated = useDedicatedMiners(
     rcl,
     containersAtSources,
     sourceCount,
+    exp,
   );
 
   if (shouldFallbackToMobileHarvest(infrastructureDedicated, economy)) {
@@ -515,8 +564,6 @@ export function runSpawn(spawn: StructureSpawn): void {
       delete creep.memory.sourceId;
     }
   }
-
-  const exp = resolveExperiment(Memory.ags);
   const minerMinWork = infrastructureDedicated
     ? effectiveMinerMinWork(exp.minerMinWork, energyCapacityAvailable)
     : exp.minerMinWork;
@@ -554,6 +601,11 @@ export function runSpawn(spawn: StructureSpawn): void {
   for (let n = 0; n < 10; n++) {
     const mid = countCreepsByRole();
     if (!reassignUpgraderToExtensionBuilder(room, want, mid)) break;
+  }
+  // After surplus→builder, restore the emergency upgrader seat if empty.
+  for (let n = 0; n < 10; n++) {
+    const mid = countCreepsByRole();
+    if (!reassignForControllerSurvival(room, want, mid)) break;
   }
   const liveCounts = countCreepsByRole();
   const minerSnapshots: Array<{ sourceId?: string; ticksToLive?: number }> = [];
@@ -655,7 +707,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       minerWorkParts,
       sourceCount,
     }) &&
-    recycleWeakMiners(spawn, targetMinerWork, energyAvailable)
+    recycleWeakMiners(spawn, targetMinerWork, energyAvailable, { sourceCount })
   ) {
     return;
   }
@@ -668,7 +720,12 @@ export function runSpawn(spawn: StructureSpawn): void {
     economy,
     liveCounts,
     energyAvailable,
-    { infrastructurePush, buildersBelowQuota, economyFloorMet },
+    {
+      infrastructurePush,
+      buildersBelowQuota,
+      economyFloorMet,
+      spawnChain: exp.spawnChain,
+    },
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
   // Experiment haulerCap (thin) also caps when economy is healthy.

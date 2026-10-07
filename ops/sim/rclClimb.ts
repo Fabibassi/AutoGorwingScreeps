@@ -10,6 +10,7 @@ import {
   ROOM,
   addBotWithModules,
   createMockupServer,
+  liveFromSummary,
   patchControllerAndSpawn,
   readRoomSummary,
   resetEmptyRoom,
@@ -115,35 +116,30 @@ export async function runRclClimbScenario(opts: {
           rcl: after.level,
           progress: after.progress,
         });
-        writeLiveStatus({
-          instance: opts.instance,
-          tick: final.gameTime,
-          ticksCap: opts.ticks,
-          creeps: final.creeps,
-          spawnEnergy: final.spawnEnergy,
-          storageEnergy: final.storageEnergy,
-          roles: { ...final.roles, _rcl: after.level },
-          updatedAt: new Date().toISOString(),
-        });
+        writeLiveStatus(
+          liveFromSummary(opts.instance, opts.ticks, final, {
+            rcl: after.level,
+            progress: after.progress,
+            progressTotal: after.progressTotal,
+            roles: { ...final.roles },
+          }),
+        );
       }
 
       if (after.level >= 8 && economy) {
         stableAt8++;
         if (stableAt8 >= 20) {
           const reason = "RCL8 reached with healthy economy";
-          writeLiveStatus({
-            instance: opts.instance,
-            tick: final.gameTime,
-            ticksCap: opts.ticks,
-            creeps: final.creeps,
-            spawnEnergy: final.spawnEnergy,
-            storageEnergy: final.storageEnergy,
-            roles: final.roles,
-            done: true,
-            ok: true,
-            reason,
-            updatedAt: new Date().toISOString(),
-          });
+          writeLiveStatus(
+            liveFromSummary(opts.instance, opts.ticks, final, {
+              rcl: after.level,
+              progress: after.progress,
+              progressTotal: after.progressTotal,
+              done: true,
+              ok: true,
+              reason,
+            }),
+          );
           return { ok: true, ticksRun: i + 1, final, reason };
         }
       } else {

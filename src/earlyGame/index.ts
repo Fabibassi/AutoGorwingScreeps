@@ -17,9 +17,11 @@ export {
   AB_KNOBS,
   AB_VARIANTS,
   BASELINE_PROFILE,
+  BOOTSTRAP_STRATEGIES,
   FULL_MERGE_PROFILE,
   OPTIMIZED_PROFILE,
   allowControllerContainer,
+  applyBootstrapStrategy,
   experimentTag,
   extensionBootstrapCap,
   isAbKnob,
@@ -29,6 +31,7 @@ export {
   resolveExperiment,
   sourceContainerQueueCount,
   type AbKnob,
+  type BootstrapStrategy,
   type ExperimentProfile,
 } from "./experimentPolicy";
 export {

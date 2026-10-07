@@ -209,6 +209,17 @@ export async function setBotRoadPolicy(
   );
 }
 
+/** Kill every live creep and clear haul reservations (wipe-recovery sims). */
+export async function wipeAllCreeps(bot: SimBot): Promise<void> {
+  await bot.console(
+    [
+      "for (const n in Game.creeps) Game.creeps[n].suicide();",
+      "for (const n in Memory.creeps) delete Memory.creeps[n];",
+      "if (Memory.ags) { Memory.ags.haulOrders = {}; }",
+    ].join(" "),
+  );
+}
+
 /** Inject early-game A/B knob+variant (and optional named profile). */
 export async function setBotExperiment(
   bot: SimBot,

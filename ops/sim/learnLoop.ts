@@ -71,7 +71,10 @@ function parseArgs(argv: string[]) {
       concurrency = Number(argv[++i]);
     else if (a === "--rounds" && argv[i + 1]) rounds = Number(argv[++i]);
     else if (a === "--curriculum" && argv[i + 1]) {
-      curriculum = argv[++i].split(",").map((s) => s.trim()).filter(Boolean);
+      curriculum = argv[++i]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean) as Array<(typeof DEFAULT_CURRICULUM)[number]>;
     }
   }
   if (concurrency <= 0) concurrency = workers;

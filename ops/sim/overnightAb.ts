@@ -249,6 +249,10 @@ function writeOptimizedSource(profile: ExperimentProfile): void {
   haulerMaxCost: ${hauler},
   controllerContainer: "${profile.controllerContainer}",
   spawnBuffer: ${profile.spawnBuffer},
+  allowDropMiners: ${profile.allowDropMiners},
+  universalUntilCapacity: ${profile.universalUntilCapacity},
+  containersAfterExtensions: ${profile.containersAfterExtensions},
+  spawnChain: "${profile.spawnChain}",
 };`;
   if (/export const OPTIMIZED_PROFILE: ExperimentProfile = [\s\S]*?;/.test(src)) {
     src = src.replace(
@@ -300,6 +304,7 @@ function baselineVariant(knob: AbKnob): string {
     haulerCap: "fat",
     controllerContainer: "after_sources",
     spawnBuffer: "200",
+    bootstrapStrategy: "control",
   };
   return baseline[knob];
 }
@@ -354,6 +359,19 @@ function mergeProfile(winners: Record<AbKnob, string>): ExperimentProfile {
         break;
       case "spawnBuffer":
         p.spawnBuffer = one.spawnBuffer;
+        break;
+      case "bootstrapStrategy":
+        // Composite strategy overrides the early-game shape as a whole.
+        p.allowDropMiners = one.allowDropMiners;
+        p.universalUntilCapacity = one.universalUntilCapacity;
+        p.containersAfterExtensions = one.containersAfterExtensions;
+        p.spawnChain = one.spawnChain;
+        p.containerTiming = one.containerTiming;
+        p.extensionBootstrap = one.extensionBootstrap;
+        p.builderInfra = one.builderInfra;
+        p.minerMinWork = one.minerMinWork;
+        p.haulerMaxCost = one.haulerMaxCost;
+        p.upgraderQuotaClimb = one.upgraderQuotaClimb;
         break;
     }
   }

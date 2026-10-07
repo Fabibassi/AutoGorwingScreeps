@@ -2,6 +2,7 @@ import {
   countSourceContainers,
   findSourceContainerSites,
 } from "../room/queries";
+import { isDowngradeRisk } from "../selfCheck";
 
 /** Cheap WORK+CARRY+MOVE body — bank this before remote container trips. */
 export const INFRA_BUILDER_SPAWN_ENERGY = 200;
@@ -80,6 +81,42 @@ function countBuildersInRoom(roomName: string): number {
   return n;
 }
 
+function countUpgradersInRoom(roomName: string): number {
+  let n = 0;
+  for (const name in Game.creeps) {
+    const c = Game.creeps[name];
+    if (c.room.name === roomName && c.memory.role === "upgrader") n++;
+  }
+  return n;
+}
+
+function upgradeController(creep: Creep, controller: StructureController): void {
+  if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
+    creep.moveTo(controller);
+  }
+}
+
+/** Spawn first, then hungry extensions — keeps energyAvailable alive after wipes. */
+export function findHarvesterDeliveryTarget(
+  creep: Creep,
+  spawn: StructureSpawn | undefined,
+): StructureSpawn | StructureExtension | null {
+  if (spawn && spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+    return spawn;
+  }
+  const hungry = creep.room.find(FIND_MY_STRUCTURES, {
+    filter: (s): s is StructureExtension =>
+      s.structureType === STRUCTURE_EXTENSION &&
+      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+  });
+  if (hungry.length === 0) return null;
+  return (
+    creep.pos.findClosestByPath(hungry) ??
+    creep.pos.findClosestByRange(hungry) ??
+    null
+  );
+}
+
 export function runHarvester(creep: Creep): number {
   let harvested = 0;
   const capacity = creep.store.getCapacity(RESOURCE_ENERGY) ?? 0;
@@ -132,6 +169,34 @@ export function runHarvester(creep: Creep): number {
     return harvested;
   }
 
+  const controller = creep.room.controller;
+  const upgraderCount = countUpgradersInRoom(creep.room.name);
+  const controllerUrgent =
+    controller != null &&
+    isDowngradeRisk(controller.level, controller.ticksToDowngrade, upgraderCount);
+
+  // Feed spawn + extensions before remote builds/upgrade. After a wipe we often
+  // still have many empty extensions; spending CARRY on containers/controller
+  // while energyAvailable sits at ~300 soft-locks fat spawn bodies forever.
+  // Exception: critical downgrade timer beats extension top-ups.
+  const delivery = findHarvesterDeliveryTarget(creep, spawn);
+  if (delivery) {
+    // Keep feeding an empty spawn; otherwise refresh a critical controller first.
+    if (controllerUrgent && controller && delivery !== spawn) {
+      upgradeController(creep, controller);
+      return 0;
+    }
+    if (creep.transfer(delivery, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+      creep.moveTo(delivery);
+    }
+    return 0;
+  }
+
+  if (controllerUrgent && controller) {
+    upgradeController(creep, controller);
+    return 0;
+  }
+
   const capacitySpawn = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const fill = spawnEnergy / capacitySpawn;
   const preferRemoteBuild = shouldBuildSourceContainers(
@@ -145,23 +210,13 @@ export function runHarvester(creep: Creep): number {
     return 0;
   }
 
-  if (spawn && spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-    if (creep.transfer(spawn, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(spawn);
-    }
-    return 0;
-  }
-
-  // Spawn full: finish remaining source containers before upgrading.
+  // Spawn + extensions saturated: finish remaining source containers before upgrading.
   if (missingSourceContainers && buildRemoteSourceContainerSite(creep)) {
     return 0;
   }
 
-  const controller = creep.room.controller;
   if (controller) {
-    if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
-      creep.moveTo(controller);
-    }
+    upgradeController(creep, controller);
   }
   return 0;
 }

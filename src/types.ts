@@ -74,6 +74,19 @@ export interface AgsMemory {
   abVariant?: string;
   /** Named profile: baseline (default) | optimized (merged winners). */
   profile?: string;
+  /**
+   * Active hauler pickup reservations (haulerName → order).
+   * See src/logistics/haulOrders.ts.
+   */
+  haulOrders?: Record<
+    string,
+    {
+      containerId: string;
+      reserved: number;
+      created: number;
+      withdrawn: number;
+    }
+  >;
 }
 
 declare global {
@@ -85,6 +98,10 @@ declare global {
     pickupId?: Id<StructureContainer | StructureStorage | StructureExtension | Resource>;
     /** Walking to spawn to be recycled — do not evict from the hub ring. */
     recycling?: boolean;
+    /** Energy withdrawn under the current haul order (settle check). */
+    haulWithdrawn?: number;
+    /** Park until death — TTL too short for another haul trip. */
+    haulRetire?: boolean;
   }
   interface Memory {
     ags?: AgsMemory;

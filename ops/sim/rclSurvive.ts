@@ -8,6 +8,7 @@
 import { pathToFileURL } from "node:url";
 import {
   ROOM,
+  PROGRESS_TOTAL,
   addBotWithModules,
   createMockupServer,
   patchControllerAndSpawn,
@@ -17,17 +18,8 @@ import {
   type SimResult,
 } from "./harness";
 
-/** Controller progressTotal mirrors (approx Screeps World). */
-export const PROGRESS_TOTAL: Record<number, number> = {
-  1: 200,
-  2: 45_000,
-  3: 135_000,
-  4: 405_000,
-  5: 1_215_000,
-  6: 3_645_000,
-  7: 10_935_000,
-  8: 0,
-};
+/** @deprecated import from harness — kept for existing sim imports. */
+export { PROGRESS_TOTAL } from "./harness";
 
 const SOURCES: Array<[number, number]> = [
   [10, 40],

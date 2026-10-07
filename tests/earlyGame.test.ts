@@ -19,6 +19,7 @@ import {
   shouldBuildWalls,
   spawnPriorityOrder,
   isEconomyDepressed,
+  profileForVariant,
   shouldFallbackToMobileHarvest,
   useDedicatedMiners,
 } from "../src/earlyGame";
@@ -51,6 +52,9 @@ describe("dedicated miners", () => {
     expect(useDedicatedMiners(2, 0, 2)).toBe(false);
     expect(useDedicatedMiners(2, 1, 2)).toBe(false);
     expect(useDedicatedMiners(2, 2, 2)).toBe(true);
+    expect(
+      useDedicatedMiners(2, 0, 2, profileForVariant("bootstrapStrategy", "b_drop")),
+    ).toBe(true);
   });
 });
 
@@ -157,8 +161,20 @@ describe("desiredCreeps", () => {
     ).toMatchObject({ miner: 2, hauler: 4 });
   });
 
-  test("rcl2 without containers keeps mobile harvesters", () => {
+  test("b_chain baseline drop-mines without containers", () => {
     expect(desiredCreeps(2, 2, 0, false)).toEqual({
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 3,
+      builder: 0,
+      filler: 0,
+    });
+  });
+
+  test("control profile keeps mobile harvesters without containers", () => {
+    const control = profileForVariant("bootstrapStrategy", "control");
+    expect(desiredCreeps(2, 2, 0, false, undefined, control)).toEqual({
       harvester: 3,
       miner: 0,
       hauler: 0,
@@ -168,37 +184,46 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl4 zero income wants hauler to break soft-lock even during infra push", () => {
+  test("control: rcl4 zero income wants hauler during infra push", () => {
+    const control = profileForVariant("bootstrapStrategy", "control");
     expect(
-      desiredCreeps(4, 2, 0, true, {
-        energyIncomePerTick: 0,
-        spawnFillPct: 0.27,
-        energyAvailable: 152,
-      }),
+      desiredCreeps(
+        4,
+        2,
+        0,
+        true,
+        {
+          energyIncomePerTick: 0,
+          spawnFillPct: 0.27,
+          energyAvailable: 152,
+        },
+        control,
+      ),
     ).toEqual({
       // Infra push: sources only (no spare H) so builders can claim spawn.
       harvester: 2,
       miner: 0,
       hauler: 1,
-      upgrader: 0,
-      builder: 4,
-      filler: 0,
-    });
-  });
-
-  test("rcl2 infra push keeps one upgrader so RCL3 can advance during builds", () => {
-    expect(desiredCreeps(2, 2, 0, true)).toEqual({
-      harvester: 2,
-      miner: 0,
-      hauler: 0,
       upgrader: 1,
       builder: 4,
       filler: 0,
     });
   });
 
-  test("rcl2 with partial containers unlocks miner/hauler for finished sources", () => {
-    expect(desiredCreeps(2, 2, 1, false)).toEqual({
+  test("b_chain infra push uses drop miners + lean builders", () => {
+    expect(desiredCreeps(2, 2, 0, true)).toEqual({
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 3,
+      builder: 2,
+      filler: 0,
+    });
+  });
+
+  test("control: partial containers unlock miner/hauler for finished sources", () => {
+    const control = profileForVariant("bootstrapStrategy", "control");
+    expect(desiredCreeps(2, 2, 1, false, undefined, control)).toEqual({
       harvester: 2,
       miner: 1,
       hauler: 1,
@@ -208,19 +233,21 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("rcl4 partial container keeps builders and funds miner/hauler while income is collapsed", () => {
+  test("b_chain: partial containers still want full miner/hauler pairs", () => {
     expect(
       desiredCreeps(4, 2, 1, true, {
         energyIncomePerTick: 2,
         spawnFillPct: 0.12,
         energyAvailable: 37,
+        minerCount: 0,
       }),
     ).toEqual({
+      // Bridge harvester while miners are wiped; drop-mine seats stay at 2.
       harvester: 1,
-      miner: 1,
-      hauler: 1,
-      upgrader: 0,
-      builder: 4,
+      miner: 2,
+      hauler: 2,
+      upgrader: 1,
+      builder: 2,
       filler: 0,
     });
   });
@@ -242,8 +269,8 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      // Overnight winner: builderInfra=4 (was 2).
-      builder: 4,
+      // strategy-bench b_chain: builderInfra=2
+      builder: 2,
       filler: 0,
     });
   });
@@ -274,12 +301,12 @@ describe("desiredCreeps", () => {
     ).toMatchObject({ harvester: 0, miner: 2 });
   });
 
-  test("dedicated mining defers upgraders and boosts builders while extension sites exist", () => {
+  test("dedicated mining keeps one emergency upgrader while boosting builders", () => {
     expect(desiredCreeps(4, 2, 2, true, { energyIncomePerTick: 6 })).toEqual({
       harvester: 0,
       miner: 2,
       hauler: 2,
-      upgrader: 0,
+      upgrader: 1,
       builder: 4,
       filler: 0,
     });
@@ -548,12 +575,25 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
-    // Only source containers — extensions wait until containers exist.
-    expect(queue.filter((s) => s === "container")).toHaveLength(2);
+    // b_chain one_source: serialize a single container site.
+    expect(queue.filter((s) => s === "container")).toHaveLength(1);
     expect(queue[0]).toBe("container");
     expect(queue.filter((s) => s === "extension")).toHaveLength(0);
     expect(queue.includes("storage")).toBe(false);
     expect(queue.includes("road")).toBe(false);
+  });
+
+  test("control queues both source containers at once", () => {
+    const queue = constructionPriority(2, {
+      sourceContainerCount: 0,
+      sourceCount: 2,
+      hasControllerContainer: false,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+      experiment: profileForVariant("bootstrapStrategy", "control"),
+    });
+    expect(queue.filter((s) => s === "container")).toHaveLength(2);
   });
 
   test("controller container queued only after source containers exist", () => {
@@ -691,7 +731,7 @@ describe("desiredCreeps extension push under saturated zero-income", () => {
       harvester: 1,
       miner: 2,
       hauler: 2,
-      upgrader: 0,
+      upgrader: 1,
       builder: 4,
       filler: 0,
     });
@@ -708,7 +748,7 @@ describe("desiredCreeps extension push under saturated zero-income", () => {
       harvester: 0,
       miner: 2,
       hauler: 2,
-      upgrader: 0,
+      upgrader: 1,
       builder: 4,
       filler: 0,
     });
