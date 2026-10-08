@@ -74,7 +74,7 @@ export async function runWipeRecoveryScenario(opts: {
     await setBotRoadPolicy(bot, roadPolicy);
     await server.tick();
 
-    let final = await readRoomSummary(server);
+    let final = await readRoomSummary(server, bot);
     let phase: "climb" | "wiped" | "recover" = "climb";
     let wipeAt: number | null = null;
     let wipeRcl = 1;
@@ -101,7 +101,7 @@ export async function runWipeRecoveryScenario(opts: {
       if (i % 100 === 0) await setBotRoadPolicy(bot, roadPolicy);
       await server.tick();
       await syncControllerProgress(server);
-      final = await readRoomSummary(server);
+      final = await readRoomSummary(server, bot);
 
       if (rcl3Tick == null && final.rcl >= 3) rcl3Tick = i + 1;
 
@@ -126,7 +126,7 @@ export async function runWipeRecoveryScenario(opts: {
           wipeRcl = final.rcl;
           await wipeAllCreeps(bot);
           await server.tick();
-          final = await readRoomSummary(server);
+          final = await readRoomSummary(server, bot);
           phase = "wiped";
           wipeAt = i + 1;
           console.log(

@@ -209,6 +209,17 @@ export async function setBotRoadPolicy(
   );
 }
 
+/** Inject RCL4→5 spend mode (survives via main sticky). */
+export async function setBotRcl5Mode(
+  bot: SimBot,
+  mode: string,
+): Promise<void> {
+  const safe = mode.replace(/[^a-z0-9_]/gi, "");
+  await bot.console(
+    `${ensureAgsPreamble()} Memory.ags.rcl5Mode = "${safe}";`,
+  );
+}
+
 /** Kill every live creep and clear haul reservations (wipe-recovery sims). */
 export async function wipeAllCreeps(bot: SimBot): Promise<void> {
   await bot.console(
@@ -331,12 +342,80 @@ export async function patchControllerAndSpawn(
   );
 }
 
-export async function readRoomSummary(server: SimServer): Promise<RoomSummary> {
+function parseBotMemory(raw: unknown): {
+  creeps?: Record<string, { role?: string }>;
+  ags?: { _roles?: Record<string, string> };
+} | null {
+  try {
+    let mem: unknown = raw;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed.startsWith("gz:")) return null;
+      mem = JSON.parse(trimmed);
+    }
+    return mem as {
+      creeps?: Record<string, { role?: string }>;
+      ags?: { _roles?: Record<string, string> };
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function memoryRolesFromBot(
+  bot: SimBot | undefined,
+  creepCount: number,
+): Promise<Record<string, string>> {
+  if (!bot) return {};
+  try {
+    let mem = parseBotMemory(await bot.memory);
+    let out: Record<string, string> = {};
+    const snap = mem?.ags?._roles;
+    if (snap && typeof snap === "object") {
+      out = { ...snap };
+    }
+    const creepsMem = mem?.creeps;
+    if (creepsMem && typeof creepsMem === "object") {
+      for (const [name, m] of Object.entries(creepsMem)) {
+        if (m?.role) out[name] = String(m.role);
+      }
+    }
+    // Exported Memory.creeps is often incomplete in mockup — snapshot via console.
+    if (creepCount > 0 && Object.keys(out).length < creepCount) {
+      await bot.console(
+        `Memory.ags=Memory.ags||{};Memory.ags._roles={};for(const n in Game.creeps)Memory.ags._roles[n]=Game.creeps[n].memory.role;`,
+      );
+      mem = parseBotMemory(await bot.memory);
+      const refreshed = mem?.ags?._roles;
+      if (refreshed && typeof refreshed === "object") {
+        out = { ...out, ...refreshed };
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Room snapshot for sim watchers.
+ * Pass `bot` so roles come from Memory.creeps[].role (name prefixes go stale
+ * after builder→upgrader reassign — overnight false "upgrader=0").
+ */
+export async function readRoomSummary(
+  server: SimServer,
+  bot?: SimBot,
+): Promise<RoomSummary> {
   const gameTime = Number(await server.world.gameTime);
   const objects = await server.common.storage.db["rooms.objects"].find({
     room: ROOM,
   });
   let creeps = 0;
+  for (const o of objects) {
+    if (o.type === "creep") creeps++;
+  }
+  const memRoles = await memoryRolesFromBot(bot, creeps);
+  creeps = 0;
   let spawnEnergy = 0;
   let storageEnergy = 0;
   let rcl = 1;
@@ -351,7 +430,7 @@ export async function readRoomSummary(server: SimServer): Promise<RoomSummary> {
     if (o.type === "creep") {
       creeps++;
       const name = String(o.name ?? "");
-      const role = name.split("-")[0] || "creep";
+      const role = memRoles[name] || name.split("-")[0] || "creep";
       roles[role] = (roles[role] ?? 0) + 1;
     } else if (o.type === "spawn") {
       const store = o.store as Record<string, number> | undefined;
@@ -372,6 +451,12 @@ export async function readRoomSummary(server: SimServer): Promise<RoomSummary> {
     } else if (o.type === "constructionSite") {
       sites++;
     }
+  }
+  if (bot && gameTime > 0 && gameTime % 500 < 2) {
+    console.log(
+      `[memRoles] t=${gameTime} memEntries=${Object.keys(memRoles).length}`,
+      roles,
+    );
   }
   return {
     gameTime,

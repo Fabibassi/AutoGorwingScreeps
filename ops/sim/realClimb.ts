@@ -119,7 +119,7 @@ export async function runRealClimbScenario(opts: {
       await setBotRoadPolicy(bot, roadPolicy);
     }
     await server.tick();
-    let final = await readRoomSummary(server);
+    let final = await readRoomSummary(server, bot);
     let deadStreak = 0;
     let peakRcl = final.rcl;
     let peakContainers = final.containers;
@@ -162,7 +162,7 @@ export async function runRealClimbScenario(opts: {
       }
       await server.tick();
       await syncControllerProgress(server);
-      final = await readRoomSummary(server);
+      final = await readRoomSummary(server, bot);
       peakRcl = Math.max(peakRcl, final.rcl);
       peakContainers = Math.max(peakContainers, final.containers);
       peakRoads = Math.max(peakRoads, final.roads);

@@ -6,6 +6,12 @@ import {
   type ExperimentProfile,
   BASELINE_PROFILE,
 } from "./experimentPolicy";
+import {
+  applyRcl5ModeQuotas,
+  parseRcl5Mode,
+  rcl5ModePausesExtensionSpam,
+  type Rcl5Mode,
+} from "./rcl5Mode";
 
 /**
  * Early-game policy derived from common Screeps guides:
@@ -38,7 +44,19 @@ export const EARLY_GAME_THRESHOLDS = {
   minBootstrapEnergy: 200,
   /** Cheapest recovery hauler (CARRY+MOVE). Below this with no CARRY creeps = soft-lock. */
   minHaulerEnergy: 100,
+  /** Source-container bank high enough to prioritize hub storage (RCL4). */
+  sourceContainerSurplusEnergy: 3000,
+  /** Storage bank that unlocks upgrade-first spend instead of extension flood. */
+  storageSpendEnergy: 1000,
 } as const;
+
+/** True when source containers hold enough energy to justify hub storage. */
+export function sourceContainerEnergySurplus(
+  totalEnergy: number,
+  threshold: number = EARLY_GAME_THRESHOLDS.sourceContainerSurplusEnergy,
+): boolean {
+  return totalEnergy >= threshold;
+}
 
 /** CONTROLLER_STRUCTURES.extension mirror (Screeps World). */
 export const EXTENSIONS_BY_RCL: Record<number, number> = {
@@ -135,8 +153,33 @@ export interface EconomyContext {
   haulRange?: number;
   /** Owned storage exists — haulers dump here, one filler tops spawn/extensions. */
   hasStorage?: boolean;
+  /** Energy currently held in owned storage. */
+  storageEnergy?: number;
+  /** Sum of energy in finished source-adjacent containers. */
+  sourceContainerEnergy?: number;
   /** Room energyCapacityAvailable (spawn + extensions). */
   energyCapacityAvailable?: number;
+  /** RCL4→5 spend experiment mode (sim / Memory.ags.rcl5Mode). */
+  rcl5Mode?: Rcl5Mode | string;
+}
+
+/**
+ * After storage exists: spend on upgrade/bodies when the hub (or still-full
+ * source containers with a saturated spawn) holds surplus energy.
+ */
+export function isHubSpendMode(economy?: EconomyContext): boolean {
+  if (!economy?.hasStorage) return false;
+  if (
+    (economy.storageEnergy ?? 0) >= EARLY_GAME_THRESHOLDS.storageSpendEnergy
+  ) {
+    return true;
+  }
+  if (!sourceContainerEnergySurplus(economy.sourceContainerEnergy ?? 0)) {
+    return false;
+  }
+  const avail = economy.energyAvailable ?? 0;
+  const cap = economy.energyCapacityAvailable ?? 0;
+  return cap > 0 ? avail >= cap - 50 : avail >= 550;
 }
 
 /** Each WORK harvests 2 energy/tick; a source caps at 10 e/t. */
@@ -184,6 +227,21 @@ export function effectiveMinerMinWork(
     Math.max(1, experimentMinWork),
     minerTargetWorkParts(energyCapacityAvailable),
   );
+}
+
+/**
+ * Prefer fat miners, but never leave a mining seat empty because the bank is
+ * momentarily under the 5W cost (live W21N35: ~500 available, 550 needed).
+ */
+export function minerMinWorkForSpawn(opts: {
+  preferredMinWork: number;
+  energyAvailable: number;
+  seatsUncovered: boolean;
+}): number {
+  const preferred = Math.max(1, opts.preferredMinWork);
+  if (!opts.seatsUncovered) return preferred;
+  if (opts.energyAvailable >= minerBodyCost(preferred)) return preferred;
+  return 1;
 }
 
 const SPAWN_STORE_CAPACITY = 300;
@@ -419,6 +477,8 @@ export function spawnPriorityOrder(
     buildersBelowQuota?: boolean;
     /** At least one harvester/miner per source — spare H can wait. */
     economyFloorMet?: boolean;
+    /** No live upgrader while want.upgrader≥1 (RCL2+ controller seat). */
+    upgraderSeatEmpty?: boolean;
     /** Experiment spawn-chain preference. */
     spawnChain?: ExperimentProfile["spawnChain"];
   },
@@ -464,7 +524,27 @@ export function spawnPriorityOrder(
   } else if (opts?.buildersBelowQuota && opts.economyFloorMet) {
     order = prioritizeBuilderAfterEconomy(order);
   }
+
+  // RCL2 climb: empty upgrader seat must beat builders — overnight live runs
+  // showed builder=5 / upgrader=0 while want.upgrader≥1 (sites starve controller).
+  if (opts?.upgraderSeatEmpty && opts.economyFloorMet) {
+    order = prioritizeUpgraderSeat(order);
+  }
   return withFillerSlot(order);
+}
+
+/** Pull upgrader ahead of builder/hauler when the controller seat is empty. */
+export function prioritizeUpgraderSeat(
+  order: Array<keyof CreepQuotas>,
+): Array<keyof CreepQuotas> {
+  const without = order.filter((r) => r !== "upgrader");
+  const minerIdx = without.indexOf("miner");
+  const harvesterIdx = without.indexOf("harvester");
+  const insertAt =
+    minerIdx >= 0 ? minerIdx + 1 : harvesterIdx >= 0 ? harvesterIdx + 1 : 0;
+  const next = without.slice();
+  next.splice(insertAt, 0, "upgrader");
+  return next;
 }
 
 export function desiredCreeps(
@@ -604,6 +684,7 @@ export function desiredCreeps(
   // 45k controller progress never finishes under a 4-builder extension push.
   const climbingToRcl3 = rcl < 3;
   const extensionPush = hasConstructionSites && !depressed && !climbingToRcl3;
+  const hubSpend = isHubSpendMode(economy);
   // Fallback assume 1 WORK/source until spawn passes live miner WORK counts.
   const minerWorkParts = economy?.minerWorkParts ?? sources;
   const liveMiners = economy?.minerCount;
@@ -629,7 +710,7 @@ export function desiredCreeps(
     hauler: haulers,
     upgrader: climbingToRcl3
       ? exp.upgraderQuotaClimb
-      : extensionPush
+      : extensionPush && !hubSpend
         ? 0
         : depressed
           ? 1
@@ -643,7 +724,7 @@ export function desiredCreeps(
       : infraBuilder
         ? infraBuilders
         : extensionPush
-          ? bankForMiners
+          ? bankForMiners || hubSpend
             ? Math.min(2, Math.max(1, infraBuilders))
             : Math.max(4, infraBuilders)
           : 0,
@@ -657,7 +738,16 @@ export function desiredCreeps(
   if (rcl >= 2) {
     quotas.upgrader = Math.max(1, quotas.upgrader);
   }
-  return quotas;
+  if (hubSpend && rcl >= 4) {
+    quotas.upgrader = Math.max(2, quotas.upgrader);
+  }
+  return applyRcl5ModeQuotas(quotas, parseRcl5Mode(economy?.rcl5Mode), {
+    rcl,
+    hasStorage: economy?.hasStorage === true,
+    hasConstructionSites,
+    minerWorkParts,
+    sources,
+  });
 }
 
 /** Ordered build priorities for early rooms (extensions before containers/storage). */
@@ -681,10 +771,19 @@ export function constructionPriority(
     minerWorkParts?: number;
     /** Room energyCapacityAvailable — pause new sites while upgrading miners. */
     energyCapacityAvailable?: number;
+    /** Sum of energy in finished source-adjacent containers. */
+    sourceContainerEnergy?: number;
+    /** Storage construction site already placed — finish before extension spam. */
+    storageSiteOpen?: boolean;
+    /** RCL5 climb mode — may pause extension/road spam. */
+    rcl5Mode?: Rcl5Mode | string;
     experiment?: ExperimentProfile;
   },
 ): BuildableStructureConstant[] {
   const exp = opts.experiment ?? BASELINE_PROFILE;
+  const mode = parseRcl5Mode(opts.rcl5Mode);
+  const pauseExtSpam =
+    opts.hasStorage && rcl5ModePausesExtensionSpam(mode);
   const queue: BuildableStructureConstant[] = [];
   const fullExtQuota = extensionQuota(rcl);
   const minerWorkParts = opts.minerWorkParts ?? 0;
@@ -718,6 +817,12 @@ export function constructionPriority(
     opts.extensionBuilt ?? 0,
   );
 
+  const prioritizeStorage =
+    shouldBuildStorage(rcl) &&
+    !opts.hasStorage &&
+    (opts.storageSiteOpen === true ||
+      sourceContainerEnergySurplus(opts.sourceContainerEnergy ?? 0));
+
   const laterMode = exp.containerTiming === "later";
   // later: bootstrap extensions before source containers.
   if (laterMode && shouldBuildExtensions(rcl)) {
@@ -739,9 +844,15 @@ export function constructionPriority(
     for (let i = 0; i < missing; i++) queue.push("tower");
   }
 
+  // Surplus / open site: hub storage before extension or controller-container spam.
+  if (prioritizeStorage && containerSites === 0 && missingAll === 0) {
+    queue.push("storage");
+  }
+
   if (
     shouldBuildExtensions(rcl) &&
     !laterMode &&
+    !pauseExtSpam &&
     containerSites === 0 &&
     missingAll === 0
   ) {
@@ -753,7 +864,7 @@ export function constructionPriority(
     }
   }
 
-  // Controller container timing is experiment-driven.
+  // Controller container timing is experiment-driven (after storage when surplus).
   if (
     shouldBuildContainers(rcl) &&
     !opts.hasControllerContainer &&
@@ -762,11 +873,15 @@ export function constructionPriority(
     queue.push("container");
   }
 
-  if (shouldBuildStorage(rcl) && !opts.hasStorage) {
+  if (
+    shouldBuildStorage(rcl) &&
+    !opts.hasStorage &&
+    !prioritizeStorage
+  ) {
     queue.push("storage");
   }
 
-  if (opts.roadSitesAllowed) {
+  if (opts.roadSitesAllowed && !pauseExtSpam) {
     queue.push("road");
   }
 
