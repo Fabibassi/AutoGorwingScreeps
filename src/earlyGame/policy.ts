@@ -537,12 +537,14 @@ export function spawnPriorityOrder(
 export function prioritizeUpgraderSeat(
   order: Array<keyof CreepQuotas>,
 ): Array<keyof CreepQuotas> {
-  const without = order.filter((r) => r !== "upgrader");
+  const without: Array<keyof CreepQuotas> = order.filter(
+    (r) => r !== "upgrader",
+  );
   const minerIdx = without.indexOf("miner");
   const harvesterIdx = without.indexOf("harvester");
   const insertAt =
     minerIdx >= 0 ? minerIdx + 1 : harvesterIdx >= 0 ? harvesterIdx + 1 : 0;
-  const next = without.slice();
+  const next: Array<keyof CreepQuotas> = without.slice();
   next.splice(insertAt, 0, "upgrader");
   return next;
 }

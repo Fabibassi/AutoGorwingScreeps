@@ -162,15 +162,15 @@ function creepHasWork(creep: Creep): boolean {
   // Fallback if WORK global/bodyparts misbehave in a runtime — still promote.
   const body = creep.body;
   if (!Array.isArray(body)) return false;
-  return body.some(
-    (p) =>
-      p === WORK ||
-      p === "work" ||
-      (typeof p === "object" &&
-        p != null &&
-        ((p as { type?: string }).type === WORK ||
-          (p as { type?: string }).type === "work")),
-  );
+  return body.some((p) => {
+    const t =
+      typeof p === "string"
+        ? p
+        : typeof p === "object" && p != null
+          ? (p as { type?: string }).type
+          : undefined;
+    return t === WORK || t === "work";
+  });
 }
 
 export function reassignForControllerSurvival(
