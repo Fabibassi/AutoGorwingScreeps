@@ -484,6 +484,8 @@ export function spawnPriorityOrder(
     upgraderSeatEmpty?: boolean;
     /** Experiment spawn-chain preference. */
     spawnChain?: ExperimentProfile["spawnChain"];
+    /** Finished source-adjacent containers (static miner seats). */
+    containersAtSources?: number;
   },
 ): Array<keyof CreepQuotas> {
   let order: Array<keyof CreepQuotas>;
@@ -494,10 +496,15 @@ export function spawnPriorityOrder(
     isSoftLocked(energyAvailable, counts)
   ) {
     order = ["hauler", "harvester", "miner", "upgrader", "builder"];
-  } else if (counts && dedicatedMiners && (counts.miner ?? 0) === 0) {
-    // Empty miner seats with source containers: recruit miners before the
-    // no-economy hauler/harvester boot path (otherwise CI/live stalls on
-    // hauler@100 while M:0/2 never gets the spawn budget).
+  } else if (
+    counts &&
+    dedicatedMiners &&
+    (counts.miner ?? 0) === 0 &&
+    (opts?.containersAtSources ?? 0) > 0
+  ) {
+    // Empty miner seats beside finished source containers: recruit miners
+    // before the no-economy hauler/harvester boot path. Do not use this for
+    // drop-miner BASELINE boots with zero containers — those still need H/Ha.
     order = ["miner", "hauler", "harvester", "upgrader", "builder"];
   } else if (counts && hasNoEconomyCreeps(counts)) {
     // Soft bank (spawn < 200): hauler@100 drains storage/containers first.

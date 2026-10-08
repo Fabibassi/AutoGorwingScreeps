@@ -813,6 +813,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       economyFloorMet,
       upgraderSeatEmpty,
       spawnChain: exp.spawnChain,
+      containersAtSources,
     },
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.

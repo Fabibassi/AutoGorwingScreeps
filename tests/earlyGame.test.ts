@@ -480,6 +480,7 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 0.8, spawnFillPct: 0.58, energyAvailable: 316 },
         { harvester: 0, miner: 0 },
         316,
+        { containersAtSources: 2 },
       ),
     ).toEqual(["miner", "filler", "hauler", "harvester", "upgrader", "builder"]);
   });
@@ -491,6 +492,7 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 1, spawnFillPct: 0.6, energyAvailable: 300 },
         { harvester: 0, miner: 0 },
         300,
+        { containersAtSources: 2 },
       )[0],
     ).toBe("miner");
     expect(
@@ -499,6 +501,7 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 5, spawnFillPct: 0.8 },
         { harvester: 1, miner: 0 },
         300,
+        { containersAtSources: 2 },
       )[0],
     ).toBe("miner");
   });
@@ -537,6 +540,8 @@ describe("spawnPriorityOrder", () => {
           baselineIncome: 4,
         },
         { harvester: 0, miner: 0 },
+        undefined,
+        { containersAtSources: 2 },
       ),
     ).toEqual([
       "miner",
@@ -555,6 +560,7 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 0, spawnFillPct: 0.1, energyAvailable: 200 },
         { harvester: 0, miner: 0 },
         200,
+        { containersAtSources: 2 },
       )[0],
     ).toBe("miner");
   });
@@ -600,8 +606,21 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 0.8, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
         200,
+        { containersAtSources: 2 },
       ),
     ).toEqual(["miner", "filler", "hauler", "harvester", "upgrader", "builder"]);
+  });
+
+  test("drop-miner boot without containers still prefers harvester/hauler economy", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0, spawnFillPct: 0.01 },
+        { harvester: 0, miner: 0 },
+        300,
+        { containersAtSources: 0 },
+      )[0],
+    ).toBe("harvester");
   });
 
   test("hauler first when soft-locked below bootstrap energy (#36)", () => {
