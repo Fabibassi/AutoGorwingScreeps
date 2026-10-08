@@ -32,44 +32,7 @@ describe("restoreParsedMemory", () => {
 });
 
 describe("applyParsedMemoryReuse", () => {
-  test("does not throw when Memory cannot be assigned", () => {
-    const g = globalThis as { Memory?: Memory; __agsMemHack?: unknown };
-    const prevHack = g.__agsMemHack;
-    g.__agsMemHack = {
-      lastTick: 10,
-      parsed: { creeps: {} } as Memory,
-    };
-    expect(() => applyParsedMemoryReuse()).not.toThrow();
-    g.__agsMemHack = prevHack;
-  });
-
-  test("reuse installs cached parse on RawMemory before any Memory read", () => {
-    const g = globalThis as {
-      Memory?: Memory;
-      Game?: { time: number };
-      RawMemory?: { _parsed?: Memory };
-      __agsMemHack?: unknown;
-    };
-    const cached = { creeps: {}, ags: { metrics: { tick: 10 } } } as Memory;
-    const throwaway = { creeps: { junk: {} } } as unknown as Memory;
-    const prev = {
-      hack: g.__agsMemHack,
-      memory: g.Memory,
-      game: g.Game,
-      raw: g.RawMemory,
-    };
-    g.Game = { time: 11 };
-    g.RawMemory = { _parsed: throwaway };
-    g.Memory = throwaway;
-    g.__agsMemHack = { lastTick: 10, parsed: cached };
-
-    expect(applyParsedMemoryReuse()).toBe(true);
-    expect(g.RawMemory?._parsed).toBe(cached);
-    expect(g.Memory).toBe(cached);
-
-    g.__agsMemHack = prev.hack;
-    g.Memory = prev.memory;
-    g.Game = prev.game;
-    g.RawMemory = prev.raw;
+  test("is disabled (always false) so World Memory.ags keeps serializing", () => {
+    expect(applyParsedMemoryReuse()).toBe(false);
   });
 });
