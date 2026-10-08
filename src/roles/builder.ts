@@ -66,6 +66,26 @@ export function preferLogisticsRefill(
 
 export type LogisticsKind = "spawn" | "storage" | "container";
 
+/** Hub sites that must not lose WORK to the extension-only filter. */
+const HUB_BUILD_TYPES = new Set(["storage", "tower"]);
+
+/**
+ * Once source containers exist, prefer finishing hub sites (storage/tower)
+ * over the extension-only filter that otherwise starves the 5k storage site.
+ */
+export function filterBuildSitesForWork<
+  T extends { structureType: StructureConstant | string },
+>(sites: T[], sourceContainersReady: boolean): T[] {
+  if (!sourceContainersReady || sites.length === 0) return sites;
+  const hub = sites.filter((s) => HUB_BUILD_TYPES.has(String(s.structureType)));
+  if (hub.length > 0) return hub;
+  const extensions = sites.filter(
+    (s) => String(s.structureType) === "extension",
+  );
+  if (extensions.length > 0) return extensions;
+  return sites;
+}
+
 /**
  * Prefer hub energy (spawn/storage) over remote mining containers.
  * Score = kind bonus + energy − range; skip crumb containers far away.
@@ -120,12 +140,11 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
   }
   let sites = creep.room.find(FIND_CONSTRUCTION_SITES);
   // Roads finish faster (300 vs 3000) and steal WORK under remaining-progress pick.
-  if (containersAtSources >= sourceCount) {
-    const extensions = sites.filter(
-      (s) => s.structureType === STRUCTURE_EXTENSION,
-    );
-    if (extensions.length > 0) sites = extensions;
-  }
+  // Hub sites (storage/tower) win over extension-only filtering.
+  sites = filterBuildSitesForWork(
+    sites,
+    containersAtSources >= sourceCount,
+  );
   const picked = pickBuildSite(
     sites.map((site) => ({
       site,

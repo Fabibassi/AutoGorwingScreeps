@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   BUILDER_SPAWN_THRESHOLDS,
   canWithdrawFromSpawn,
+  filterBuildSitesForWork,
   pickBuildSite,
   pickClosestLogisticsEnergy,
   preferLogisticsRefill,
@@ -16,6 +17,7 @@ import {
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
   reassignSpareHarvesterToMiner,
+  reassignSurplusBuilderToUpgrader,
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
   recycleExcessMiners,
@@ -43,6 +45,27 @@ describe("preferLogisticsRefill", () => {
     expect(preferLogisticsRefill(2, 2)).toBe(true);
     expect(preferLogisticsRefill(1, 2)).toBe(false);
     expect(preferLogisticsRefill(0, 2)).toBe(false);
+  });
+});
+
+describe("filterBuildSitesForWork", () => {
+  test("keeps storage/tower sites instead of extension-only filter", () => {
+    const sites = [
+      { structureType: "extension" },
+      { structureType: "storage" },
+      { structureType: "road" },
+    ];
+    const filtered = filterBuildSitesForWork(sites, true);
+    expect(filtered.map((s) => s.structureType)).toEqual(["storage"]);
+  });
+
+  test("falls back to extensions when no hub sites exist", () => {
+    const sites = [
+      { structureType: "extension" },
+      { structureType: "road" },
+    ];
+    const filtered = filterBuildSitesForWork(sites, true);
+    expect(filtered.map((s) => s.structureType)).toEqual(["extension"]);
   });
 });
 
@@ -216,6 +239,74 @@ describe("reassignForEconomySurvival", () => {
   });
 });
 
+describe("reassignSurplusBuilderToUpgrader", () => {
+  test("converts surplus builders into upgraders when builder quota drops", () => {
+    const builder = {
+      room: { name: "W21N35" },
+      memory: { role: "builder" },
+      getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "builder-1": builder },
+    };
+    vi.stubGlobal("WORK", "work");
+    const ok = reassignSurplusBuilderToUpgrader(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 3,
+        builder: 0,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 1,
+        builder: 4,
+        filler: 0,
+      },
+    );
+    expect(ok).toBe(true);
+    expect(builder.memory.role).toBe("upgrader");
+  });
+
+  test("leaves builders alone while still under builder quota", () => {
+    const builder = {
+      room: { name: "W21N35" },
+      memory: { role: "builder" },
+      getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "builder-1": builder },
+    };
+    vi.stubGlobal("WORK", "work");
+    const ok = reassignSurplusBuilderToUpgrader(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 3,
+        builder: 4,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 1,
+        builder: 2,
+        filler: 0,
+      },
+    );
+    expect(ok).toBe(false);
+    expect(builder.memory.role).toBe("builder");
+  });
+});
+
 describe("reassignUpgraderToExtensionBuilder", () => {
   test("converts surplus upgraders into builders during extension push", () => {
     const upgrader = {
@@ -276,6 +367,40 @@ describe("reassignForControllerSurvival", () => {
         hauler: 0,
         upgrader: 0,
         builder: 2,
+        filler: 0,
+      },
+    );
+    expect(ok).toBe(true);
+    expect(builder.memory.role).toBe("upgrader");
+  });
+
+  test("promotes via body[] when getActiveBodyparts reports 0 WORK", () => {
+    const builder = {
+      room: { name: "W21N35" },
+      memory: { role: "builder" },
+      getActiveBodyparts: () => 0,
+      body: [{ type: "work" }, { type: "carry" }, { type: "move" }],
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "builder-1": builder },
+    };
+    vi.stubGlobal("WORK", "work");
+    const ok = reassignForControllerSurvival(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 3,
+        builder: 2,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 0,
+        builder: 5,
         filler: 0,
       },
     );
@@ -751,6 +876,36 @@ describe("recycleExcessMiners", () => {
       true,
     );
     expect(recycled).toBe(true);
+  });
+
+  test("does not recycle while a replacement seat is open (TTL handoff)", () => {
+    const miner = {
+      room: { name: "W21N35" },
+      memory: { role: "miner" },
+      pos: { isNearTo: () => true },
+      moveTo: () => 0,
+    };
+    const spawn = {
+      spawning: null,
+      room: { name: "W21N35" },
+      pos: { x: 10, y: 10 },
+      recycleCreep: () => OK,
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { "miner-1": miner } };
+    const want = {
+      harvester: 0,
+      miner: 2,
+      hauler: 2,
+      upgrader: 0,
+      builder: 0,
+      filler: 0,
+    };
+    const live = { ...want, miner: 3 };
+    expect(
+      recycleExcessMiners(spawn as unknown as StructureSpawn, want, live, 2, {
+        replacementSeatOpen: true,
+      }),
+    ).toBe(false);
   });
 });
 

@@ -361,17 +361,12 @@ function mergeProfile(winners: Record<AbKnob, string>): ExperimentProfile {
         p.spawnBuffer = one.spawnBuffer;
         break;
       case "bootstrapStrategy":
-        // Composite strategy overrides the early-game shape as a whole.
+        // Strategy-only fields. Do NOT clobber single-knob winners
+        // (containerTiming / builderCount / …) — those have their own AB rows.
         p.allowDropMiners = one.allowDropMiners;
         p.universalUntilCapacity = one.universalUntilCapacity;
         p.containersAfterExtensions = one.containersAfterExtensions;
         p.spawnChain = one.spawnChain;
-        p.containerTiming = one.containerTiming;
-        p.extensionBootstrap = one.extensionBootstrap;
-        p.builderInfra = one.builderInfra;
-        p.minerMinWork = one.minerMinWork;
-        p.haulerMaxCost = one.haulerMaxCost;
-        p.upgraderQuotaClimb = one.upgraderQuotaClimb;
         break;
     }
   }

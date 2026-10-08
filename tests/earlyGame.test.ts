@@ -12,6 +12,8 @@ import {
   isSoftLocked,
   minerTargetWorkParts,
   shouldBankForBetterMiners,
+  minerMinWorkForSpawn,
+  sourceContainerEnergySurplus,
   stagedExtensionBuildCap,
   shouldBuildContainers,
   shouldBuildRoads,
@@ -210,13 +212,13 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("b_chain infra push uses drop miners + lean builders", () => {
+  test("overnight baseline infra push uses drop miners + builderInfra=4", () => {
     expect(desiredCreeps(2, 2, 0, true)).toEqual({
       harvester: 0,
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      builder: 2,
+      builder: 4,
       filler: 0,
     });
   });
@@ -233,7 +235,7 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("b_chain: partial containers still want full miner/hauler pairs", () => {
+  test("partial containers still want full miner/hauler pairs", () => {
     expect(
       desiredCreeps(4, 2, 1, true, {
         energyIncomePerTick: 2,
@@ -247,7 +249,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 1,
-      builder: 2,
+      builder: 4,
       filler: 0,
     });
   });
@@ -269,8 +271,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      // strategy-bench b_chain: builderInfra=2
-      builder: 2,
+      builder: 4,
       filler: 0,
     });
   });
@@ -286,6 +287,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
+      // Cap builders while mining seats are empty so spawn prefers miners.
       builder: 2,
       filler: 0,
     });
@@ -318,9 +320,52 @@ describe("desiredCreeps", () => {
     ).toMatchObject({ filler: 1 });
   });
 
+  test("hub spend mode keeps upgrade pressure with storage surplus", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 6,
+        hasStorage: true,
+        storageEnergy: 1200,
+        minerWorkParts: 10,
+        energyCapacityAvailable: 1300,
+        rcl5Mode: "hub_spend",
+      }),
+    ).toMatchObject({ filler: 1, upgrader: 2, builder: 2 });
+  });
+
+  test("hub spend mode also triggers from full spawn plus container surplus", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 6,
+        hasStorage: true,
+        storageEnergy: 200,
+        sourceContainerEnergy: 3500,
+        energyAvailable: 1300,
+        energyCapacityAvailable: 1300,
+        minerWorkParts: 10,
+        rcl5Mode: "hub_spend",
+      }),
+    ).toMatchObject({ filler: 1, upgrader: 2 });
+  });
+
+  test("default rcl5 mode after storage is upgrade_rush", () => {
+    expect(
+      desiredCreeps(4, 2, 2, true, {
+        energyIncomePerTick: 10,
+        hasStorage: true,
+        storageEnergy: 2000,
+        minerWorkParts: 10,
+        energyCapacityAvailable: 1300,
+      }),
+    ).toMatchObject({ filler: 1, upgrader: 4, builder: 1 });
+  });
+
   test("rcl2 zero income keeps haulers to drain trapped container energy", () => {
     expect(
-      desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 0 }),
+      desiredCreeps(2, 2, 2, true, {
+        energyIncomePerTick: 0,
+        baselineIncome: 4,
+      }),
     ).toEqual({
       harvester: 3,
       miner: 0,
@@ -332,12 +377,31 @@ describe("desiredCreeps", () => {
   });
 
   test("rcl2 zero income falls back to mobile harvesters not bootstrap add-on", () => {
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 0,
+        baselineIncome: 4,
+      }),
+    ).toBe(true);
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 5,
+        baselineIncome: 4,
+      }),
+    ).toBe(false);
+  });
+
+  test("boot into containered room keeps miner pipeline without baseline", () => {
     expect(shouldFallbackToMobileHarvest(true, { energyIncomePerTick: 0 })).toBe(
-      true,
+      false,
     );
     expect(
-      shouldFallbackToMobileHarvest(true, { energyIncomePerTick: 0.1 }),
-    ).toBe(false);
+      desiredCreeps(4, 2, 2, false, {
+        energyIncomePerTick: 0,
+        energyAvailable: 50,
+        spawnFillPct: 0.1,
+      }),
+    ).toMatchObject({ miner: 2 });
   });
 
   test("falls back when income collapsed vs baseline (RCL4 rollback #34)", () => {
@@ -416,8 +480,9 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 0.8, spawnFillPct: 0.58, energyAvailable: 316 },
         { harvester: 0, miner: 0 },
         316,
+        { containersAtSources: 2 },
       ),
-    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
+    ).toEqual(["miner", "filler", "hauler", "harvester", "upgrader", "builder"]);
   });
 
   test("miner before hauler when dedicated mining has zero miners", () => {
@@ -427,14 +492,16 @@ describe("spawnPriorityOrder", () => {
         { energyIncomePerTick: 1, spawnFillPct: 0.6, energyAvailable: 300 },
         { harvester: 0, miner: 0 },
         300,
+        { containersAtSources: 2 },
       )[0],
-    ).toBe("harvester");
+    ).toBe("miner");
     expect(
       spawnPriorityOrder(
         true,
         { energyIncomePerTick: 5, spawnFillPct: 0.8 },
         { harvester: 1, miner: 0 },
         300,
+        { containersAtSources: 2 },
       )[0],
     ).toBe("miner");
   });
@@ -462,13 +529,40 @@ describe("spawnPriorityOrder", () => {
   });
 
   test("hauler first when spawn is nearly empty during zero-income fallback", () => {
-    expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.05 })).toEqual([
-      "hauler",
+    // Fallback demotes want.miner→0; spawn still sees dedicatedMiners + empty
+    // miner seats and recruits miners first (hauler cannot unlock static mining).
+    expect(
+      spawnPriorityOrder(
+        true,
+        {
+          energyIncomePerTick: 0,
+          spawnFillPct: 0.05,
+          baselineIncome: 4,
+        },
+        { harvester: 0, miner: 0 },
+        undefined,
+        { containersAtSources: 2 },
+      ),
+    ).toEqual([
+      "miner",
       "filler",
+      "hauler",
       "harvester",
       "upgrader",
       "builder",
     ]);
+  });
+
+  test("miner first when container seats exist but roster is empty", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0, spawnFillPct: 0.1, energyAvailable: 200 },
+        { harvester: 0, miner: 0 },
+        200,
+        { containersAtSources: 2 },
+      )[0],
+    ).toBe("miner");
   });
 
   test("harvester first when spawn is nearly empty but income positive", () => {
@@ -483,6 +577,7 @@ describe("spawnPriorityOrder", () => {
   });
 
   test("hauler first when economy creeps are zero and income is dead", () => {
+    // Soft-lock / low energy: hauler consolidates before miner body fits.
     expect(
       spawnPriorityOrder(
         true,
@@ -504,14 +599,28 @@ describe("spawnPriorityOrder", () => {
     ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
   });
 
-  test("harvester first when economy creeps are zero but income positive", () => {
+  test("miner first when dedicated seats empty even if income positive", () => {
     expect(
       spawnPriorityOrder(
         true,
         { energyIncomePerTick: 0.8, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
+        200,
+        { containersAtSources: 2 },
       ),
-    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
+    ).toEqual(["miner", "filler", "hauler", "harvester", "upgrader", "builder"]);
+  });
+
+  test("drop-miner boot without containers still prefers harvester/hauler economy", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0, spawnFillPct: 0.01 },
+        { harvester: 0, miner: 0 },
+        300,
+        { containersAtSources: 0 },
+      )[0],
+    ).toBe("harvester");
   });
 
   test("hauler first when soft-locked below bootstrap energy (#36)", () => {
@@ -563,6 +672,23 @@ describe("spawnPriorityOrder", () => {
       ),
     ).toEqual(["miner", "filler", "builder", "hauler", "harvester", "upgrader"]);
   });
+
+  test("empty upgrader seat beats builder priority during RCL2 climb", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 12, spawnFillPct: 1 },
+        { harvester: 0, miner: 2 },
+        300,
+        {
+          buildersBelowQuota: true,
+          economyFloorMet: true,
+          upgraderSeatEmpty: true,
+          spawnChain: "miner_hauler",
+        },
+      ),
+    ).toEqual(["miner", "filler", "upgrader", "builder", "hauler", "harvester"]);
+  });
 });
 
 describe("constructionPriority", () => {
@@ -575,8 +701,8 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
-    // b_chain one_source: serialize a single container site.
-    expect(queue.filter((s) => s === "container")).toHaveLength(1);
+    // overnight immediate: both source containers at once.
+    expect(queue.filter((s) => s === "container")).toHaveLength(2);
     expect(queue[0]).toBe("container");
     expect(queue.filter((s) => s === "extension")).toHaveLength(0);
     expect(queue.includes("storage")).toBe(false);
@@ -596,7 +722,7 @@ describe("constructionPriority", () => {
     expect(queue.filter((s) => s === "container")).toHaveLength(2);
   });
 
-  test("controller container queued only after source containers exist", () => {
+  test("controller container deferred until RCL4 by default", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -604,6 +730,19 @@ describe("constructionPriority", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: extensionQuota(2),
+    });
+    expect(queue.filter((s) => s === "container")).toHaveLength(0);
+  });
+
+  test("after_sources queues controller container once sources are done", () => {
+    const queue = constructionPriority(2, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: false,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: extensionQuota(2),
+      experiment: profileForVariant("controllerContainer", "after_sources"),
     });
     expect(queue.filter((s) => s === "container")).toHaveLength(1);
   });
@@ -681,6 +820,61 @@ describe("constructionPriority", () => {
       towerCount: 1,
     });
     expect(queue[0]).toBe("storage");
+  });
+
+  test("sourceContainerEnergySurplus gates the 3k bank", () => {
+    expect(sourceContainerEnergySurplus(2999)).toBe(false);
+    expect(sourceContainerEnergySurplus(3000)).toBe(true);
+  });
+
+  test("surplus queues storage before extensions at RCL 4", () => {
+    const queue = constructionPriority(4, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+      towerCount: 1,
+      minerWorkParts: 10,
+      sourceContainerEnergy: 3200,
+    });
+    expect(queue[0]).toBe("storage");
+    expect(queue.indexOf("storage")).toBeLessThan(queue.indexOf("extension"));
+  });
+
+  test("open storage site also prioritizes storage before extensions", () => {
+    const queue = constructionPriority(4, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: false,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+      towerCount: 1,
+      minerWorkParts: 10,
+      storageSiteOpen: true,
+    });
+    expect(queue[0]).toBe("storage");
+    const storageIdx = queue.indexOf("storage");
+    const controllerContainerIdx = queue.indexOf("container");
+    expect(storageIdx).toBeLessThan(queue.indexOf("extension"));
+    expect(storageIdx).toBeLessThan(controllerContainerIdx);
+  });
+
+  test("without surplus keeps extensions before storage", () => {
+    const queue = constructionPriority(4, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: 0,
+      towerCount: 1,
+      minerWorkParts: 10,
+      sourceContainerEnergy: 500,
+    });
+    expect(queue.indexOf("extension")).toBeLessThan(queue.indexOf("storage"));
   });
 
   test("roads last when allowed", () => {
@@ -823,6 +1017,38 @@ describe("bodyForRole", () => {
     expect(bodyForRole("hauler", 69)).toEqual([]);
     expect(bodyForRole("hauler", 99)).toEqual([]);
     expect(bodyForRole("hauler", 100)).toEqual(["carry", "move"]);
+  });
+});
+
+describe("minerMinWorkForSpawn", () => {
+  test("keeps fat min-work when the bank can fund it", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 550,
+        seatsUncovered: true,
+      }),
+    ).toBe(5);
+  });
+
+  test("bridges with 1W when a seat is empty and energy is under the fat body", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 500,
+        seatsUncovered: true,
+      }),
+    ).toBe(1);
+  });
+
+  test("does not bridge when every seat is already covered", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 500,
+        seatsUncovered: false,
+      }),
+    ).toBe(5);
   });
 });
 

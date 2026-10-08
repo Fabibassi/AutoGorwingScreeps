@@ -51,9 +51,12 @@ export async function runMinersScenario(opts: {
 
     for (const [sx, sy] of SOURCES) {
       // Container adjacent east of source (walkable mining seat).
+      // hits required — mockup drops containers without them.
       await server.world.addRoomObject(ROOM, "container", sx + 1, sy, {
         store: { energy: 0 },
         storeCapacityResource: { energy: 2000 },
+        hits: 250_000,
+        hitsMax: 250_000,
         user: bot.id,
       });
     }

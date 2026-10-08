@@ -82,17 +82,18 @@ export interface ExperimentProfile {
 }
 
 /**
- * Production defaults = strategy-bench winner `b_chain`
- * (6/6 OK, median rcl3@19426; see `.sim-learn/strategy-bench.json`).
+ * Production defaults = overnight RCL1→5 winners (2026-10-08).
+ * See `.sim-learn/overnight-final.json` / overnight-morning-summary.md.
+ * Strategy-only fields keep b_chain spawn shape (drop miners + miner_hauler).
  */
 export const BASELINE_PROFILE: ExperimentProfile = {
-  containerTiming: "one_source",
+  containerTiming: "immediate",
   upgraderQuotaClimb: 3,
   extensionBootstrap: 5,
-  builderInfra: 2,
-  minerMinWork: 2,
+  builderInfra: 4,
+  minerMinWork: 1,
   haulerMaxCost: undefined,
-  controllerContainer: "after_sources",
+  controllerContainer: "defer_rcl4",
   spawnBuffer: 200,
   allowDropMiners: true,
   universalUntilCapacity: 0,
@@ -112,13 +113,13 @@ export function parseAbVariant(
   if (raw && (variants as readonly string[]).includes(raw)) return raw;
   // Baseline variant per knob.
   const baseline: Record<AbKnob, string> = {
-    containerTiming: "one_source",
+    containerTiming: "immediate",
     upgraderQuota: "3",
     extensionBootstrap: "5",
-    builderCount: "2",
-    minerBody: "wait_2w",
+    builderCount: "4",
+    minerBody: "early_1w",
     haulerCap: "fat",
-    controllerContainer: "after_sources",
+    controllerContainer: "defer_rcl4",
     spawnBuffer: "200",
     bootstrapStrategy: "b_chain",
   };
@@ -306,7 +307,20 @@ export const FULL_MERGE_PROFILE: ExperimentProfile = {
 };
 
 export const OPTIMIZED_PROFILE: ExperimentProfile = {
-  ...BASELINE_PROFILE,
+  // 2026-10-08 overnight single-knob winners + b_chain strategy-only fields.
+  // (Running overnight finalize had briefly clobbered builder/miner/timing via b_chain.)
+  containerTiming: "immediate",
+  upgraderQuotaClimb: 3,
+  extensionBootstrap: 5,
+  builderInfra: 4,
+  minerMinWork: 1,
+  haulerMaxCost: undefined,
+  controllerContainer: "defer_rcl4",
+  spawnBuffer: 200,
+  allowDropMiners: true,
+  universalUntilCapacity: 0,
+  containersAfterExtensions: 0,
+  spawnChain: "miner_hauler",
 };
 
 /** Tag for GUI / live reason strings. */

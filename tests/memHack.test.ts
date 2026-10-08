@@ -32,14 +32,7 @@ describe("restoreParsedMemory", () => {
 });
 
 describe("applyParsedMemoryReuse", () => {
-  test("does not throw when Memory cannot be assigned", () => {
-    const g = globalThis as { Memory?: Memory; __agsMemHack?: unknown };
-    const prevHack = g.__agsMemHack;
-    g.__agsMemHack = {
-      lastTick: 10,
-      parsed: { creeps: {} } as Memory,
-    };
-    expect(() => applyParsedMemoryReuse()).not.toThrow();
-    g.__agsMemHack = prevHack;
+  test("is disabled (always false) so World Memory.ags keeps serializing", () => {
+    expect(applyParsedMemoryReuse()).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { isIncomeStalled } from "../telemetry";
 import { canWithdrawFromSpawn } from "./builder";
+import { storageBlackoutReserve } from "./hauler";
 
 export function runUpgrader(creep: Creep): void {
   if (creep.store[RESOURCE_ENERGY] === 0) {
@@ -40,7 +41,7 @@ export function runUpgrader(creep: Creep): void {
     const baseline = Memory.ags?.baseline?.energyIncomePerTick;
     if (
       storage &&
-      storage.store[RESOURCE_ENERGY] > 0 &&
+      storage.store[RESOURCE_ENERGY] > storageBlackoutReserve() &&
       isIncomeStalled(income, baseline)
     ) {
       if (creep.withdraw(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {

@@ -192,7 +192,33 @@ describe("storage haul policy (absolute spawn energy)", () => {
         spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
+        storageEnergy: 2500,
+      }),
+    ).toBe(true);
+  });
+
+  test("keeps storage blackout reserve when spawn is not urgent", () => {
+    expect(
+      shouldWithdrawFromStorage({
+        energyIncomePerTick: 5,
+        spawnEnergy: 180,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+        storageExists: true,
         storageEnergy: 2000,
+      }),
+    ).toBe(false);
+  });
+
+  test("may dip into storage reserve when spawn is urgent", () => {
+    expect(
+      shouldWithdrawFromStorage({
+        energyIncomePerTick: 5,
+        spawnEnergy: 80,
+        spawnCapacity: 300,
+        extensionsNeedingEnergy: 0,
+        storageExists: true,
+        storageEnergy: 500,
       }),
     ).toBe(true);
   });
@@ -206,7 +232,7 @@ describe("storage haul policy (absolute spawn energy)", () => {
         spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
-        storageEnergy: 2000,
+        storageEnergy: 5000,
       }),
     ).toBe(true);
   });

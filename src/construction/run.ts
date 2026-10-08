@@ -3,9 +3,12 @@ import {
   extensionQuota,
   shouldBankForBetterMiners,
   shouldBuildRoads,
+  shouldBuildStorage,
   shouldBuildWalls,
+  sourceContainerEnergySurplus,
   stagedExtensionBuildCap,
 } from "../earlyGame";
+import { parseRcl5Mode } from "../earlyGame/rcl5Mode";
 import {
   allowControllerContainer,
   extensionBootstrapCap,
@@ -27,6 +30,7 @@ import {
   removeOrphanContainerSites,
   removeRedundantSourceContainerSites,
   sourceMissingContainer,
+  sumSourceContainerEnergy,
 } from "../room/queries";
 import {
   clearBlockingSitesOnRoads,
@@ -161,12 +165,24 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // At the 3-site cap: never sacrifice source-container / tower sites.
+  const controllerContainer = hasControllerContainer(room);
+  const hasStorage = countStructures(room, STRUCTURE_STORAGE) > 0;
+  const storageSites = existingSites.filter(
+    (s) => s.structureType === STRUCTURE_STORAGE,
+  ).length;
+  const sourceContainerEnergy = sumSourceContainerEnergy(room);
+  const needStorage =
+    !hasStorage &&
+    shouldBuildStorage(rcl) &&
+    !needSourceContainers &&
+    (storageSites > 0 || sourceContainerEnergySurplus(sourceContainerEnergy));
+
+  // At the 3-site cap: never sacrifice source-container / tower / storage sites.
   // Roads do NOT count toward this cap — when full of extensions we must still
   // place roads (live W21N35: 3 extension sites forever blocked all roads).
   let skipNonRoadPlacement = false;
   if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
-    if (needSourceContainers) {
+    if (needSourceContainers || (needStorage && storageSites === 0)) {
       const extensionSite = nonRoadSites.find(
         (s) => s.structureType === STRUCTURE_EXTENSION,
       );
@@ -180,7 +196,8 @@ export function runConstruction(room: Room): void {
         (s) =>
           s.structureType !== STRUCTURE_EXTENSION &&
           s.structureType !== STRUCTURE_CONTAINER &&
-          s.structureType !== STRUCTURE_TOWER,
+          s.structureType !== STRUCTURE_TOWER &&
+          s.structureType !== STRUCTURE_STORAGE,
       );
       if (sacrificial) {
         sacrificial.remove();
@@ -191,8 +208,6 @@ export function runConstruction(room: Room): void {
       skipNonRoadPlacement = true;
     }
   }
-  const controllerContainer = hasControllerContainer(room);
-  const hasStorage = countStructures(room, STRUCTURE_STORAGE) > 0;
   const spawnEnergy = spawn.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0;
   const roadCount = countStructures(room, STRUCTURE_ROAD);
   const roadSites = existingSites.filter((s) => s.structureType === STRUCTURE_ROAD)
@@ -269,6 +284,9 @@ export function runConstruction(room: Room): void {
     towerCount,
     minerWorkParts,
     energyCapacityAvailable,
+    sourceContainerEnergy,
+    storageSiteOpen: storageSites > 0,
+    rcl5Mode: parseRcl5Mode(Memory.ags?.rcl5Mode),
     experiment: exp,
   });
 

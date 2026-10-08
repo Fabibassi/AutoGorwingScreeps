@@ -4,6 +4,7 @@ import {
   effectiveMinerMinWork,
   hasNoEconomyCreeps,
   minerBodyCost,
+  minerMinWorkForSpawn,
   minerTargetWorkParts,
   needsInfrastructureBuilder,
   shouldBankForBetterMiners,
@@ -26,6 +27,7 @@ import {
   countSourceContainers,
   findSourcesWithContainers,
   healCreepRoles,
+  sumSourceContainerEnergy,
 } from "./room/queries";
 
 export { desiredCreeps, type CreepQuotas };
@@ -128,9 +130,49 @@ export function reassignUpgraderToExtensionBuilder(
 }
 
 /**
+ * When builder quota drops (no construction sites), convert surplus builders
+ * into upgraders so WORK keeps climbing instead of idling as "builder".
+ * Callers should gate on RCL>=3 so early site gaps do not strip builders.
+ */
+export function reassignSurplusBuilderToUpgrader(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+): boolean {
+  if (counts.builder <= want.builder) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "builder") continue;
+    if (!creepHasWork(creep)) continue;
+    creep.memory.role = "upgrader";
+    delete creep.memory.sourceId;
+    return true;
+  }
+  return false;
+}
+
+/**
  * Instant controller keep-alive after a wipe: promote a WORK body to upgrader
  * instead of waiting a full spawn cycle while ticksToDowngrade bleeds.
  */
+function creepHasWork(creep: Creep): boolean {
+  if (creep.getActiveBodyparts(WORK) >= 1) return true;
+  // Fallback if WORK global/bodyparts misbehave in a runtime — still promote.
+  const body = creep.body;
+  if (!Array.isArray(body)) return false;
+  return body.some((p) => {
+    const t =
+      typeof p === "string"
+        ? p
+        : typeof p === "object" && p != null
+          ? (p as { type?: string }).type
+          : undefined;
+    return t === WORK || t === "work";
+  });
+}
+
 export function reassignForControllerSurvival(
   room: Room,
   want: CreepQuotas,
@@ -140,12 +182,14 @@ export function reassignForControllerSurvival(
   if (counts.upgrader >= want.upgrader) return false;
 
   const donors: Array<"builder" | "harvester"> = ["builder", "harvester"];
+  const seatEmpty = counts.upgrader === 0;
   for (const role of donors) {
     for (const name in Game.creeps) {
       const creep = Game.creeps[name];
       if (creep.room.name !== room.name) continue;
       if (creep.memory.role !== role) continue;
-      if (creep.getActiveBodyparts(WORK) < 1) continue;
+      // Empty controller seat: promote even if WORK detection fails in a runtime.
+      if (!seatEmpty && !creepHasWork(creep)) continue;
       creep.memory.role = "upgrader";
       delete creep.memory.sourceId;
       return true;
@@ -330,10 +374,13 @@ export function recycleExcessMiners(
   want: CreepQuotas,
   counts: CreepQuotas,
   durableMiners: number,
+  opts?: { replacementSeatOpen?: boolean },
 ): boolean {
   if (spawn.spawning) return false;
   if (counts.miner <= want.miner) return false;
   if (durableMiners < want.miner) return false;
+  // TTL handoff in flight — never recycle the walking replacement.
+  if (opts?.replacementSeatOpen) return false;
 
   let best: Creep | null = null;
   for (const name in Game.creeps) {
@@ -547,6 +594,9 @@ export function runSpawn(spawn: StructureSpawn): void {
         ? Math.max(8, Math.round(haulRangeSum / sourceList.length))
         : 20,
     hasStorage: room.storage !== undefined,
+    storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
+    sourceContainerEnergy: sumSourceContainerEnergy(room),
+    rcl5Mode: Memory.ags?.rcl5Mode,
   };
   const exp = resolveExperiment(Memory.ags);
   const infrastructureDedicated = useDedicatedMiners(
@@ -606,6 +656,18 @@ export function runSpawn(spawn: StructureSpawn): void {
   for (let n = 0; n < 10; n++) {
     const mid = countCreepsByRole();
     if (!reassignForControllerSurvival(room, want, mid)) break;
+  }
+  // No sites → builder quota 0: flip surplus builders into upgraders.
+  // Gate RCL>=3: earlier, brief site gaps (roads done, extensions not yet
+  // placed) would strip builders and slow the RCL2→3 climb in AB sims.
+  if (
+    Memory.ags?.idleBuilderUpgrade !== false &&
+    (room.controller?.level ?? 0) >= 3
+  ) {
+    for (let n = 0; n < 10; n++) {
+      const mid = countCreepsByRole();
+      if (!reassignSurplusBuilderToUpgrader(room, want, mid)) break;
+    }
   }
   const liveCounts = countCreepsByRole();
   const minerSnapshots: Array<{ sourceId?: string; ticksToLive?: number }> = [];
@@ -703,12 +765,19 @@ export function runSpawn(spawn: StructureSpawn): void {
   ) {
     return;
   }
+  const replacementSeatOpen =
+    sourceIdForReplacementMiner(
+      minerSnapshots,
+      minerSourceIds,
+      leadTimeFor,
+    ) != null;
   if (
     recycleExcessMiners(
       spawn,
       { ...want, miner: minerSeatWant },
       liveCounts,
       minersDurable,
+      { replacementSeatOpen },
     )
   ) {
     return;
@@ -728,7 +797,11 @@ export function runSpawn(spawn: StructureSpawn): void {
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
-    infrastructureDedicated && liveCounts.miner < minerSeatWant;
+    infrastructureDedicated && minersDurable < minerSeatWant;
+  const upgraderSeatEmpty =
+    want.upgrader >= 1 && liveCounts.upgrader === 0 && rcl >= 2;
+  const canAffordBridgeMiner =
+    bodyForRole("miner", energyAvailable, { minerMinWork: 1 }).length > 0;
   const spawnOrder = spawnPriorityOrder(
     infrastructureDedicated,
     economy,
@@ -738,7 +811,9 @@ export function runSpawn(spawn: StructureSpawn): void {
       infrastructurePush,
       buildersBelowQuota,
       economyFloorMet,
+      upgraderSeatEmpty,
       spawnChain: exp.spawnChain,
+      containersAtSources,
     },
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
@@ -779,19 +854,31 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
     // Never spend on builders while sources have no harvester/miner.
     if (role === "builder" && !economyFloorMet) continue;
-    // Miner gap: do not spend the bank on hauler@100 / upgrader / builder —
-    // that permanently keeps spawn under the 150 miner body cost.
+    // Miner gap: do not spend the bank on upgrader / builder — but still allow
+    // haulers when we cannot afford even a 1W bridge miner (refill the bank).
+    // Exception: empty controller seat at RCL2+ must not wait on miner TTL math
+    // (overnight sims stuck at builder=5 / upgrader=0).
     if (
       minersBelowQuota &&
       role !== "miner" &&
       role !== "harvester" &&
-      role !== "filler"
+      role !== "filler" &&
+      !(role === "hauler" && !canAffordBridgeMiner) &&
+      !(role === "upgrader" && upgraderSeatEmpty)
     ) {
       continue;
     }
+    const roleMinerMinWork =
+      role === "miner"
+        ? minerMinWorkForSpawn({
+            preferredMinWork: minerMinWork,
+            energyAvailable,
+            seatsUncovered: minersBelowQuota,
+          })
+        : minerMinWork;
     const body = bodyForRole(role, energyAvailable, {
       haulerMaxCost,
-      minerMinWork,
+      minerMinWork: roleMinerMinWork,
     });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
