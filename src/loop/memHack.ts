@@ -18,10 +18,7 @@ export function restoreParsedMemory(
   freshlyParsed: Memory,
   raw?: RawWithParsed,
 ): { lastTick: number; parsed: Memory; reused: boolean } {
-  if (
-    state.parsed &&
-    shouldReuseParsedMemory(state.lastTick, now)
-  ) {
+  if (state.parsed && shouldReuseParsedMemory(state.lastTick, now)) {
     if (raw) raw._parsed = state.parsed;
     return { lastTick: now, parsed: state.parsed, reused: true };
   }
@@ -34,7 +31,14 @@ type GlobalMem = {
   __agsMemHack?: { lastTick?: number; parsed?: Memory };
 };
 
-/** First statement of loop(): keep Memory identity when the global survived. */
+/**
+ * First statement of loop(): keep Memory identity when the global survived.
+ *
+ * Critical: on the reuse path, install RawMemory._parsed (and Memory) from the
+ * cache BEFORE reading `Memory`. Reading first can bind a throwaway parse;
+ * later writes then miss the object that gets serialized — live symptom was
+ * Memory.ags.metrics.tick frozen while creeps/room still advanced.
+ */
 export function applyParsedMemoryReuse(): boolean {
   try {
     const g = globalThis as unknown as GlobalMem;
@@ -43,21 +47,29 @@ export function applyParsedMemoryReuse(): boolean {
       typeof RawMemory === "undefined"
         ? undefined
         : (RawMemory as unknown as RawWithParsed);
+    const state = g.__agsMemHack ?? {};
+
+    if (state.parsed && shouldReuseParsedMemory(state.lastTick, now)) {
+      if (raw) raw._parsed = state.parsed;
+      try {
+        g.Memory = state.parsed;
+      } catch {
+        /* getter-only Memory binding — _parsed above is enough */
+      }
+      g.__agsMemHack = { lastTick: now, parsed: state.parsed };
+      return true;
+    }
+
     const freshlyParsed =
       typeof Memory === "undefined" ? ({} as Memory) : Memory;
-    const next = restoreParsedMemory(g.__agsMemHack ?? {}, now, freshlyParsed, raw);
-    g.__agsMemHack = { lastTick: next.lastTick, parsed: next.parsed };
-    if (raw) raw._parsed = next.parsed;
-    // Prefer the cached object for the rest of the tick. When Memory is a
-    // live getter over RawMemory._parsed this is a no-op; when it is a stale
-    // binding from the engine parse, re-pointing stops Memory.ags writes from
-    // landing on a throwaway object (live metrics.tick freeze).
+    if (raw) raw._parsed = freshlyParsed;
     try {
-      g.Memory = next.parsed;
+      g.Memory = freshlyParsed;
     } catch {
-      /* getter-only Memory binding — _parsed above is enough */
+      /* getter-only */
     }
-    return next.reused;
+    g.__agsMemHack = { lastTick: now, parsed: freshlyParsed };
+    return false;
   } catch {
     return false;
   }
