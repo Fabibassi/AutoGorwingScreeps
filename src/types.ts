@@ -80,6 +80,16 @@ export interface AgsMemory {
    */
   rcl5Mode?: string;
   /**
+   * Convert surplus builders → upgraders when quota drops (no sites).
+   * Default true; set false for sim control arms.
+   */
+  idleBuilderUpgrade?: boolean;
+  /**
+   * Absolute energy floor left in storage (blackout buffer).
+   * Default 2000; set 0 to disable for sim control arms.
+   */
+  storageBlackoutReserve?: number;
+  /**
    * Active hauler pickup reservations (haulerName → order).
    * See src/logistics/haulOrders.ts.
    */

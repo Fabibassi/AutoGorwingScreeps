@@ -26,6 +26,8 @@ export function loop(): void {
   const abVariantSticky = Memory.ags?.abVariant;
   const profileSticky = Memory.ags?.profile;
   const rcl5ModeSticky = Memory.ags?.rcl5Mode;
+  const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
+  const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
 
   try {
     applyParsedMemoryReuse();
@@ -79,7 +81,7 @@ export function loop(): void {
     // containersAtSources (live false 1/2 while W21N35 already had both seats).
     const room = pickHomeRoom(Game.rooms, Game.spawns);
     const rcl = room?.controller?.level ?? 1;
-    Memory.ags = tickTelemetry({
+    const nextAgs = tickTelemetry({
       tick: Game.time,
       rcl,
       energyHarvestedThisTick,
@@ -87,22 +89,42 @@ export function loop(): void {
       cpuUsed: Game.cpu.getUsed(),
       memory: Memory.ags,
     });
+    // Mutate in place so memHack's cached Memory identity keeps ags writes.
+    if (!Memory.ags) Memory.ags = nextAgs;
+    else Object.assign(Memory.ags, nextAgs);
     // Preserve experiment knobs across telemetry rewrites.
     if (roadPolicySticky) Memory.ags.roadPolicy = roadPolicySticky;
     if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
     if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
     if (profileSticky) Memory.ags.profile = profileSticky;
     if (rcl5ModeSticky) Memory.ags.rcl5Mode = rcl5ModeSticky;
-    Memory.ags = maybeUpdateHealthCheck(room, Memory.ags) ?? Memory.ags;
+    if (idleBuilderUpgradeSticky !== undefined) {
+      Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
+    }
+    if (storageBlackoutReserveSticky !== undefined) {
+      Memory.ags.storageBlackoutReserve = storageBlackoutReserveSticky;
+    }
+    const withHealth = maybeUpdateHealthCheck(room, Memory.ags);
+    if (withHealth && withHealth !== Memory.ags) {
+      Object.assign(Memory.ags, withHealth);
+    }
     if (roadPolicySticky) Memory.ags.roadPolicy = roadPolicySticky;
     if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
     if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
     if (profileSticky) Memory.ags.profile = profileSticky;
     if (rcl5ModeSticky) Memory.ags.rcl5Mode = rcl5ModeSticky;
+    if (idleBuilderUpgradeSticky !== undefined) {
+      Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
+    }
+    if (storageBlackoutReserveSticky !== undefined) {
+      Memory.ags.storageBlackoutReserve = storageBlackoutReserveSticky;
+    }
 
     logPlanStatusIfDue(room, Memory.ags);
   } catch (e) {
     console.log("main loop error", e);
-    Memory.ags = recoverTelemetryOnLoopError(Memory.ags);
+    const recovered = recoverTelemetryOnLoopError(Memory.ags);
+    if (!Memory.ags) Memory.ags = recovered;
+    else Object.assign(Memory.ags, recovered);
   }
 }

@@ -17,6 +17,7 @@ import {
   reassignForEconomySurvival,
   reassignSpareHarvesterToInfraBuilder,
   reassignSpareHarvesterToMiner,
+  reassignSurplusBuilderToUpgrader,
   reassignUpgraderToExtensionBuilder,
   recycleExcessHaulers,
   recycleExcessMiners,
@@ -235,6 +236,74 @@ describe("reassignForEconomySurvival", () => {
     );
     expect(a.memory.role).toBe("harvester");
     expect(b.memory.role).toBe("harvester");
+  });
+});
+
+describe("reassignSurplusBuilderToUpgrader", () => {
+  test("converts surplus builders into upgraders when builder quota drops", () => {
+    const builder = {
+      room: { name: "W21N35" },
+      memory: { role: "builder" },
+      getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "builder-1": builder },
+    };
+    vi.stubGlobal("WORK", "work");
+    const ok = reassignSurplusBuilderToUpgrader(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 3,
+        builder: 0,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 1,
+        builder: 4,
+        filler: 0,
+      },
+    );
+    expect(ok).toBe(true);
+    expect(builder.memory.role).toBe("upgrader");
+  });
+
+  test("leaves builders alone while still under builder quota", () => {
+    const builder = {
+      room: { name: "W21N35" },
+      memory: { role: "builder" },
+      getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
+    };
+    (globalThis as { Game?: unknown }).Game = {
+      creeps: { "builder-1": builder },
+    };
+    vi.stubGlobal("WORK", "work");
+    const ok = reassignSurplusBuilderToUpgrader(
+      { name: "W21N35" } as Room,
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 3,
+        builder: 4,
+        filler: 0,
+      },
+      {
+        harvester: 0,
+        miner: 2,
+        hauler: 2,
+        upgrader: 1,
+        builder: 2,
+        filler: 0,
+      },
+    );
+    expect(ok).toBe(false);
+    expect(builder.memory.role).toBe("builder");
   });
 });
 

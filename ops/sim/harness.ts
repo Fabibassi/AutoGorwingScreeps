@@ -239,6 +239,10 @@ export async function setBotExperiment(
     variant?: string;
     profile?: string;
     roadPolicy?: string;
+    /** Explicit false disables surplus builder→upgrader (sim control). */
+    idleBuilderUpgrade?: boolean;
+    /** Absolute storage energy floor; 0 disables blackout reserve. */
+    storageBlackoutReserve?: number;
   },
 ): Promise<void> {
   const parts = [ensureAgsPreamble()];
@@ -257,6 +261,16 @@ export async function setBotExperiment(
   if (opts.profile) {
     const safe = opts.profile.replace(/[^a-zA-Z0-9_]/g, "");
     parts.push(`Memory.ags.profile = "${safe}";`);
+  }
+  if (opts.idleBuilderUpgrade !== undefined) {
+    parts.push(
+      `Memory.ags.idleBuilderUpgrade = ${opts.idleBuilderUpgrade ? "true" : "false"};`,
+    );
+  }
+  if (opts.storageBlackoutReserve !== undefined) {
+    parts.push(
+      `Memory.ags.storageBlackoutReserve = ${Number(opts.storageBlackoutReserve)};`,
+    );
   }
   await bot.console(parts.join(" "));
 }

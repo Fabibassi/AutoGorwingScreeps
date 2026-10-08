@@ -62,6 +62,12 @@ export const HAUL_THRESHOLDS = {
   minPartialLoad: 100,
   /** For extension-only need: only early-deliver when CARRY is mostly full. */
   extensionFillRatio: 0.6,
+  /**
+   * Keep this much energy in storage as a blackout buffer so a filler can
+   * still top spawn after income dips. Urgent spawn may dip into it.
+   * Override with Memory.ags.storageBlackoutReserve (0 disables).
+   */
+  storageBlackoutReserve: 2000,
 } as const;
 
 export interface StorageHaulContext {
@@ -109,8 +115,27 @@ export function shouldDumpToStorage(
   if (!fillerExists) return shouldDepositInStorage(ctx);
   return true;
 }
+export function storageBlackoutReserve(): number {
+  try {
+    const override = (
+      globalThis as { Memory?: { ags?: { storageBlackoutReserve?: number } } }
+    ).Memory?.ags?.storageBlackoutReserve;
+    if (typeof override === "number" && Number.isFinite(override)) {
+      return Math.max(0, override);
+    }
+  } catch {
+    /* Memory unavailable in unit tests */
+  }
+  return HAUL_THRESHOLDS.storageBlackoutReserve;
+}
+
 export function shouldWithdrawFromStorage(ctx: StorageHaulContext): boolean {
   if (!ctx.storageExists || (ctx.storageEnergy ?? 0) <= 0) return false;
+  const energy = ctx.storageEnergy ?? 0;
+  // Critical spawn may drain the reserve; otherwise keep a blackout buffer.
+  if (ctx.spawnEnergy >= HAUL_THRESHOLDS.spawnUrgent) {
+    if (energy <= storageBlackoutReserve()) return false;
+  }
   if (!spawnIsComfortable(ctx)) return true;
   return isIncomeStalled(ctx.energyIncomePerTick, ctx.baselineIncome);
 }

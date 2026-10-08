@@ -22,6 +22,7 @@ import {
   patchControllerAndSpawn,
   readRoomSummary,
   resetEmptyRoom,
+  setBotExperiment,
   stopServer,
   writeLiveStatus,
   type SimResult,
@@ -58,6 +59,7 @@ function parseArgs(argv: string[]) {
   let ticks = 12_000;
   let port = 27200;
   let progressPerTick = 30_000;
+  let storageBlackoutReserve: number | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--instance" && argv[i + 1]) instance = argv[++i];
@@ -65,9 +67,11 @@ function parseArgs(argv: string[]) {
     else if (a === "--port" && argv[i + 1]) port = Number(argv[++i]);
     else if (a === "--progress-per-tick" && argv[i + 1]) {
       progressPerTick = Number(argv[++i]);
+    } else if (a === "--storage-blackout-reserve" && argv[i + 1]) {
+      storageBlackoutReserve = Number(argv[++i]);
     }
   }
-  return { instance, ticks, port, progressPerTick };
+  return { instance, ticks, port, progressPerTick, storageBlackoutReserve };
 }
 
 async function countType(server: SimServer, type: string): Promise<number> {
@@ -132,6 +136,7 @@ export async function runStorageHubScenario(opts: {
   ticks: number;
   port: number;
   progressPerTick?: number;
+  storageBlackoutReserve?: number;
 }): Promise<SimResult> {
   const ppt = opts.progressPerTick ?? 30_000;
   const server = createMockupServer(opts.instance, opts.port);
@@ -185,6 +190,11 @@ export async function runStorageHubScenario(opts: {
     }
 
     await server.start();
+    if (opts.storageBlackoutReserve !== undefined) {
+      await setBotExperiment(bot, {
+        storageBlackoutReserve: opts.storageBlackoutReserve,
+      });
+    }
     await server.tick();
 
     let final = await readRoomSummary(server, bot);
@@ -192,6 +202,8 @@ export async function runStorageHubScenario(opts: {
     let fillerTick: number | null = null;
     let hubFlowTick: number | null = null;
     let peakStorage = 0;
+    let minStorageAfterHub = Number.POSITIVE_INFINITY;
+    let minSpawnAfterHub = Number.POSITIVE_INFINITY;
 
     const publish = (extra?: Parameters<typeof liveFromSummary>[3]) => {
       writeLiveStatus(
@@ -255,6 +267,12 @@ export async function runStorageHubScenario(opts: {
       ) {
         hubFlowTick = i + 1;
       }
+      // Floor metrics only after hub is online and storage has been filled once
+      // (ignore the empty brand-new STRUCTURE_STORAGE tick).
+      if (hubFlowTick != null && final.storageEnergy > 0) {
+        minStorageAfterHub = Math.min(minStorageAfterHub, final.storageEnergy);
+        minSpawnAfterHub = Math.min(minSpawnAfterHub, final.spawnEnergy);
+      }
 
       if (i < 5 || i % 100 === 0) {
         const containerEnergy = await sumContainerEnergy(server);
@@ -279,15 +297,32 @@ export async function runStorageHubScenario(opts: {
       }
 
       if (storageTick != null && fillerTick != null && hubFlowTick != null) {
-        const reason = `storage hub online @${hubFlowTick} (storage@${storageTick} filler@${fillerTick} peakStorage=${peakStorage})`;
-        publish({ done: true, ok: true, reason });
-        return { ok: true, ticksRun: i + 1, final, reason };
+        // Keep running a bit to measure blackout floor under load.
+        if (i + 1 < Math.min(opts.ticks, hubFlowTick + 2000)) {
+          /* continue */
+        } else {
+          const minS =
+            minStorageAfterHub === Number.POSITIVE_INFINITY
+              ? 0
+              : minStorageAfterHub;
+          const minSp =
+            minSpawnAfterHub === Number.POSITIVE_INFINITY
+              ? 0
+              : minSpawnAfterHub;
+          const reason = `storage hub online @${hubFlowTick} (storage@${storageTick} filler@${fillerTick} peakStorage=${peakStorage} minStorage=${minS} minSpawn=${minSp} reserve=${opts.storageBlackoutReserve ?? "default"})`;
+          publish({ done: true, ok: true, reason });
+          return { ok: true, ticksRun: i + 1, final, reason };
+        }
       }
     }
 
     const storages = await countType(server, "storage");
     const containerEnergy = await sumContainerEnergy(server);
-    const reason = `timeout c=${final.containers} storage=${storages} filler=${final.roles.filler ?? 0} upg=${final.roles.upgrader ?? 0} storageE=${final.storageEnergy} containerE=${containerEnergy} peakStorage=${peakStorage}`;
+    const minS =
+      minStorageAfterHub === Number.POSITIVE_INFINITY ? 0 : minStorageAfterHub;
+    const minSp =
+      minSpawnAfterHub === Number.POSITIVE_INFINITY ? 0 : minSpawnAfterHub;
+    const reason = `timeout c=${final.containers} storage=${storages} filler=${final.roles.filler ?? 0} upg=${final.roles.upgrader ?? 0} storageE=${final.storageEnergy} containerE=${containerEnergy} peakStorage=${peakStorage} minStorage=${minS} minSpawn=${minSp}`;
     publish({ done: true, ok: false, reason });
     return { ok: false, ticksRun: opts.ticks, final, reason };
   } finally {
@@ -298,7 +333,10 @@ export async function runStorageHubScenario(opts: {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   console.log(
-    `[sim] storageHub instance=${args.instance} port=${args.port} ticks=${args.ticks} ppt=${args.progressPerTick}`,
+    `[sim] storageHub instance=${args.instance} port=${args.port} ticks=${args.ticks} ppt=${args.progressPerTick}` +
+      (args.storageBlackoutReserve === undefined
+        ? ""
+        : ` reserve=${args.storageBlackoutReserve}`),
   );
   const result = await runStorageHubScenario(args);
   console.log(JSON.stringify(result, null, 2));

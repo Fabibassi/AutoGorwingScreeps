@@ -52,6 +52,7 @@ function parseArgs(argv: string[]) {
   let abKnob = "";
   let abVariant = "";
   let profile = "";
+  let idleBuilderUpgrade: boolean | undefined;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--instance" && argv[i + 1]) instance = argv[++i];
@@ -62,8 +63,21 @@ function parseArgs(argv: string[]) {
     else if (a === "--ab-knob" && argv[i + 1]) abKnob = argv[++i];
     else if (a === "--ab-variant" && argv[i + 1]) abVariant = argv[++i];
     else if (a === "--profile" && argv[i + 1]) profile = argv[++i];
+    else if (a === "--idle-builder-upgrade" && argv[i + 1]) {
+      idleBuilderUpgrade = argv[++i] !== "false";
+    }
   }
-  return { instance, ticks, port, sustain, roadPolicy, abKnob, abVariant, profile };
+  return {
+    instance,
+    ticks,
+    port,
+    sustain,
+    roadPolicy,
+    abKnob,
+    abVariant,
+    profile,
+    idleBuilderUpgrade,
+  };
 }
 
 function policyTag(opts: {
@@ -88,15 +102,23 @@ export async function runRealClimbScenario(opts: {
   abKnob?: string;
   abVariant?: string;
   profile?: string;
+  idleBuilderUpgrade?: boolean;
 }): Promise<SimResult> {
   const sustainNeed = opts.sustain ?? SUSTAIN_TICKS;
   const roadPolicy = opts.roadPolicy ?? "parallel";
-  const tag = policyTag({
-    roadPolicy,
-    abKnob: opts.abKnob,
-    abVariant: opts.abVariant,
-    profile: opts.profile,
-  });
+  const tag = [
+    policyTag({
+      roadPolicy,
+      abKnob: opts.abKnob,
+      abVariant: opts.abVariant,
+      profile: opts.profile,
+    }),
+    opts.idleBuilderUpgrade === undefined
+      ? ""
+      : `idleBuilder=${opts.idleBuilderUpgrade ? "on" : "off"}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
   const server = createMockupServer(opts.instance, opts.port);
   try {
     await resetEmptyRoom(server, { rcl: 1, progressTotal: 200 });
@@ -108,12 +130,13 @@ export async function runRealClimbScenario(opts: {
     });
 
     await server.start();
-    if (opts.abKnob || opts.profile) {
+    if (opts.abKnob || opts.profile || opts.idleBuilderUpgrade !== undefined) {
       await setBotExperiment(bot, {
         knob: opts.abKnob,
         variant: opts.abVariant,
         profile: opts.profile,
         roadPolicy,
+        idleBuilderUpgrade: opts.idleBuilderUpgrade,
       });
     } else {
       await setBotRoadPolicy(bot, roadPolicy);
@@ -235,7 +258,10 @@ async function main() {
   console.log(
     `[sim] realClimb instance=${args.instance} port=${args.port} ticks=${args.ticks} sustain=${args.sustain} roadPolicy=${args.roadPolicy}` +
       (args.abKnob ? ` ab=${args.abKnob}:${args.abVariant}` : "") +
-      (args.profile ? ` profile=${args.profile}` : ""),
+      (args.profile ? ` profile=${args.profile}` : "") +
+      (args.idleBuilderUpgrade === undefined
+        ? ""
+        : ` idleBuilderUpgrade=${args.idleBuilderUpgrade}`),
   );
   const result = await runRealClimbScenario(args);
   console.log(JSON.stringify(result, null, 2));

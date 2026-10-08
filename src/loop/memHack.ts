@@ -47,8 +47,16 @@ export function applyParsedMemoryReuse(): boolean {
       typeof Memory === "undefined" ? ({} as Memory) : Memory;
     const next = restoreParsedMemory(g.__agsMemHack ?? {}, now, freshlyParsed, raw);
     g.__agsMemHack = { lastTick: next.lastTick, parsed: next.parsed };
-    // Never assign `Memory` — in Screeps it is often a getter-only binding and
-    // throws every tick, killing the loop before telemetry/triage can run.
+    if (raw) raw._parsed = next.parsed;
+    // Prefer the cached object for the rest of the tick. When Memory is a
+    // live getter over RawMemory._parsed this is a no-op; when it is a stale
+    // binding from the engine parse, re-pointing stops Memory.ags writes from
+    // landing on a throwaway object (live metrics.tick freeze).
+    try {
+      g.Memory = next.parsed;
+    } catch {
+      /* getter-only Memory binding — _parsed above is enough */
+    }
     return next.reused;
   } catch {
     return false;

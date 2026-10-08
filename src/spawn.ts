@@ -130,6 +130,30 @@ export function reassignUpgraderToExtensionBuilder(
 }
 
 /**
+ * When builder quota drops (no construction sites), convert surplus builders
+ * into upgraders so WORK keeps climbing instead of idling as "builder".
+ * Callers should gate on RCL>=3 so early site gaps do not strip builders.
+ */
+export function reassignSurplusBuilderToUpgrader(
+  room: Room,
+  want: CreepQuotas,
+  counts: CreepQuotas,
+): boolean {
+  if (counts.builder <= want.builder) return false;
+
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "builder") continue;
+    if (!creepHasWork(creep)) continue;
+    creep.memory.role = "upgrader";
+    delete creep.memory.sourceId;
+    return true;
+  }
+  return false;
+}
+
+/**
  * Instant controller keep-alive after a wipe: promote a WORK body to upgrader
  * instead of waiting a full spawn cycle while ticksToDowngrade bleeds.
  */
@@ -632,6 +656,18 @@ export function runSpawn(spawn: StructureSpawn): void {
   for (let n = 0; n < 10; n++) {
     const mid = countCreepsByRole();
     if (!reassignForControllerSurvival(room, want, mid)) break;
+  }
+  // No sites → builder quota 0: flip surplus builders into upgraders.
+  // Gate RCL>=3: earlier, brief site gaps (roads done, extensions not yet
+  // placed) would strip builders and slow the RCL2→3 climb in AB sims.
+  if (
+    Memory.ags?.idleBuilderUpgrade !== false &&
+    (room.controller?.level ?? 0) >= 3
+  ) {
+    for (let n = 0; n < 10; n++) {
+      const mid = countCreepsByRole();
+      if (!reassignSurplusBuilderToUpgrader(room, want, mid)) break;
+    }
   }
   const liveCounts = countCreepsByRole();
   const minerSnapshots: Array<{ sourceId?: string; ticksToLive?: number }> = [];
