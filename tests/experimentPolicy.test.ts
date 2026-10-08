@@ -19,15 +19,17 @@ describe("experimentPolicy", () => {
     expect(resolveExperiment({})).toEqual(BASELINE_PROFILE);
   });
 
-  test("baseline matches strategy-bench winner b_chain", () => {
-    const chain = profileForVariant("bootstrapStrategy", "b_chain");
-    expect(BASELINE_PROFILE).toEqual(chain);
+  test("baseline matches overnight RCL1-5 winners", () => {
     expect(BASELINE_PROFILE.allowDropMiners).toBe(true);
-    expect(BASELINE_PROFILE.containerTiming).toBe("one_source");
+    expect(BASELINE_PROFILE.containerTiming).toBe("immediate");
     expect(BASELINE_PROFILE.spawnChain).toBe("miner_hauler");
-    expect(BASELINE_PROFILE.minerMinWork).toBe(2);
-    expect(BASELINE_PROFILE.builderInfra).toBe(2);
+    expect(BASELINE_PROFILE.minerMinWork).toBe(1);
+    expect(BASELINE_PROFILE.builderInfra).toBe(4);
     expect(BASELINE_PROFILE.extensionBootstrap).toBe(5);
+    expect(BASELINE_PROFILE.upgraderQuotaClimb).toBe(3);
+    expect(BASELINE_PROFILE.controllerContainer).toBe("defer_rcl4");
+    expect(BASELINE_PROFILE.haulerMaxCost).toBeUndefined();
+    expect(BASELINE_PROFILE.spawnBuffer).toBe(200);
   });
 
   test("extensionBootstrap variants set RCL2 cap", () => {

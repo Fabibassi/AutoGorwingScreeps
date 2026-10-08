@@ -212,13 +212,13 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("b_chain infra push uses drop miners + lean builders", () => {
+  test("overnight baseline infra push uses drop miners + builderInfra=4", () => {
     expect(desiredCreeps(2, 2, 0, true)).toEqual({
       harvester: 0,
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      builder: 2,
+      builder: 4,
       filler: 0,
     });
   });
@@ -235,7 +235,7 @@ describe("desiredCreeps", () => {
     });
   });
 
-  test("b_chain: partial containers still want full miner/hauler pairs", () => {
+  test("partial containers still want full miner/hauler pairs", () => {
     expect(
       desiredCreeps(4, 2, 1, true, {
         energyIncomePerTick: 2,
@@ -249,7 +249,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 1,
-      builder: 2,
+      builder: 4,
       filler: 0,
     });
   });
@@ -271,8 +271,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
-      // strategy-bench b_chain: builderInfra=2
-      builder: 2,
+      builder: 4,
       filler: 0,
     });
   });
@@ -288,6 +287,7 @@ describe("desiredCreeps", () => {
       miner: 2,
       hauler: 2,
       upgrader: 3,
+      // Cap builders while mining seats are empty so spawn prefers miners.
       builder: 2,
       filler: 0,
     });
@@ -634,8 +634,8 @@ describe("constructionPriority", () => {
       roadSitesAllowed: false,
       extensionCount: 0,
     });
-    // b_chain one_source: serialize a single container site.
-    expect(queue.filter((s) => s === "container")).toHaveLength(1);
+    // overnight immediate: both source containers at once.
+    expect(queue.filter((s) => s === "container")).toHaveLength(2);
     expect(queue[0]).toBe("container");
     expect(queue.filter((s) => s === "extension")).toHaveLength(0);
     expect(queue.includes("storage")).toBe(false);
@@ -655,7 +655,7 @@ describe("constructionPriority", () => {
     expect(queue.filter((s) => s === "container")).toHaveLength(2);
   });
 
-  test("controller container queued only after source containers exist", () => {
+  test("controller container deferred until RCL4 by default", () => {
     const queue = constructionPriority(2, {
       sourceContainerCount: 2,
       sourceCount: 2,
@@ -663,6 +663,19 @@ describe("constructionPriority", () => {
       hasStorage: false,
       roadSitesAllowed: false,
       extensionCount: extensionQuota(2),
+    });
+    expect(queue.filter((s) => s === "container")).toHaveLength(0);
+  });
+
+  test("after_sources queues controller container once sources are done", () => {
+    const queue = constructionPriority(2, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: false,
+      hasStorage: false,
+      roadSitesAllowed: false,
+      extensionCount: extensionQuota(2),
+      experiment: profileForVariant("controllerContainer", "after_sources"),
     });
     expect(queue.filter((s) => s === "container")).toHaveLength(1);
   });
