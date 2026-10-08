@@ -359,6 +359,9 @@ export function shouldFallbackToMobileHarvest(
   // Live miners + source containers: stalled income is energy sitting in
   // containers, not a reason to demote miners into fat WCM harvesters.
   if ((ctx.minerCount ?? 0) > 0) return false;
+  // Boot / never established a baseline: keep recruiting static miners instead
+  // of abandoning the pipeline for mobile harvesters (CI miners sim + live).
+  if ((ctx.baselineIncome ?? 0) <= 0) return false;
   // Healthy spawn/extensions: low measured income usually means energy banked in
   // source containers, not a dead miner pipeline. Demoting miners then leaves a
   // source idle while the converted body wanders as a mobile harvester.
@@ -491,6 +494,11 @@ export function spawnPriorityOrder(
     isSoftLocked(energyAvailable, counts)
   ) {
     order = ["hauler", "harvester", "miner", "upgrader", "builder"];
+  } else if (counts && dedicatedMiners && (counts.miner ?? 0) === 0) {
+    // Empty miner seats with source containers: recruit miners before the
+    // no-economy hauler/harvester boot path (otherwise CI/live stalls on
+    // hauler@100 while M:0/2 never gets the spawn budget).
+    order = ["miner", "hauler", "harvester", "upgrader", "builder"];
   } else if (counts && hasNoEconomyCreeps(counts)) {
     // Soft bank (spawn < 200): hauler@100 drains storage/containers first.
     // Full spawn (≥200): harvest immediately — a fat hauler wastes the boot budget.
@@ -501,9 +509,6 @@ export function spawnPriorityOrder(
       (ctx?.energyIncomePerTick ?? 0) <= 0 && !canAffordWorker
         ? ["hauler", "harvester", "miner", "upgrader", "builder"]
         : ["harvester", "miner", "hauler", "upgrader", "builder"];
-  } else if (counts && dedicatedMiners && (counts.miner ?? 0) === 0) {
-    // Miners wiped but a hauler/harvester remains — refill sources first.
-    order = ["miner", "hauler", "harvester", "upgrader", "builder"];
   } else if (shouldFallbackToMobileHarvest(dedicatedMiners, ctx)) {
     // Hauler-first: containers may hold all room energy; hauler body costs 100 vs 150.
     order = ["hauler", "harvester", "upgrader", "builder"];

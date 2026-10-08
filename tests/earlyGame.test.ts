@@ -362,7 +362,10 @@ describe("desiredCreeps", () => {
 
   test("rcl2 zero income keeps haulers to drain trapped container energy", () => {
     expect(
-      desiredCreeps(2, 2, 2, true, { energyIncomePerTick: 0 }),
+      desiredCreeps(2, 2, 2, true, {
+        energyIncomePerTick: 0,
+        baselineIncome: 4,
+      }),
     ).toEqual({
       harvester: 3,
       miner: 0,
@@ -374,12 +377,31 @@ describe("desiredCreeps", () => {
   });
 
   test("rcl2 zero income falls back to mobile harvesters not bootstrap add-on", () => {
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 0,
+        baselineIncome: 4,
+      }),
+    ).toBe(true);
+    expect(
+      shouldFallbackToMobileHarvest(true, {
+        energyIncomePerTick: 5,
+        baselineIncome: 4,
+      }),
+    ).toBe(false);
+  });
+
+  test("boot into containered room keeps miner pipeline without baseline", () => {
     expect(shouldFallbackToMobileHarvest(true, { energyIncomePerTick: 0 })).toBe(
-      true,
+      false,
     );
     expect(
-      shouldFallbackToMobileHarvest(true, { energyIncomePerTick: 0.1 }),
-    ).toBe(false);
+      desiredCreeps(4, 2, 2, false, {
+        energyIncomePerTick: 0,
+        energyAvailable: 50,
+        spawnFillPct: 0.1,
+      }),
+    ).toMatchObject({ miner: 2 });
   });
 
   test("falls back when income collapsed vs baseline (RCL4 rollback #34)", () => {
@@ -459,7 +481,7 @@ describe("spawnPriorityOrder", () => {
         { harvester: 0, miner: 0 },
         316,
       ),
-    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
+    ).toEqual(["miner", "filler", "hauler", "harvester", "upgrader", "builder"]);
   });
 
   test("miner before hauler when dedicated mining has zero miners", () => {
@@ -470,7 +492,7 @@ describe("spawnPriorityOrder", () => {
         { harvester: 0, miner: 0 },
         300,
       )[0],
-    ).toBe("harvester");
+    ).toBe("miner");
     expect(
       spawnPriorityOrder(
         true,
@@ -504,13 +526,37 @@ describe("spawnPriorityOrder", () => {
   });
 
   test("hauler first when spawn is nearly empty during zero-income fallback", () => {
-    expect(spawnPriorityOrder(true, { energyIncomePerTick: 0, spawnFillPct: 0.05 })).toEqual([
-      "hauler",
+    // Fallback demotes want.miner→0; spawn still sees dedicatedMiners + empty
+    // miner seats and recruits miners first (hauler cannot unlock static mining).
+    expect(
+      spawnPriorityOrder(
+        true,
+        {
+          energyIncomePerTick: 0,
+          spawnFillPct: 0.05,
+          baselineIncome: 4,
+        },
+        { harvester: 0, miner: 0 },
+      ),
+    ).toEqual([
+      "miner",
       "filler",
+      "hauler",
       "harvester",
       "upgrader",
       "builder",
     ]);
+  });
+
+  test("miner first when container seats exist but roster is empty", () => {
+    expect(
+      spawnPriorityOrder(
+        true,
+        { energyIncomePerTick: 0, spawnFillPct: 0.1, energyAvailable: 200 },
+        { harvester: 0, miner: 0 },
+        200,
+      )[0],
+    ).toBe("miner");
   });
 
   test("harvester first when spawn is nearly empty but income positive", () => {
@@ -525,6 +571,7 @@ describe("spawnPriorityOrder", () => {
   });
 
   test("hauler first when economy creeps are zero and income is dead", () => {
+    // Soft-lock / low energy: hauler consolidates before miner body fits.
     expect(
       spawnPriorityOrder(
         true,
@@ -546,14 +593,15 @@ describe("spawnPriorityOrder", () => {
     ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
   });
 
-  test("harvester first when economy creeps are zero but income positive", () => {
+  test("miner first when dedicated seats empty even if income positive", () => {
     expect(
       spawnPriorityOrder(
         true,
         { energyIncomePerTick: 0.8, spawnFillPct: 0.01 },
         { harvester: 0, miner: 0 },
+        200,
       ),
-    ).toEqual(["harvester", "miner", "filler", "hauler", "upgrader", "builder"]);
+    ).toEqual(["miner", "filler", "hauler", "harvester", "upgrader", "builder"]);
   });
 
   test("hauler first when soft-locked below bootstrap energy (#36)", () => {
