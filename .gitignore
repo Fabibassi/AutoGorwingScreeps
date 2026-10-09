@@ -9,3 +9,4 @@ coverage/
 .sim-learn/
 ops/_probe*.txt
 ops/_last-probe*
+.probe-summary.json
