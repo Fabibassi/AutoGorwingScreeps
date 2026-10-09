@@ -2,6 +2,7 @@
  * One-shot Screeps live status for ops (Memory.ags + creeps + room objects).
  * Usage: SCREEPS_TOKEN=... SCREEPS_SHARD=shard3 npx tsx ops/liveProbe.ts [ROOM]
  */
+import { writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
@@ -10,6 +11,8 @@ import { fetchMemoryPath, screepsHeaders } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 
 const DEFAULT_ROOM = "W21N35";
+/** Machine-readable SitRep for CI (cron / RCL5 issue notify). */
+const PROBE_SUMMARY_PATH = ".probe-summary.json";
 
 function decodeDataField(data: unknown): unknown {
   if (data == null) return null;
@@ -401,22 +404,46 @@ export async function main(): Promise<void> {
     typeof roomRcl === "number"
       ? maybeArmRcl5AftercareMode(roomRcl, rcl5ModeRaw)
       : undefined;
+  const aftercareArmed = rcl5ModeRaw === "build_heavy";
+  const aftercareArm = {
+    rcl5Mode: rcl5ModeRaw ?? null,
+    aftercareArmed,
+    roomRcl: roomRcl ?? null,
+    metricsRcl: metricsRcl ?? null,
+    maybeArmWouldWrite: armWouldWrite ?? null,
+    progress: summary.controller?.progress ?? null,
+    progressTotal: summary.controller?.progressTotal ?? null,
+    storageEnergy: summary.storageEnergy,
+    extensionCount: summary.extensionCount,
+    constructionSites: summary.constructionSites,
+  };
   console.log("## Memory.ags.rcl5Mode / aftercare arm");
-  console.log(
-    JSON.stringify(
-      {
-        rcl5Mode: rcl5ModeRaw ?? null,
-        aftercareArmed: rcl5ModeRaw === "build_heavy",
-        roomRcl: roomRcl ?? null,
-        metricsRcl: metricsRcl ?? null,
-        maybeArmWouldWrite: armWouldWrite ?? null,
-        progress: summary.controller?.progress ?? null,
-        storageEnergy: summary.storageEnergy,
-      },
-      null,
-      2,
-    ),
-  );
+  console.log(JSON.stringify(aftercareArm, null, 2));
+
+  const runUrl =
+    process.env.GITHUB_SERVER_URL &&
+    process.env.GITHUB_REPOSITORY &&
+    process.env.GITHUB_RUN_ID
+      ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+      : null;
+  const probeSummary = {
+    at: new Date().toISOString(),
+    room,
+    shard: shard ?? null,
+    roomRcl: roomRcl ?? null,
+    rcl5Mode: rcl5ModeRaw ?? null,
+    aftercareArmed,
+    maybeArmWouldWrite: armWouldWrite ?? null,
+    progress: summary.controller?.progress ?? null,
+    progressTotal: summary.controller?.progressTotal ?? null,
+    storageEnergy: summary.storageEnergy,
+    extensionCount: summary.extensionCount,
+    constructionSites: summary.constructionSites,
+    runUrl,
+  };
+  writeFileSync(PROBE_SUMMARY_PATH, `${JSON.stringify(probeSummary, null, 2)}\n`, "utf8");
+  console.log(`## probe summary written ${PROBE_SUMMARY_PATH}`);
+  console.log(`PROBE_SUMMARY_RCL=${roomRcl ?? "null"} AFTERCARE_ARMED=${aftercareArmed}`);
 
   const memHealth =
     ags && typeof ags === "object"

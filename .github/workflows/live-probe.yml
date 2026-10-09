@@ -1,5 +1,8 @@
 name: Live Probe
 on:
+  schedule:
+    # Catch RCL4→5 overnight without missing the aftercare arm window.
+    - cron: "0 */2 * * *"
   workflow_dispatch:
     inputs:
       room:
@@ -9,6 +12,9 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,5 +29,22 @@ jobs:
           SCREEPS_PASSWORD: ${{ secrets.SCREEPS_PASSWORD }}
           SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
           SCREEPS_HOSTNAME: ${{ vars.SCREEPS_HOSTNAME }}
-          SCREEPS_ROOM: ${{ inputs.room }}
+          SCREEPS_ROOM: ${{ inputs.room || 'W21N35' }}
         run: npx tsx ops/liveProbe.ts
+
+      - name: Upload probe summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-summary
+          path: .probe-summary.json
+          if-no-files-found: ignore
+
+      - name: Open or update RCL5 aftercare issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_TITLE: "RCL5 aftercare verify"
+        run: |
+          chmod +x .github/scripts/notify-rcl5-aftercare.sh
+          .github/scripts/notify-rcl5-aftercare.sh .probe-summary.json
