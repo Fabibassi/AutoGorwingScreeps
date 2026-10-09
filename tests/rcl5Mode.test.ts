@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   applyRcl5ModeQuotas,
+  maybeArmRcl5AftercareMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
 } from "../src/earlyGame/rcl5Mode";
@@ -19,6 +20,16 @@ describe("rcl5Mode", () => {
   test("parse defaults to upgrade_rush (bench winner)", () => {
     expect(parseRcl5Mode(undefined)).toBe("upgrade_rush");
     expect(parseRcl5Mode("hub_spend")).toBe("hub_spend");
+  });
+
+  test("maybeArmRcl5AftercareMode switches climb default to build_heavy at RCL≥5", () => {
+    expect(maybeArmRcl5AftercareMode(4, "upgrade_rush")).toBeUndefined();
+    expect(maybeArmRcl5AftercareMode(4, undefined)).toBeUndefined();
+    expect(maybeArmRcl5AftercareMode(5, undefined)).toBe("build_heavy");
+    expect(maybeArmRcl5AftercareMode(5, "upgrade_rush")).toBe("build_heavy");
+    expect(maybeArmRcl5AftercareMode(5, "build_heavy")).toBeUndefined();
+    expect(maybeArmRcl5AftercareMode(5, "hub_spend")).toBeUndefined();
+    expect(maybeArmRcl5AftercareMode(6, "")).toBe("build_heavy");
   });
 
   test("upgrade_rush prioritizes upgraders and pauses extension spam", () => {
@@ -110,7 +121,7 @@ describe("rcl5Mode", () => {
     expect(queue.includes("tower")).toBe(true);
   });
 
-  test("early RCL5 hub wave boosts builders under upgrade_rush", () => {
+  test("early RCL5 hub wave uses build_heavy quotas (aftercare winner)", () => {
     const q = applyRcl5ModeQuotas(base, "upgrade_rush", {
       rcl: 5,
       hasStorage: true,
@@ -120,6 +131,6 @@ describe("rcl5Mode", () => {
       extensionCount: 15,
       towerCount: 1,
     });
-    expect(q).toMatchObject({ upgrader: 2, builder: 3, filler: 1 });
+    expect(q).toMatchObject({ upgrader: 1, builder: 4, filler: 1 });
   });
 });
