@@ -37,6 +37,7 @@ export type LiveStatus = {
   roads?: number;
   sites?: number;
   extensions?: number;
+  towers?: number;
   done?: boolean;
   ok?: boolean;
   reason?: string;
@@ -127,6 +128,7 @@ export type RoomSummary = {
   roads: number;
   sites: number;
   extensions: number;
+  towers: number;
 };
 
 export type SimResult = {
@@ -439,6 +441,7 @@ export async function readRoomSummary(
   let roads = 0;
   let sites = 0;
   let extensions = 0;
+  let towers = 0;
   const roles: Record<string, number> = {};
   for (const o of objects) {
     if (o.type === "creep") {
@@ -462,6 +465,8 @@ export async function readRoomSummary(
       roads++;
     } else if (o.type === "extension") {
       extensions++;
+    } else if (o.type === "tower") {
+      towers++;
     } else if (o.type === "constructionSite") {
       sites++;
     }
@@ -485,6 +490,7 @@ export async function readRoomSummary(
     roads,
     sites,
     extensions,
+    towers,
   };
 }
 
@@ -510,6 +516,7 @@ export function liveFromSummary(
     roads: final.roads,
     sites: final.sites,
     extensions: final.extensions,
+    towers: final.towers,
     updatedAt: new Date().toISOString(),
     ...extra,
   };

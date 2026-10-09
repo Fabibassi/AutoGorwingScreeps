@@ -112,6 +112,7 @@ export function runConstruction(room: Room): void {
     fullQuota: extensionQuota(rcl),
     minerWorkParts,
     sourceCount,
+    rcl,
   });
   const bootstrapCap = extensionBootstrapCap(exp, rcl, extensionQuota(rcl));
   const bankForMiners = shouldBankForBetterMiners({

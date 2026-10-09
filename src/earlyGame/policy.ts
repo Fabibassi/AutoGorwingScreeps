@@ -161,6 +161,10 @@ export interface EconomyContext {
   energyCapacityAvailable?: number;
   /** RCL4→5 spend experiment mode (sim / Memory.ags.rcl5Mode). */
   rcl5Mode?: Rcl5Mode | string;
+  /** Finished + open extension sites (RCL5 hub wave). */
+  extensionCount?: number;
+  /** Built + open tower sites. */
+  towerCount?: number;
 }
 
 /**
@@ -232,15 +236,29 @@ export function effectiveMinerMinWork(
 /**
  * Prefer fat miners, but never leave a mining seat empty because the bank is
  * momentarily under the 5W cost (live W21N35: ~500 available, 550 needed).
+ *
+ * Pre-spawn (TTL handoff while the incumbent still mines) waits for the
+ * capacity-sized body when storage can fund the refill — thin 1–4W bridges
+ * only for true uncovered seats, or when the storage reserve is too lean.
  */
 export function minerMinWorkForSpawn(opts: {
   preferredMinWork: number;
   energyAvailable: number;
   seatsUncovered: boolean;
+  /** TTL replacement while a live miner still covers the source. */
+  isPrespawn?: boolean;
+  storageEnergy?: number;
+  /** Wait only while storage is above this (default: never wait on lean/absent bank). */
+  storageWaitReserve?: number;
 }): number {
   const preferred = Math.max(1, opts.preferredMinWork);
   if (!opts.seatsUncovered) return preferred;
   if (opts.energyAvailable >= minerBodyCost(preferred)) return preferred;
+  if (opts.isPrespawn) {
+    const reserve = Math.max(0, opts.storageWaitReserve ?? 0);
+    const storage = Math.max(0, opts.storageEnergy ?? 0);
+    if (storage > reserve) return preferred;
+  }
   return 1;
 }
 
@@ -257,17 +275,24 @@ export function extensionsNeededForMinerWork(workParts: number): number {
 /**
  * Build extensions in miner-quality stages only:
  * 1) enough for 3W1M → 2) enough for 5W1M (5×50 + spawn 300 = 550).
- * Never push past the 5W gate — spare energy upgrades bodies, not empty shells.
+ * Past the 5W gate (or once RCL5 unlocks the next hub wave), fill the RCL quota.
  */
 export function stagedExtensionBuildCap(opts: {
   fullQuota: number;
   minerWorkParts: number;
   sourceCount: number;
+  /** When ≥5, unlock full RCL extension quota (tower#2 / 30-ext wave). */
+  rcl?: number;
 }): number {
   const full = Math.max(0, opts.fullQuota);
   const sources = Math.max(1, opts.sourceCount);
   const gate3 = extensionsNeededForMinerWork(3);
   const gate5 = extensionsNeededForMinerWork(5);
+  // RCL5 hub wave (2nd tower + 30 ext): fill quota. Earlier RCLs stay at miner gates
+  // so climb energy upgrades bodies instead of empty shells.
+  if ((opts.rcl ?? 0) >= 5) {
+    return full;
+  }
   if (opts.minerWorkParts >= sources * 3) {
     return Math.min(full, Math.max(gate5, gate3));
   }
@@ -761,6 +786,8 @@ export function desiredCreeps(
     hasConstructionSites,
     minerWorkParts,
     sources,
+    extensionCount: economy?.extensionCount,
+    towerCount: economy?.towerCount,
   });
 }
 
@@ -796,8 +823,10 @@ export function constructionPriority(
 ): BuildableStructureConstant[] {
   const exp = opts.experiment ?? BASELINE_PROFILE;
   const mode = parseRcl5Mode(opts.rcl5Mode);
+  // Climb-only: once RCL5 unlocks tower#2 + ext 30, resume hub build even if
+  // Memory still says upgrade_rush (live aftercare must not freeze at 15–20 ext).
   const pauseExtSpam =
-    opts.hasStorage && rcl5ModePausesExtensionSpam(mode);
+    opts.hasStorage && rcl < 5 && rcl5ModePausesExtensionSpam(mode);
   const queue: BuildableStructureConstant[] = [];
   const fullExtQuota = extensionQuota(rcl);
   const minerWorkParts = opts.minerWorkParts ?? 0;
@@ -805,6 +834,7 @@ export function constructionPriority(
     fullQuota: fullExtQuota,
     minerWorkParts,
     sourceCount: opts.sourceCount,
+    rcl,
   });
   const bootstrapCap = extensionBootstrapCap(exp, rcl, fullExtQuota);
   const finishedExt = opts.extensionBuilt ?? 0;

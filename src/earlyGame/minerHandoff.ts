@@ -87,6 +87,27 @@ export function minerSpawnSeatsWanted(
   return Math.min(Math.max(0, wantMiner), seatCount);
 }
 
+/**
+ * True economy gap: a mining seat has zero live miners (and no unassigned
+ * cover). TTL pre-spawn of a dying singleton is NOT uncovered — mining continues.
+ */
+export function hasUncoveredMinerSeat(
+  miners: MinerHandoffSnapshot[],
+  sourceIds: string[],
+): boolean {
+  let unassigned = miners.filter((m) => !m.sourceId).length;
+  for (const sid of sourceIds) {
+    if (minersOnSource(miners, sid).length === 0) {
+      if (unassigned > 0) {
+        unassigned--;
+        continue;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 export function sourceIdForReplacementMiner(
   miners: MinerHandoffSnapshot[],
   sourceIds: string[],
