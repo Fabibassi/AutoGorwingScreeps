@@ -77,7 +77,7 @@ describe("miner quality banking", () => {
     expect(minerTargetWorkParts(800)).toBe(5);
   });
 
-  test("extension build stages unlock 3W then 5W and stop there", () => {
+  test("extension build stages unlock 3W then 5W; RCL5 fills quota", () => {
     expect(extensionsNeededForMinerWork(3)).toBe(1);
     expect(extensionsNeededForMinerWork(5)).toBe(5);
     // Before 3W miners: only enough extensions for a 3W body.
@@ -96,14 +96,24 @@ describe("miner quality banking", () => {
         sourceCount: 2,
       }),
     ).toBe(5);
-    // 5W seats filled → stay at the 5W gate (no RCL-quota spam).
+    // 5W seats filled pre-RCL5 → stay at the 5W gate.
     expect(
       stagedExtensionBuildCap({
         fullQuota: 10,
         minerWorkParts: 10,
         sourceCount: 2,
+        rcl: 4,
       }),
     ).toBe(5);
+    // RCL5 unlocks full RCL quota for the hub wave.
+    expect(
+      stagedExtensionBuildCap({
+        fullQuota: 30,
+        minerWorkParts: 6,
+        sourceCount: 2,
+        rcl: 5,
+      }),
+    ).toBe(30);
   });
 
   test("banks when capacity allows fat miners but live WORK is thin", () => {
@@ -1049,6 +1059,45 @@ describe("minerMinWorkForSpawn", () => {
         seatsUncovered: false,
       }),
     ).toBe(5);
+  });
+
+  test("pre-spawn waits for fat body when storage reserve is fat but spawn pool is thin", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 400,
+        seatsUncovered: true,
+        isPrespawn: true,
+        storageEnergy: 20_000,
+        storageWaitReserve: 2000,
+      }),
+    ).toBe(5);
+  });
+
+  test("pre-spawn still bridges when storage is too lean to justify waiting", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 400,
+        seatsUncovered: true,
+        isPrespawn: true,
+        storageEnergy: 1500,
+        storageWaitReserve: 2000,
+      }),
+    ).toBe(1);
+  });
+
+  test("true uncovered seat bridges even with a fat storage bank", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 400,
+        seatsUncovered: true,
+        isPrespawn: false,
+        storageEnergy: 100_000,
+        storageWaitReserve: 2000,
+      }),
+    ).toBe(1);
   });
 });
 

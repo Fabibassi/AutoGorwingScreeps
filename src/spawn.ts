@@ -16,6 +16,7 @@ import {
 import {
   durableCount,
   durableMinerCount,
+  hasUncoveredMinerSeat,
   minerLiveCap,
   minerReplacementLeadTime,
   minerSpawnSeatsWanted,
@@ -25,10 +26,12 @@ import { resolveExperiment } from "./earlyGame/experimentPolicy";
 import {
   countCreepsByRole,
   countSourceContainers,
+  countStructures,
   findSourcesWithContainers,
   healCreepRoles,
   sumSourceContainerEnergy,
 } from "./room/queries";
+import { storageBlackoutReserve } from "./roles/hauler";
 
 export { desiredCreeps, type CreepQuotas };
 
@@ -597,6 +600,16 @@ export function runSpawn(spawn: StructureSpawn): void {
     storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
     sourceContainerEnergy: sumSourceContainerEnergy(room),
     rcl5Mode: Memory.ags?.rcl5Mode,
+    extensionCount:
+      countStructures(room, STRUCTURE_EXTENSION) +
+      room
+        .find(FIND_MY_CONSTRUCTION_SITES)
+        .filter((s) => s.structureType === STRUCTURE_EXTENSION).length,
+    towerCount:
+      countStructures(room, STRUCTURE_TOWER) +
+      room
+        .find(FIND_MY_CONSTRUCTION_SITES)
+        .filter((s) => s.structureType === STRUCTURE_TOWER).length,
   };
   const exp = resolveExperiment(Memory.ags);
   const infrastructureDedicated = useDedicatedMiners(
@@ -874,6 +887,12 @@ export function runSpawn(spawn: StructureSpawn): void {
             preferredMinWork: minerMinWork,
             energyAvailable,
             seatsUncovered: minersBelowQuota,
+            // TTL handoff with a live incumbent — wait for fat body if bank is fat.
+            isPrespawn:
+              replacementSeatOpen &&
+              !hasUncoveredMinerSeat(minerSnapshots, minerSourceIds),
+            storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
+            storageWaitReserve: storageBlackoutReserve(),
           })
         : minerMinWork;
     const body = bodyForRole(role, energyAvailable, {

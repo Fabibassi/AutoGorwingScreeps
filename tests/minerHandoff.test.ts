@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   durableCount,
   durableMinerCount,
+  hasUncoveredMinerSeat,
   minerLiveCap,
   minerMoveTicksPerTile,
   minerNeedsReplacement,
@@ -97,6 +98,21 @@ describe("durableMinerCount / replacement source", () => {
         lead,
       ),
     ).toBe("s1");
+  });
+
+  test("dying singleton is pre-spawn, not a true uncovered seat", () => {
+    const miners = [
+      { sourceId: "s1", ticksToLive: 40 },
+      { sourceId: "s2", ticksToLive: 800 },
+    ];
+    expect(hasUncoveredMinerSeat(miners, sources)).toBe(false);
+    expect(sourceIdForReplacementMiner(miners, sources, lead)).toBe("s1");
+  });
+
+  test("empty source is a true uncovered seat", () => {
+    const miners = [{ sourceId: "s1", ticksToLive: 800 }];
+    expect(hasUncoveredMinerSeat(miners, sources)).toBe(true);
+    expect(sourceIdForReplacementMiner(miners, sources, lead)).toBe("s2");
   });
 
   test("prefers an empty source over a dying one", () => {

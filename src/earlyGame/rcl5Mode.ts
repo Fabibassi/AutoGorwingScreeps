@@ -32,10 +32,31 @@ export function applyRcl5ModeQuotas(
     hasConstructionSites: boolean;
     minerWorkParts: number;
     sources: number;
+    /** Finished + site extensions — gates early-RCL5 hub wave. */
+    extensionCount?: number;
+    /** Built + site towers. */
+    towerCount?: number;
   },
 ): CreepQuotas {
   if (opts.rcl < 4 || !opts.hasStorage) return quotas;
   const q: CreepQuotas = { ...quotas, filler: Math.max(1, quotas.filler) };
+
+  // Just hit RCL5: finish tower#2 + ext→30 before full upgrade pressure.
+  const hubIncomplete =
+    opts.rcl >= 5 &&
+    opts.hasConstructionSites &&
+    ((opts.extensionCount ?? 0) < 30 || (opts.towerCount ?? 0) < 2);
+
+  if (hubIncomplete) {
+    if (mode === "build_heavy") {
+      q.upgrader = 1;
+      q.builder = 4;
+      return q;
+    }
+    q.upgrader = 2;
+    q.builder = 3;
+    return q;
+  }
 
   switch (mode) {
     case "upgrade_rush":

@@ -92,4 +92,34 @@ describe("rcl5Mode", () => {
     expect(queue.filter((s) => s === "extension")).toHaveLength(0);
     expect(queue.includes("road")).toBe(false);
   });
+
+  test("constructionPriority resumes extensions at RCL5 under upgrade_rush", () => {
+    const queue = constructionPriority(5, {
+      sourceContainerCount: 2,
+      sourceCount: 2,
+      hasControllerContainer: true,
+      hasStorage: true,
+      roadSitesAllowed: true,
+      extensionCount: 15,
+      extensionBuilt: 15,
+      towerCount: 1,
+      minerWorkParts: 10,
+      rcl5Mode: "upgrade_rush",
+    });
+    expect(queue.filter((s) => s === "extension").length).toBeGreaterThan(0);
+    expect(queue.includes("tower")).toBe(true);
+  });
+
+  test("early RCL5 hub wave boosts builders under upgrade_rush", () => {
+    const q = applyRcl5ModeQuotas(base, "upgrade_rush", {
+      rcl: 5,
+      hasStorage: true,
+      hasConstructionSites: true,
+      minerWorkParts: 10,
+      sources: 2,
+      extensionCount: 15,
+      towerCount: 1,
+    });
+    expect(q).toMatchObject({ upgrader: 2, builder: 3, filler: 1 });
+  });
 });

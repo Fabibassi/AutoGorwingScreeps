@@ -97,7 +97,9 @@ export function loop(): void {
     if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
     if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
     if (profileSticky) Memory.ags.profile = profileSticky;
-    if (rcl5ModeSticky) Memory.ags.rcl5Mode = rcl5ModeSticky;
+    // Prefer mid-tick console injections over the tick-start snapshot.
+    const rcl5ModeNow = Memory.ags?.rcl5Mode ?? rcl5ModeSticky;
+    if (rcl5ModeNow) Memory.ags.rcl5Mode = rcl5ModeNow;
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }
@@ -112,7 +114,8 @@ export function loop(): void {
     if (abKnobSticky) Memory.ags.abKnob = abKnobSticky;
     if (abVariantSticky) Memory.ags.abVariant = abVariantSticky;
     if (profileSticky) Memory.ags.profile = profileSticky;
-    if (rcl5ModeSticky) Memory.ags.rcl5Mode = rcl5ModeSticky;
+    const rcl5ModeKeep = Memory.ags?.rcl5Mode ?? rcl5ModeSticky;
+    if (rcl5ModeKeep) Memory.ags.rcl5Mode = rcl5ModeKeep;
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }
