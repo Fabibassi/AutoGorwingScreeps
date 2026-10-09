@@ -53,8 +53,13 @@ Hub-wave quota (incomplete hub at RCL≥5): prefer **U=1 / B=4** (build_heavy sh
 
 - [ ] Probe until `rcl >= 5` (blocked while still RCL4)
 - [x] Auto-arm `Memory.ags.rcl5Mode = "build_heavy"` at RCL≥5 when missing/`upgrade_rush` (`maybeArmRcl5AftercareMode` in main; sticky)
-- [ ] Ensure aftercare code is deployed to Screeps (PR → main → Deploy)
+- [x] Ensure aftercare code is deployed to Screeps (PR #52 → main → Deploy Screeps success)
 - [ ] Verify via Live Probe: tower#2 / ext climb, storage floor, no soft-lock
+- [x] Live Probe prints `## Memory.ags.rcl5Mode / aftercare arm` for post-RCL5 verify
+
+#### Live status (2026-10-09T22:50Z)
+
+Probe [38001103177](https://github.com/Fabibassi/AutoGorwingScreeps/actions/runs/38001103177): **RCL4**, progress **340034**/405000, storage **102135**, `rcl5Mode` absent. ETA ≈ **~10h** at ~106 prog/min. Goal remains OPEN until RCL5 + `build_heavy` armed verified.
 
 #### Live apply checklist (ready — waiting on RCL5)
 

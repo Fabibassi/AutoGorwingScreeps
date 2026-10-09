@@ -5,6 +5,7 @@
 import { gunzipSync } from "node:zlib";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { maybeArmRcl5AftercareMode } from "../src/earlyGame/rcl5Mode";
 import { fetchMemoryPath, screepsHeaders } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 
@@ -386,6 +387,36 @@ export async function main(): Promise<void> {
   const summary = summarizeObjects(objects);
   console.log("## Room objects summary");
   console.log(JSON.stringify(summary, null, 2));
+
+  const agsRec =
+    ags && typeof ags === "object" ? (ags as Record<string, unknown>) : undefined;
+  const rcl5ModeRaw =
+    typeof agsRec?.rcl5Mode === "string" ? agsRec.rcl5Mode : undefined;
+  const metricsRcl =
+    agsRec?.metrics && typeof agsRec.metrics === "object"
+      ? (agsRec.metrics as { rcl?: number }).rcl
+      : undefined;
+  const roomRcl = summary.controller?.level ?? metricsRcl;
+  const armWouldWrite =
+    typeof roomRcl === "number"
+      ? maybeArmRcl5AftercareMode(roomRcl, rcl5ModeRaw)
+      : undefined;
+  console.log("## Memory.ags.rcl5Mode / aftercare arm");
+  console.log(
+    JSON.stringify(
+      {
+        rcl5Mode: rcl5ModeRaw ?? null,
+        aftercareArmed: rcl5ModeRaw === "build_heavy",
+        roomRcl: roomRcl ?? null,
+        metricsRcl: metricsRcl ?? null,
+        maybeArmWouldWrite: armWouldWrite ?? null,
+        progress: summary.controller?.progress ?? null,
+        storageEnergy: summary.storageEnergy,
+      },
+      null,
+      2,
+    ),
+  );
 
   const memHealth =
     ags && typeof ags === "object"
