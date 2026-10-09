@@ -20,6 +20,23 @@ export function parseRcl5Mode(raw?: string): Rcl5Mode {
 }
 
 /**
+ * Sticky one-shot aftercare arm at RCL≥5.
+ * Aftercare bench winner (2026-10-10): build_heavy finishes hub (tower#2 + ext→30)
+ * fastest; climb default upgrade_rush stays for RCL4→5 only.
+ * Returns the mode to write, or undefined when no change (already an explicit choice).
+ */
+export function maybeArmRcl5AftercareMode(
+  rcl: number,
+  currentMode: string | undefined,
+): Rcl5Mode | undefined {
+  if (rcl < 5) return undefined;
+  if (currentMode === undefined || currentMode === "" || currentMode === "upgrade_rush") {
+    return "build_heavy";
+  }
+  return undefined;
+}
+
+/**
  * After storage exists at RCL4+, reshape quotas for the RCL5 climb experiment.
  * Remotes are intentionally out of scope — home controller is the sink.
  */
@@ -42,19 +59,15 @@ export function applyRcl5ModeQuotas(
   const q: CreepQuotas = { ...quotas, filler: Math.max(1, quotas.filler) };
 
   // Just hit RCL5: finish tower#2 + ext→30 before full upgrade pressure.
+  // Aftercare bench winner (2026-10-10): build_heavy hub@~6.6k vs upgrade_rush ~10k.
   const hubIncomplete =
     opts.rcl >= 5 &&
     opts.hasConstructionSites &&
     ((opts.extensionCount ?? 0) < 30 || (opts.towerCount ?? 0) < 2);
 
   if (hubIncomplete) {
-    if (mode === "build_heavy") {
-      q.upgrader = 1;
-      q.builder = 4;
-      return q;
-    }
-    q.upgrader = 2;
-    q.builder = 3;
+    q.upgrader = 1;
+    q.builder = 4;
     return q;
   }
 

@@ -1,3 +1,4 @@
+import { maybeArmRcl5AftercareMode } from "./earlyGame/rcl5Mode";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
@@ -100,6 +101,9 @@ export function loop(): void {
     // Prefer mid-tick console injections over the tick-start snapshot.
     const rcl5ModeNow = Memory.ags?.rcl5Mode ?? rcl5ModeSticky;
     if (rcl5ModeNow) Memory.ags.rcl5Mode = rcl5ModeNow;
+    // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
+    const armed = maybeArmRcl5AftercareMode(rcl, Memory.ags?.rcl5Mode);
+    if (armed) Memory.ags.rcl5Mode = armed;
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }

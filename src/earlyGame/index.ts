@@ -78,6 +78,7 @@ export {
   RCL5_MODES,
   applyRcl5ModeQuotas,
   isRcl5Mode,
+  maybeArmRcl5AftercareMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
   type Rcl5Mode,
