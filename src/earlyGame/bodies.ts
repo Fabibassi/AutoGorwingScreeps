@@ -83,12 +83,18 @@ export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
 export function bodyForRole(
   role: keyof CreepQuotas,
   energyAvailable: number,
-  opts?: { haulerMaxCost?: number; minerMinWork?: number },
+  opts?: {
+    haulerMaxCost?: number;
+    minerMinWork?: number;
+    /** Cap WORK when bridging (e.g. 1W only — do not grow into 2–4W mid bodies). */
+    minerMaxWork?: number;
+  },
 ): BodyPartConstant[] {
   switch (role) {
     case "miner":
       return buildMinerBody(energyAvailable, {
         minWork: opts?.minerMinWork,
+        maxWork: opts?.minerMaxWork,
       });
     case "hauler":
     case "filler":

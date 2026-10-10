@@ -1,6 +1,8 @@
 export type MinerHandoffSnapshot = {
   sourceId?: string;
   ticksToLive?: number;
+  /** Live WORK parts — under-target miners do not count as durable seats. */
+  workParts?: number;
 };
 
 export function minerMoveTicksPerTile(workParts: number, moveParts: number): number {
@@ -50,22 +52,34 @@ export function durableMinerCount(
   miners: MinerHandoffSnapshot[],
   sourceIds: string[],
   leadTimeFor: (sourceId: string) => number,
+  opts?: { minWorkParts?: number },
 ): number {
+  const minWork = Math.max(0, opts?.minWorkParts ?? 0);
   let n = 0;
   for (const sid of sourceIds) {
     const here = minersOnSource(miners, sid);
     const lead = leadTimeFor(sid);
     const healthy = here.filter((m) => !minerNeedsReplacement(m.ticksToLive, lead));
-    if (healthy.length > 0 || here.length >= 2) n++;
+    const strongHealthy =
+      minWork > 1
+        ? healthy.filter((m) => (m.workParts ?? 0) >= minWork)
+        : healthy;
+    // Weak-only coverage is not durable when the room targets fat miners —
+    // otherwise 2W seats block 5W upgrades forever.
+    if (strongHealthy.length > 0) n++;
+    else if (minWork <= 1 && (healthy.length > 0 || here.length >= 2)) n++;
   }
   const uncovered = Math.max(0, sourceIds.length - n);
   if (uncovered === 0) return n;
   const fallbackLead =
     sourceIds.length > 0 ? leadTimeFor(sourceIds[0]) : 100;
-  const unassignedHealthy = miners.filter(
-    (m) =>
-      !m.sourceId && !minerNeedsReplacement(m.ticksToLive, fallbackLead),
-  ).length;
+  const unassignedHealthy = miners.filter((m) => {
+    if (m.sourceId || minerNeedsReplacement(m.ticksToLive, fallbackLead)) {
+      return false;
+    }
+    if (minWork > 1 && (m.workParts ?? 0) < minWork) return false;
+    return true;
+  }).length;
   return n + Math.min(uncovered, unassignedHealthy);
 }
 
@@ -112,7 +126,9 @@ export function sourceIdForReplacementMiner(
   miners: MinerHandoffSnapshot[],
   sourceIds: string[],
   leadTimeFor: (sourceId: string) => number,
+  opts?: { minWorkParts?: number },
 ): string | null {
+  const minWork = Math.max(0, opts?.minWorkParts ?? 0);
   let unassigned = miners.filter((m) => !m.sourceId).length;
   for (const sid of sourceIds) {
     if (minersOnSource(miners, sid).length === 0) {
@@ -128,6 +144,15 @@ export function sourceIdForReplacementMiner(
     const lead = leadTimeFor(sid);
     const healthy = here.filter((m) => !minerNeedsReplacement(m.ticksToLive, lead));
     if (healthy.length === 0 && here.length === 1) return sid;
+  }
+  // Capacity upgrade: sole under-powered miner → spawn fat handoff (then recycle).
+  if (minWork > 1) {
+    for (const sid of sourceIds) {
+      const here = minersOnSource(miners, sid);
+      if (here.length === 0 || here.length >= 2) continue;
+      if (here.some((m) => (m.workParts ?? 0) >= minWork)) continue;
+      return sid;
+    }
   }
   return null;
 }

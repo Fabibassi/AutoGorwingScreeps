@@ -683,13 +683,18 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
   }
   const liveCounts = countCreepsByRole();
-  const minerSnapshots: Array<{ sourceId?: string; ticksToLive?: number }> = [];
+  const minerSnapshots: Array<{
+    sourceId?: string;
+    ticksToLive?: number;
+    workParts?: number;
+  }> = [];
   for (const name in Game.creeps) {
     const creep = Game.creeps[name];
     if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
     minerSnapshots.push({
       sourceId: creep.memory.sourceId,
       ticksToLive: creep.ticksToLive,
+      workParts: creep.getActiveBodyparts(WORK),
     });
   }
   // Drop-miners may seat on every source; otherwise only finished containers.
@@ -720,6 +725,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     minerSnapshots,
     minerSourceIds,
     leadTimeFor,
+    { minWorkParts: minerMinWork },
   );
   const haulerSnapshots: Array<{ ticksToLive?: number }> = [];
   for (const name in Game.creeps) {
@@ -783,6 +789,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       minerSnapshots,
       minerSourceIds,
       leadTimeFor,
+      { minWorkParts: minerMinWork },
     ) != null;
   if (
     recycleExcessMiners(
@@ -895,19 +902,24 @@ export function runSpawn(spawn: StructureSpawn): void {
             storageWaitReserve: storageBlackoutReserve(),
           })
         : minerMinWork;
+    // Bridge only: keep maxWork=minWork so partial spawn energy cannot grow 1→2–4W.
+    const bridgingThin =
+      role === "miner" && roleMinerMinWork < minerMinWork;
     const body = bodyForRole(role, energyAvailable, {
       haulerMaxCost,
       minerMinWork: roleMinerMinWork,
+      minerMaxWork: bridgingThin ? roleMinerMinWork : undefined,
     });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
     const memory: CreepMemory = { role };
     if (role === "miner") {
-      // Only empty seats or true TTL handoff — never stack onto a healthy miner.
+      // Empty seats, TTL handoff, or under-powered upgrade — never stack on a fat miner.
       const seatId = sourceIdForReplacementMiner(
         minerSnapshots,
         minerSourceIds,
         leadTimeFor,
+        { minWorkParts: minerMinWork },
       );
       if (!seatId && minerSourceIds.length > 0) continue;
       if (seatId) memory.sourceId = seatId as Id<Source>;
