@@ -138,6 +138,43 @@ export const HUB_EXTENSION_STAMP: ReadonlyArray<readonly [number, number]> = [
   [4, -4],
   [-4, 4],
   [-4, -4],
+  // r5 — extra pockets when walkway-buffer / roads fill r2–r4 (live RCL5 stall ~23 ext).
+  [5, 1],
+  [5, -1],
+  [-5, 1],
+  [-5, -1],
+  [1, 5],
+  [1, -5],
+  [-1, 5],
+  [-1, -5],
+  [5, 2],
+  [5, -2],
+  [-5, 2],
+  [-5, -2],
+  [2, 5],
+  [2, -5],
+  [-2, 5],
+  [-2, -5],
+  [5, 3],
+  [5, -3],
+  [-5, 3],
+  [-5, -3],
+  [3, 5],
+  [3, -5],
+  [-3, 5],
+  [-3, -5],
+  [5, 4],
+  [5, -4],
+  [-5, 4],
+  [-5, -4],
+  [4, 5],
+  [4, -5],
+  [-4, 5],
+  [-4, -5],
+  [5, 5],
+  [5, -5],
+  [-5, 5],
+  [-5, -5],
 ];
 
 /** Hub road stamp: exit ring + cardinal rays. */
@@ -401,27 +438,50 @@ export function tryPlaceHubRoad(
 }
 
 export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
-  // Stamp pockets only — never greedy-fill corridor tiles.
-  for (const [dx, dy] of HUB_EXTENSION_STAMP) {
-    const x = spawnPos.x + dx;
-    const y = spawnPos.y + dy;
-    if (!isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: true })) continue;
-    if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
-      return true;
+  // Stamp pockets first (walkway buffer), then stamp without buffer, then ring search.
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+      const x = spawnPos.x + dx;
+      const y = spawnPos.y + dy;
+      if (
+        !isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: useBuffer })
+      ) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
+        return true;
+      }
     }
+  }
+  const spot = findBuildSpotNear(room, spawnPos, 7, SPAWN_EXIT_MIN_RANGE, true);
+  if (
+    spot &&
+    room.createConstructionSite(spot, STRUCTURE_EXTENSION) === OK
+  ) {
+    return true;
   }
   return false;
 }
 
 /** Tower in a stamp pocket near spawn (same diamond gaps as extensions). */
 export function tryPlaceTower(room: Room, spawnPos: RoomPosition): boolean {
-  for (const [dx, dy] of HUB_EXTENSION_STAMP) {
-    const r = Math.max(Math.abs(dx), Math.abs(dy));
-    if (r > 4) continue;
-    const x = spawnPos.x + dx;
-    const y = spawnPos.y + dy;
-    if (!isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: true })) continue;
-    if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) return true;
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+      const r = Math.max(Math.abs(dx), Math.abs(dy));
+      if (r > 5) continue;
+      const x = spawnPos.x + dx;
+      const y = spawnPos.y + dy;
+      if (
+        !isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: useBuffer })
+      ) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) return true;
+    }
+  }
+  const spot = findBuildSpotNear(room, spawnPos, 6, SPAWN_EXIT_MIN_RANGE, true);
+  if (spot && room.createConstructionSite(spot, STRUCTURE_TOWER) === OK) {
+    return true;
   }
   return false;
 }

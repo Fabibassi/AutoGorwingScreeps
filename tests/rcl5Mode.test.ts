@@ -155,4 +155,17 @@ describe("rcl5Mode", () => {
     });
     expect(q).toMatchObject({ upgrader: 1, builder: 4, filler: 1 });
   });
+
+  test("hub wave keeps builders even when constructionSites briefly hit 0", () => {
+    const q = applyRcl5ModeQuotas(base, "build_heavy", {
+      rcl: 5,
+      hasStorage: true,
+      hasConstructionSites: false,
+      minerWorkParts: 10,
+      sources: 2,
+      extensionCount: 23,
+      towerCount: 1,
+    });
+    expect(q).toMatchObject({ upgrader: 1, builder: 4, filler: 1 });
+  });
 });
