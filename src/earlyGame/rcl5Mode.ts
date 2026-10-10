@@ -76,9 +76,10 @@ export function applyRcl5ModeQuotas(
 
   // Just hit RCL5: finish tower#2 + ext→30 before full upgrade pressure.
   // Aftercare bench winner (2026-10-10): build_heavy hub@~6.6k vs upgrade_rush ~10k.
+  // Do NOT require open sites — a 0-site gap between finishes must not drop builders
+  // or skip the hub wave (live stall at ~23 ext / 0 sites).
   const hubIncomplete =
     opts.rcl >= 5 &&
-    opts.hasConstructionSites &&
     ((opts.extensionCount ?? 0) < 30 || (opts.towerCount ?? 0) < 2);
 
   if (hubIncomplete) {
