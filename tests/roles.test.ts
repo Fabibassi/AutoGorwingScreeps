@@ -361,7 +361,7 @@ describe("runMiner", () => {
     expect(moveTo).not.toHaveBeenCalled();
   });
 
-  test("retreats from source when harvest returns ERR_FULL", () => {
+  test("stays put when harvest returns ERR_FULL (no walk oscillation)", () => {
     const moveTo = vi.fn(() => 0);
     const move = vi.fn(() => 0);
     const source = {
@@ -392,7 +392,7 @@ describe("runMiner", () => {
 
     expect(runMiner(creep)).toBe(0);
     expect(moveTo).not.toHaveBeenCalled();
-    expect(move).toHaveBeenCalled();
+    expect(move).not.toHaveBeenCalled();
   });
 
   test("counts harvest power when mining succeeds", () => {

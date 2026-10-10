@@ -164,6 +164,34 @@ describe("durableMinerCount / replacement source", () => {
       sourceIdForReplacementMiner([{ ticksToLive: 1400 }], sources, lead),
     ).toBe("s2");
   });
+
+  test("under-powered miners are not durable when minWorkParts targets fat bodies", () => {
+    expect(
+      durableMinerCount(
+        [
+          { sourceId: "s1", ticksToLive: 800, workParts: 2 },
+          { sourceId: "s2", ticksToLive: 800, workParts: 5 },
+        ],
+        sources,
+        lead,
+        { minWorkParts: 5 },
+      ),
+    ).toBe(1);
+  });
+
+  test("requests a fat upgrade for a sole weak miner seat", () => {
+    expect(
+      sourceIdForReplacementMiner(
+        [
+          { sourceId: "s1", ticksToLive: 800, workParts: 2 },
+          { sourceId: "s2", ticksToLive: 800, workParts: 5 },
+        ],
+        sources,
+        lead,
+        { minWorkParts: 5 },
+      ),
+    ).toBe("s1");
+  });
 });
 
 describe("shouldWaitForIncumbentMiner", () => {

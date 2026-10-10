@@ -982,6 +982,12 @@ describe("bodyForRole", () => {
     expect(body).toEqual(["work", "work", "work", "work", "work", "move"]);
   });
 
+  test("bridge miner stays 1W even when spawn energy could grow a mid body", () => {
+    expect(
+      bodyForRole("miner", 300, { minerMinWork: 1, minerMaxWork: 1 }),
+    ).toEqual(["work", "move"]);
+  });
+
   test("hauler uses carry/move pairs", () => {
     const body = bodyForRole("hauler", 300);
     expect(body.filter((p) => p === "carry").length).toBe(
