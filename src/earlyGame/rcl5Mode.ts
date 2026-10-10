@@ -37,6 +37,22 @@ export function maybeArmRcl5AftercareMode(
 }
 
 /**
+ * After hub-ready (ext≥30 ∧ towers≥2), switch aftercare build_heavy → fat_first.
+ * Wave-2 bench (2026-10-10): fat_first hit RCL6 @~155k with storage floor;
+ * upgrade_rush drained storage to 0 and never finished in 160k.
+ */
+export function maybeArmRcl5PostHubMode(
+  rcl: number,
+  currentMode: string | undefined,
+  opts: { extensions: number; towers: number },
+): Rcl5Mode | undefined {
+  if (rcl < 5) return undefined;
+  if (opts.extensions < 30 || opts.towers < 2) return undefined;
+  if (currentMode === "build_heavy") return "fat_first";
+  return undefined;
+}
+
+/**
  * After storage exists at RCL4+, reshape quotas for the RCL5 climb experiment.
  * Remotes are intentionally out of scope — home controller is the sink.
  */

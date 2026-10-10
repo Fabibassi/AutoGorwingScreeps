@@ -1,4 +1,7 @@
-import { maybeArmRcl5AftercareMode } from "./earlyGame/rcl5Mode";
+import {
+  maybeArmRcl5AftercareMode,
+  maybeArmRcl5PostHubMode,
+} from "./earlyGame/rcl5Mode";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
@@ -104,6 +107,24 @@ export function loop(): void {
     // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
     const armed = maybeArmRcl5AftercareMode(rcl, Memory.ags?.rcl5Mode);
     if (armed) Memory.ags.rcl5Mode = armed;
+    // After hub-ready, switch to RCL5→RCL6 bench winner (fat_first).
+    if (room?.controller?.my) {
+      const extensions = room
+        .find(FIND_MY_STRUCTURES, {
+          filter: (s) => s.structureType === STRUCTURE_EXTENSION,
+        })
+        .length;
+      const towers = room
+        .find(FIND_MY_STRUCTURES, {
+          filter: (s) => s.structureType === STRUCTURE_TOWER,
+        })
+        .length;
+      const postHub = maybeArmRcl5PostHubMode(rcl, Memory.ags?.rcl5Mode, {
+        extensions,
+        towers,
+      });
+      if (postHub) Memory.ags.rcl5Mode = postHub;
+    }
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }
