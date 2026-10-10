@@ -5,6 +5,7 @@ import {
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
+import { runLinks } from "./links";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
 import { healCreepRoles, pickHomeRoom } from "./room/queries";
 import { runCreep } from "./roles";
@@ -30,6 +31,7 @@ export function loop(): void {
   const abVariantSticky = Memory.ags?.abVariant;
   const profileSticky = Memory.ags?.profile;
   const rcl5ModeSticky = Memory.ags?.rcl5Mode;
+  const rcl5PlanSticky = Memory.ags?.rcl5Plan;
   const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
   const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
 
@@ -68,6 +70,12 @@ export function loop(): void {
         errorsThisTick++;
         console.log(`towers ${name} error`, e);
       }
+      try {
+        runLinks(room);
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`links ${name} error`, e);
+      }
     }
 
     for (const name in Game.creeps) {
@@ -104,10 +112,12 @@ export function loop(): void {
     // Prefer mid-tick console injections over the tick-start snapshot.
     const rcl5ModeNow = Memory.ags?.rcl5Mode ?? rcl5ModeSticky;
     if (rcl5ModeNow) Memory.ags.rcl5Mode = rcl5ModeNow;
+    const rcl5PlanNow = Memory.ags?.rcl5Plan ?? rcl5PlanSticky;
+    if (rcl5PlanNow) Memory.ags.rcl5Plan = rcl5PlanNow;
     // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
     const armed = maybeArmRcl5AftercareMode(rcl, Memory.ags?.rcl5Mode);
     if (armed) Memory.ags.rcl5Mode = armed;
-    // After hub-ready, switch to RCL5→RCL6 bench winner (fat_first).
+    // After hub-ready, switch to RCL5→RCL6 bench winner (fat_first) + link plan.
     if (room?.controller?.my) {
       const extensions = room
         .find(FIND_MY_STRUCTURES, {
@@ -124,6 +134,7 @@ export function loop(): void {
         towers,
       });
       if (postHub) Memory.ags.rcl5Mode = postHub;
+      // rcl5Plan is sticky / harness-set only (link_boost after sim win).
     }
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
@@ -141,6 +152,8 @@ export function loop(): void {
     if (profileSticky) Memory.ags.profile = profileSticky;
     const rcl5ModeKeep = Memory.ags?.rcl5Mode ?? rcl5ModeSticky;
     if (rcl5ModeKeep) Memory.ags.rcl5Mode = rcl5ModeKeep;
+    const rcl5PlanKeep = Memory.ags?.rcl5Plan ?? rcl5PlanSticky;
+    if (rcl5PlanKeep) Memory.ags.rcl5Plan = rcl5PlanKeep;
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }

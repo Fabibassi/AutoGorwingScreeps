@@ -1,10 +1,11 @@
 /**
- * Post-hub RCL5 → RCL6: hub-ready seed, compare rcl5Mode until RCL6 or tick cap.
+ * Post-hub RCL5 → RCL6: hub-ready seed, compare rcl5Mode / rcl5Plan until RCL6 or tick cap.
  *
  * Primary: ticks_to_rcl6. Gate: minStorage ≥ 20k.
  *
  * Usage:
- *   npx tsx ops/sim/rcl5ToRcl6.ts --mode upgrade_rush --ticks 40000 --port 27800
+ *   npx tsx ops/sim/rcl5ToRcl6.ts --mode fat_first --plan fat_first --ticks 40000 --port 27800
+ *   npx tsx ops/sim/rcl5ToRcl6.ts --plan link_boost --ticks 50000 --port 27800
  */
 import { pathToFileURL } from "node:url";
 import {
@@ -19,12 +20,18 @@ import {
   readRoomSummary,
   resetEmptyRoom,
   setBotRcl5Mode,
+  setBotRcl5Plan,
   stopServer,
   syncControllerProgress,
   writeLiveStatus,
   type SimResult,
 } from "./harness";
-import { RCL5_MODES, parseRcl5Mode } from "../../src/earlyGame/rcl5Mode";
+import {
+  RCL5_MODES,
+  RCL5_PLANS,
+  parseRcl5Mode,
+  parseRcl5Plan,
+} from "../../src/earlyGame/rcl5Mode";
 
 const SOURCES: Array<[number, number]> = [
   [10, 40],
@@ -74,15 +81,24 @@ function parseArgs(argv: string[]) {
   let instance = "rcl5to6-0";
   let ticks = 40_000;
   let port = 27_800;
-  let mode = "upgrade_rush";
+  let mode = "fat_first";
+  let plan = "fat_first";
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--instance" && argv[i + 1]) instance = argv[++i];
     else if (a === "--ticks" && argv[i + 1]) ticks = Number(argv[++i]);
     else if (a === "--port" && argv[i + 1]) port = Number(argv[++i]);
     else if (a === "--mode" && argv[i + 1]) mode = argv[++i];
+    else if (a === "--plan" && argv[i + 1]) plan = argv[++i];
   }
-  return { instance, ticks, port, mode: parseRcl5Mode(mode) };
+  const parsedPlan = parseRcl5Plan(plan);
+  return {
+    instance,
+    ticks,
+    port,
+    mode: parsedPlan === "link_boost" ? "fat_first" : parseRcl5Mode(mode),
+    plan: parsedPlan === "none" ? "fat_first" : parsedPlan,
+  };
 }
 
 export async function runRcl5ToRcl6Scenario(opts: {
@@ -90,8 +106,12 @@ export async function runRcl5ToRcl6Scenario(opts: {
   ticks: number;
   port: number;
   mode: string;
+  plan?: string;
 }): Promise<SimResult> {
-  const mode = parseRcl5Mode(opts.mode);
+  let plan = parseRcl5Plan(opts.plan);
+  if (plan === "none" || plan === "off") plan = "fat_first";
+  const mode =
+    plan === "link_boost" ? "fat_first" : parseRcl5Mode(opts.mode);
   const server = createMockupServer(opts.instance, opts.port);
 
   try {
@@ -180,6 +200,7 @@ export async function runRcl5ToRcl6Scenario(opts: {
 
     await server.start();
     await setBotRcl5Mode(bot, mode);
+    await setBotRcl5Plan(bot, plan);
     await server.tick();
 
     let final = await readRoomSummary(server, bot);
@@ -195,12 +216,14 @@ export async function runRcl5ToRcl6Scenario(opts: {
           roles: {
             ...final.roles,
             _mode: RCL5_MODES.indexOf(mode),
+            _plan: RCL5_PLANS.indexOf(plan),
           },
         }),
       );
     };
     publish({
-      reason: `rcl5to6 mode=${mode} hubReady seed storage=${START_STORAGE}`,
+      reason:
+        `rcl5to6 mode=${mode} plan=${plan} hubReady seed storage=${START_STORAGE}`,
     });
 
     for (let i = 0; i < opts.ticks; i++) {
@@ -227,6 +250,7 @@ export async function runRcl5ToRcl6Scenario(opts: {
             : "0";
         console.log(`[sim|${opts.instance}] t${i + 1}`, {
           mode,
+          plan,
           rcl: final.rcl,
           progress: final.progress,
           rate,
@@ -236,13 +260,14 @@ export async function runRcl5ToRcl6Scenario(opts: {
         });
         publish({
           reason:
-            `mode=${mode} t${i + 1} rcl=${final.rcl} p=${final.progress} ` +
+            `mode=${mode} plan=${plan} t${i + 1} rcl=${final.rcl} p=${final.progress} ` +
             `rate=${rate} rcl6@${rcl6Tick ?? "-"} minStorage=${minStorage}`,
         });
       }
 
       if (i > 0 && i % 250 === 0) {
         await setBotRcl5Mode(bot, mode);
+        await setBotRcl5Plan(bot, plan);
       }
 
       if (rcl6Tick != null) break;
@@ -261,7 +286,7 @@ export async function runRcl5ToRcl6Scenario(opts: {
           : null;
 
     const reason =
-      `rcl5to6 mode=${mode} rcl6@${rcl6Tick ?? "-"} eta=${eta ?? "-"} ` +
+      `rcl5to6 mode=${mode} plan=${plan} rcl6@${rcl6Tick ?? "-"} eta=${eta ?? "-"} ` +
       `p=${final.progress} peakRcl=${peakRcl} rate=${progressRate} ` +
       `minStorage=${minStorage} upg=${final.roles.upgrader ?? 0} ` +
       `bld=${final.roles.builder ?? 0}`;
@@ -278,7 +303,7 @@ export async function runRcl5ToRcl6Scenario(opts: {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   console.log(
-    `[sim] rcl5ToRcl6 mode=${args.mode} instance=${args.instance} port=${args.port} ticks=${args.ticks}`,
+    `[sim] rcl5ToRcl6 mode=${args.mode} plan=${args.plan} instance=${args.instance} port=${args.port} ticks=${args.ticks}`,
   );
   const result = await runRcl5ToRcl6Scenario(args);
   console.log(JSON.stringify(result, null, 2));

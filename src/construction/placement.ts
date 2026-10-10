@@ -519,6 +519,102 @@ export function tryPlaceStorageNearSpawn(
   return false;
 }
 
+/**
+ * Link next to storage (prefer stamp pocket in range ≤2 of storage).
+ * Falls back to ring search around storage, then spawn.
+ */
+export function tryPlaceStorageLink(
+  room: Room,
+  spawnPos: RoomPosition,
+  storagePos: RoomPosition,
+): boolean {
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+      const x = spawnPos.x + dx;
+      const y = spawnPos.y + dy;
+      const chebyshev = Math.max(
+        Math.abs(x - storagePos.x),
+        Math.abs(y - storagePos.y),
+      );
+      if (chebyshev > 2) continue;
+      if (
+        !isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: useBuffer })
+      ) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_LINK) === OK) return true;
+    }
+  }
+  const nearStorage = findBuildSpotNear(room, storagePos, 2, 1, true);
+  if (
+    nearStorage &&
+    room.createConstructionSite(nearStorage, STRUCTURE_LINK) === OK
+  ) {
+    return true;
+  }
+  const nearSpawn = findBuildSpotNear(
+    room,
+    spawnPos,
+    3,
+    SPAWN_EXIT_MIN_RANGE,
+    true,
+  );
+  if (nearSpawn && room.createConstructionSite(nearSpawn, STRUCTURE_LINK) === OK) {
+    return true;
+  }
+  return false;
+}
+
+/** Controller link in Chebyshev range ≤2 (upgrade withdraw seat). */
+export function tryPlaceControllerLink(
+  room: Room,
+  spawnPos: RoomPosition,
+  controllerPos: RoomPosition,
+): boolean {
+  const spot = findBuildSpotNear(room, controllerPos, 2, 1, true);
+  if (spot && room.createConstructionSite(spot, STRUCTURE_LINK) === OK) {
+    return true;
+  }
+  // Fallback: any free tile in range 2 ignoring stamp preference.
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      if (dx === 0 && dy === 0) continue;
+      const x = controllerPos.x + dx;
+      const y = controllerPos.y + dy;
+      if (!isFreeBuildTile(room, x, y, spawnPos)) continue;
+      if (room.createConstructionSite(x, y, STRUCTURE_LINK) === OK) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Place a link adjacent to `anchor` (storage or controller), then near-ring fallback.
+ * Respects spawn exit ring / hub corridors like other blocking structures.
+ */
+export function tryPlaceLinkNear(
+  room: Room,
+  anchor: RoomPosition,
+  spawnPos?: RoomPosition,
+): boolean {
+  const spawn = spawnPos ?? room.find(FIND_MY_SPAWNS)[0]?.pos;
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of ADJACENT_DELTAS) {
+      const x = anchor.x + dx;
+      const y = anchor.y + dy;
+      if (!isFreeBuildTile(room, x, y, spawn, { walkwayBuffer: useBuffer })) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_LINK) === OK) return true;
+    }
+  }
+  const spot = findBuildSpotNear(room, anchor, 3, 1, true);
+  if (spot && room.createConstructionSite(spot, STRUCTURE_LINK) === OK) {
+    return true;
+  }
+  return false;
+}
+
 export function tryPlaceRoadOnPath(
   room: Room,
   from: RoomPosition,

@@ -222,6 +222,17 @@ export async function setBotRcl5Mode(
   );
 }
 
+/** Inject post-hub RCL5 plan (link_boost | none). */
+export async function setBotRcl5Plan(
+  bot: SimBot,
+  plan: string,
+): Promise<void> {
+  const safe = plan.replace(/[^a-z0-9_]/gi, "");
+  await bot.console(
+    `${ensureAgsPreamble()} Memory.ags.rcl5Plan = "${safe}";`,
+  );
+}
+
 /** Kill every live creep and clear haul reservations (wipe-recovery sims). */
 export async function wipeAllCreeps(bot: SimBot): Promise<void> {
   await bot.console(

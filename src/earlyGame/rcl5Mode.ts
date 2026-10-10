@@ -10,13 +10,65 @@ export const RCL5_MODES = [
 
 export type Rcl5Mode = (typeof RCL5_MODES)[number];
 
+/**
+ * Post-hub RCL5→RCL6 plans (sticky; orthogonal to rcl5Mode quotas).
+ * none/off = control (no links); link_boost = Storage↔Controller pipeline.
+ * fat_first kept as alias of none for older sim CLI.
+ */
+export const RCL5_PLANS = ["none", "off", "fat_first", "link_boost"] as const;
+
+export type Rcl5Plan = (typeof RCL5_PLANS)[number];
+
 export function isRcl5Mode(raw: unknown): raw is Rcl5Mode {
   return typeof raw === "string" && (RCL5_MODES as readonly string[]).includes(raw);
+}
+
+export function isRcl5Plan(raw: unknown): raw is Rcl5Plan {
+  return typeof raw === "string" && (RCL5_PLANS as readonly string[]).includes(raw);
 }
 
 /** Bench winner (rcl5-bench): upgrade_rush reaches RCL5 fastest home-only. */
 export function parseRcl5Mode(raw?: string): Rcl5Mode {
   return isRcl5Mode(raw) ? raw : "upgrade_rush";
+}
+
+/** Default post-hub plan until link_boost wins a sim. */
+export function parseRcl5Plan(raw?: string): Rcl5Plan {
+  return isRcl5Plan(raw) ? raw : "none";
+}
+
+/** Place up to 2 links after hub-ready when plan is link_boost (not none/off). */
+export function shouldPlaceRcl5Links(opts: {
+  plan: Rcl5Plan | string | undefined;
+  rcl: number;
+  extensions: number;
+  towers: number;
+  /** Built links + open link construction sites. */
+  linkCount: number;
+}): boolean {
+  // Do not use parseRcl5Plan here — "none" would otherwise fall through to fat_first.
+  if (opts.plan !== "link_boost") return false;
+  if (opts.rcl < 5) return false;
+  if (opts.extensions < 30 || opts.towers < 2) return false;
+  return opts.linkCount < 2;
+}
+
+/**
+ * During link CAPEX, keep a builder wave; after both links built, leave quotas alone
+ * (caller should already apply fat_first / mode quotas).
+ */
+export function applyRcl5PlanQuotas(
+  quotas: CreepQuotas,
+  plan: Rcl5Plan | string | undefined,
+  opts: { linksBuilt: number; hasConstructionSites: boolean },
+): CreepQuotas {
+  if (plan !== "link_boost") return quotas;
+  if (opts.linksBuilt >= 2) return quotas;
+  return {
+    ...quotas,
+    upgrader: 1,
+    builder: Math.max(3, opts.hasConstructionSites ? 3 : 2),
+  };
 }
 
 /**
@@ -69,6 +121,10 @@ export function applyRcl5ModeQuotas(
     extensionCount?: number;
     /** Built + site towers. */
     towerCount?: number;
+    /** Built + site links — gates link CAPEX wave. */
+    linkCount?: number;
+    /** Post-hub plan: link_boost briefly prioritizes builders until 2 links. */
+    rcl5Plan?: string;
   },
 ): CreepQuotas {
   if (opts.rcl < 4 || !opts.hasStorage) return quotas;
@@ -87,6 +143,8 @@ export function applyRcl5ModeQuotas(
     q.builder = 4;
     return q;
   }
+
+  // Link CAPEX quotas live in applyRcl5PlanQuotas (spawn) — mode quotas stay here.
 
   switch (mode) {
     case "upgrade_rush":

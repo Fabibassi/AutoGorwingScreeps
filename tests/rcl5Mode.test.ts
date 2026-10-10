@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
   applyRcl5ModeQuotas,
+  applyRcl5PlanQuotas,
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
+  shouldPlaceRcl5Links,
 } from "../src/earlyGame/rcl5Mode";
 import { constructionPriority, desiredCreeps } from "../src/earlyGame";
 
@@ -64,6 +66,50 @@ describe("rcl5Mode", () => {
     });
     expect(q).toMatchObject({ upgrader: 4, builder: 1, filler: 1 });
     expect(rcl5ModePausesExtensionSpam("upgrade_rush")).toBe(true);
+  });
+
+  test("shouldPlaceRcl5Links only for explicit link_boost after hub", () => {
+    expect(
+      shouldPlaceRcl5Links({
+        plan: "link_boost",
+        rcl: 5,
+        extensions: 30,
+        towers: 2,
+        linkCount: 0,
+      }),
+    ).toBe(true);
+    expect(
+      shouldPlaceRcl5Links({
+        plan: "none",
+        rcl: 5,
+        extensions: 30,
+        towers: 2,
+        linkCount: 0,
+      }),
+    ).toBe(false);
+    expect(
+      shouldPlaceRcl5Links({
+        plan: undefined,
+        rcl: 5,
+        extensions: 30,
+        towers: 2,
+        linkCount: 0,
+      }),
+    ).toBe(false);
+  });
+
+  test("applyRcl5PlanQuotas forces builders during link CAPEX", () => {
+    const capex = applyRcl5PlanQuotas(base, "link_boost", {
+      linksBuilt: 0,
+      hasConstructionSites: true,
+    });
+    expect(capex).toMatchObject({ upgrader: 1, builder: 3 });
+    expect(
+      applyRcl5PlanQuotas(base, "link_boost", {
+        linksBuilt: 2,
+        hasConstructionSites: false,
+      }),
+    ).toEqual(base);
   });
 
   test("fat_first waits for 5W miners before upgrade pressure", () => {

@@ -13,7 +13,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { RCL5_MODES } from "../../src/earlyGame/rcl5Mode";
+import { RCL5_PLANS } from "../../src/earlyGame/rcl5Mode";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT_DIR = path.join(ROOT, ".sim-learn");
@@ -28,6 +28,8 @@ type Live = {
 
 type RunRow = {
   mode: string;
+  plan: string;
+  key: string;
   rep: number;
   instance: string;
   ok: boolean;
@@ -48,7 +50,9 @@ function parseArgs(argv: string[]) {
   let basePort = 27_800;
   let concurrency = 2;
   let skipBuild = false;
-  let modesCsv = "";
+  // Gameplan default: fat_first quotas × fat_first|link_boost plans.
+  let modesCsv = "fat_first";
+  let plansCsv = RCL5_PLANS.join(",");
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--replicates" && argv[i + 1]) replicates = Number(argv[++i]);
@@ -56,9 +60,18 @@ function parseArgs(argv: string[]) {
     else if (a === "--base-port" && argv[i + 1]) basePort = Number(argv[++i]);
     else if (a === "--concurrency" && argv[i + 1]) concurrency = Number(argv[++i]);
     else if (a === "--modes" && argv[i + 1]) modesCsv = argv[++i];
+    else if (a === "--plans" && argv[i + 1]) plansCsv = argv[++i];
     else if (a === "--skip-build") skipBuild = true;
   }
-  return { replicates, ticks, basePort, concurrency, skipBuild, modesCsv };
+  return {
+    replicates,
+    ticks,
+    basePort,
+    concurrency,
+    skipBuild,
+    modesCsv,
+    plansCsv,
+  };
 }
 
 function parseMetric(reason: string, key: string): number | null {
@@ -109,6 +122,7 @@ function runOne(
   port: number,
   ticks: number,
   mode: string,
+  plan: string,
 ): Promise<{ exitCode: number; ms: number }> {
   const t0 = Date.now();
   return new Promise((resolve) => {
@@ -126,6 +140,8 @@ function runOne(
         String(ticks),
         "--mode",
         mode,
+        "--plan",
+        plan,
       ],
       { cwd: ROOT, stdio: "inherit" },
     );
@@ -172,24 +188,32 @@ async function main() {
   }
 
   const modes = opts.modesCsv
-    ? opts.modesCsv.split(",").map((s) => s.trim()).filter(Boolean)
-    : [...RCL5_MODES];
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const plans = opts.plansCsv
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   console.log(
-    `[rcl5-to-rcl6-bench] modes=${modes.join(",")} replicates=${opts.replicates} ` +
-      `ticks=${opts.ticks} concurrency=${opts.concurrency}`,
+    `[rcl5-to-rcl6-bench] modes=${modes.join(",")} plans=${plans.join(",")} ` +
+      `replicates=${opts.replicates} ticks=${opts.ticks} concurrency=${opts.concurrency}`,
   );
 
-  type Job = { mode: string; rep: number };
+  type Job = { mode: string; plan: string; key: string; rep: number };
   const jobs: Job[] = [];
   for (const mode of modes) {
-    for (let rep = 0; rep < opts.replicates; rep++) {
-      jobs.push({ mode, rep });
+    for (const plan of plans) {
+      const key = `${mode}+${plan}`;
+      for (let rep = 0; rep < opts.replicates; rep++) {
+        jobs.push({ mode, plan, key, rep });
+      }
     }
   }
 
   let done = 0;
   const rows = await mapPool(jobs, opts.concurrency, async (job, index) => {
-    const instance = `rcl5to6-${job.mode}.r${job.rep}`;
+    const instance = `rcl5to6-${job.mode}-${job.plan}.r${job.rep}`;
     const port = opts.basePort + index;
     console.log(`[rcl5-to-rcl6-bench] start ${instance} port=${port}`);
     const { exitCode, ms } = await runOne(
@@ -197,11 +221,14 @@ async function main() {
       port,
       opts.ticks,
       job.mode,
+      job.plan,
     );
     const live = readLive(instance);
     const reason = live?.reason ?? `exit=${exitCode}`;
     const row: RunRow = {
       mode: job.mode,
+      plan: job.plan,
+      key: job.key,
       rep: job.rep,
       instance,
       ok: live?.ok === true || /rcl6@\d+/.test(reason),
@@ -222,22 +249,40 @@ async function main() {
     );
     writeStatus({
       phase: "running",
+      wave: "gameplan",
       done,
       total: jobs.length,
       last: row,
       at: new Date().toISOString(),
     });
+    writeFileSync(
+      path.join(OUT_DIR, "rcl5-gameplan-status.json"),
+      JSON.stringify(
+        {
+          phase: "sim-running",
+          done,
+          total: jobs.length,
+          last: row,
+          at: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
     return row;
   });
 
-  const ranking = modes
-    .map((mode) => {
-      const runs = rows.filter((r) => r.mode === mode);
+  const keys = [...new Set(jobs.map((j) => j.key))];
+  const ranking = keys
+    .map((key) => {
+      const runs = rows.filter((r) => r.key === key);
       const floorOk = runs.every(
         (r) => r.minStorage == null || r.minStorage >= STORAGE_FLOOR,
       );
       return {
-        mode,
+        key,
+        mode: runs[0]?.mode ?? key,
+        plan: runs[0]?.plan ?? "none",
         okCount: runs.filter((r) => r.ok).length,
         n: runs.length,
         floorOk,
@@ -284,20 +329,26 @@ async function main() {
     ticks: opts.ticks,
     replicates: opts.replicates,
     ranking,
-    winner: ranking[0]?.mode ?? null,
+    winner: ranking[0]?.key ?? null,
     note:
-      "Post-hub RCL5→RCL6; primary ticks_to_rcl6 / eta; gate minStorage≥20000.",
+      "Post-hub RCL5→RCL6; primary ticks_to_rcl6 / eta; gate minStorage≥20000; plans=fat_first|link_boost.",
   };
   writeFileSync(
     path.join(OUT_DIR, "rcl5-to-rcl6-bench.json"),
     JSON.stringify(report, null, 2),
   );
+  writeFileSync(
+    path.join(OUT_DIR, "rcl5-gameplan-bench.json"),
+    JSON.stringify(report, null, 2),
+  );
   writeStatus({
     phase: "done",
-    wave: "mode-matrix",
+    wave: "gameplan",
     winner: report.winner,
     ranking: ranking.map((r) => ({
+      key: r.key,
       mode: r.mode,
+      plan: r.plan,
       rcl6Median: r.rcl6Median,
       etaMedian: r.etaMedian,
       rateMedian: r.rateMedian,
@@ -305,11 +356,32 @@ async function main() {
     })),
     at: report.at,
   });
+  writeFileSync(
+    path.join(OUT_DIR, "rcl5-gameplan-status.json"),
+    JSON.stringify(
+      {
+        phase: "sim-done",
+        winner: report.winner,
+        ranking: ranking.map((r) => ({
+          key: r.key,
+          rcl6Median: r.rcl6Median,
+          etaMedian: r.etaMedian,
+          rateMedian: r.rateMedian,
+          floorOk: r.floorOk,
+          minStorageMedian: r.minStorageMedian,
+        })),
+        deliverable: "docs/superpowers/plans/2026-10-11-rcl5-gameplan.md",
+        at: report.at,
+      },
+      null,
+      2,
+    ),
+  );
 
   console.log("\n[rcl5-to-rcl6-bench] ranking (best first):");
   for (const r of ranking) {
     console.log(
-      `  ${r.mode}: ok=${r.okCount}/${r.n} floorOk=${r.floorOk} ` +
+      `  ${r.key}: ok=${r.okCount}/${r.n} floorOk=${r.floorOk} ` +
         `rcl6Median=${r.rcl6Median ?? "-"} etaMedian=${r.etaMedian ?? "-"} ` +
         `rateMedian=${r.rateMedian ?? "-"} minStorage=${r.minStorageMedian ?? "-"}`,
     );
