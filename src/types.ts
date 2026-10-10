@@ -80,6 +80,11 @@ export interface AgsMemory {
    */
   rcl5Mode?: string;
   /**
+   * Post-hub RCL5 gameplan.
+   * link_boost (default after hub) | none/off (sim control: no links)
+   */
+  rcl5Plan?: string;
+  /**
    * Convert surplus builders → upgraders when quota drops (no sites).
    * Default true; set false for sim control arms.
    */

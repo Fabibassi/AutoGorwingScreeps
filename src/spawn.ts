@@ -600,6 +600,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
     sourceContainerEnergy: sumSourceContainerEnergy(room),
     rcl5Mode: Memory.ags?.rcl5Mode,
+    rcl5Plan: Memory.ags?.rcl5Plan,
     extensionCount:
       countStructures(room, STRUCTURE_EXTENSION) +
       room
@@ -610,6 +611,8 @@ export function runSpawn(spawn: StructureSpawn): void {
       room
         .find(FIND_MY_CONSTRUCTION_SITES)
         .filter((s) => s.structureType === STRUCTURE_TOWER).length,
+    // Finished links only — CAPEX quotas stay until both links are built.
+    linkCount: countStructures(room, STRUCTURE_LINK),
   };
   const exp = resolveExperiment(Memory.ags);
   const infrastructureDedicated = useDedicatedMiners(

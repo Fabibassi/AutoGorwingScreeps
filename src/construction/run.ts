@@ -8,7 +8,10 @@ import {
   sourceContainerEnergySurplus,
   stagedExtensionBuildCap,
 } from "../earlyGame";
-import { parseRcl5Mode } from "../earlyGame/rcl5Mode";
+import {
+  parseRcl5Mode,
+  shouldPlaceRcl5Links,
+} from "../earlyGame/rcl5Mode";
 import {
   allowControllerContainer,
   extensionBootstrapCap,
@@ -22,6 +25,7 @@ import {
   roadsBlockedByContainers,
   roadsWhileContainersMissing,
 } from "../earlyGame/roadPolicy";
+import { classifyLinkRole, nextLinkSlot } from "../links/plan";
 import {
   countSourceContainers,
   countStructures,
@@ -36,12 +40,55 @@ import {
   clearBlockingSitesOnRoads,
   clearSpawnExitRing,
   tryPlaceContainer,
+  tryPlaceControllerLink,
   tryPlaceExtension,
   tryPlaceHubRoad,
   tryPlaceRoadOnPath,
+  tryPlaceStorageLink,
   tryPlaceStorageNearSpawn,
   tryPlaceTower,
 } from "./placement";
+
+function linkBuiltAndSites(room: Room): number {
+  return (
+    countStructures(room, STRUCTURE_LINK) +
+    room
+      .find(FIND_CONSTRUCTION_SITES)
+      .filter((s) => s.structureType === STRUCTURE_LINK).length
+  );
+}
+
+function linkSlotCoverage(room: Room): {
+  hasStorageLink: boolean;
+  hasControllerLink: boolean;
+} {
+  const storage = room.storage;
+  const controller = room.controller;
+  let hasStorageLink = false;
+  let hasControllerLink = false;
+  for (const s of room.find(FIND_MY_STRUCTURES, {
+    filter: (x) => x.structureType === STRUCTURE_LINK,
+  })) {
+    const role = classifyLinkRole({
+      linkPos: s.pos,
+      storagePos: storage?.pos,
+      controllerPos: controller?.pos,
+    });
+    if (role === "storage") hasStorageLink = true;
+    if (role === "controller") hasControllerLink = true;
+  }
+  for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
+    if (site.structureType !== STRUCTURE_LINK) continue;
+    const role = classifyLinkRole({
+      linkPos: site.pos,
+      storagePos: storage?.pos,
+      controllerPos: controller?.pos,
+    });
+    if (role === "storage") hasStorageLink = true;
+    if (role === "controller") hasControllerLink = true;
+  }
+  return { hasStorageLink, hasControllerLink };
+}
 
 const MAX_NON_ROAD_SITES = 3;
 
@@ -198,7 +245,8 @@ export function runConstruction(room: Room): void {
           s.structureType !== STRUCTURE_EXTENSION &&
           s.structureType !== STRUCTURE_CONTAINER &&
           s.structureType !== STRUCTURE_TOWER &&
-          s.structureType !== STRUCTURE_STORAGE,
+          s.structureType !== STRUCTURE_STORAGE &&
+          s.structureType !== STRUCTURE_LINK,
       );
       if (sacrificial) {
         sacrificial.remove();
@@ -229,6 +277,36 @@ export function runConstruction(room: Room): void {
   const towerSites = existingSites.filter((s) => s.structureType === STRUCTURE_TOWER)
     .length;
   const towerCount = towerBuilt + towerSites;
+
+  // Post-hub RCL5 link_boost: place Storage↔Controller pair (opt-in via rcl5Plan).
+  if (
+    !skipNonRoadPlacement &&
+    hasStorage &&
+    room.storage &&
+    room.controller &&
+    shouldPlaceRcl5Links({
+      plan: Memory.ags?.rcl5Plan,
+      rcl,
+      extensions: extensionBuilt,
+      towers: towerBuilt,
+      linkCount: linkBuiltAndSites(room),
+    })
+  ) {
+    const coverage = linkSlotCoverage(room);
+    const slot = nextLinkSlot(coverage);
+    if (
+      slot === "storage" &&
+      tryPlaceStorageLink(room, spawn.pos, room.storage.pos)
+    ) {
+      return;
+    }
+    if (
+      slot === "controller" &&
+      tryPlaceControllerLink(room, spawn.pos, room.controller.pos)
+    ) {
+      return;
+    }
+  }
 
   const placeRoads = (): boolean => {
     if (!roadSitesAllowed) return false;

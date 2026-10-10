@@ -76,11 +76,17 @@ export {
 } from "./policy";
 export {
   RCL5_MODES,
+  RCL5_PLANS,
   applyRcl5ModeQuotas,
+  applyRcl5PlanQuotas,
   isRcl5Mode,
+  isRcl5Plan,
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
   parseRcl5Mode,
+  parseRcl5Plan,
   rcl5ModePausesExtensionSpam,
+  shouldPlaceRcl5Links,
   type Rcl5Mode,
+  type Rcl5Plan,
 } from "./rcl5Mode";

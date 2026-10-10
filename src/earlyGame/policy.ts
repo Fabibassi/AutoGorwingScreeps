@@ -8,6 +8,7 @@ import {
 } from "./experimentPolicy";
 import {
   applyRcl5ModeQuotas,
+  applyRcl5PlanQuotas,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
   type Rcl5Mode,
@@ -165,6 +166,10 @@ export interface EconomyContext {
   extensionCount?: number;
   /** Built + open tower sites. */
   towerCount?: number;
+  /** Built + open link sites (RCL5 link pair). */
+  linkCount?: number;
+  /** Post-hub RCL5 plan (link_boost | none). */
+  rcl5Plan?: string;
 }
 
 /**
@@ -780,14 +785,22 @@ export function desiredCreeps(
   if (hubSpend && rcl >= 4) {
     quotas.upgrader = Math.max(2, quotas.upgrader);
   }
-  return applyRcl5ModeQuotas(quotas, parseRcl5Mode(economy?.rcl5Mode), {
-    rcl,
-    hasStorage: economy?.hasStorage === true,
+  const modeQuotas = applyRcl5ModeQuotas(
+    quotas,
+    parseRcl5Mode(economy?.rcl5Mode),
+    {
+      rcl,
+      hasStorage: economy?.hasStorage === true,
+      hasConstructionSites,
+      minerWorkParts,
+      sources,
+      extensionCount: economy?.extensionCount,
+      towerCount: economy?.towerCount,
+    },
+  );
+  return applyRcl5PlanQuotas(modeQuotas, economy?.rcl5Plan, {
+    linksBuilt: economy?.linkCount ?? 0,
     hasConstructionSites,
-    minerWorkParts,
-    sources,
-    extensionCount: economy?.extensionCount,
-    towerCount: economy?.towerCount,
   });
 }
 

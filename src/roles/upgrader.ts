@@ -6,6 +6,18 @@ export function runUpgrader(creep: Creep): void {
   if (creep.store[RESOURCE_ENERGY] === 0) {
     const controller = creep.room.controller;
     if (controller) {
+      // RCL5 link_boost: prefer controller link over walking to storage.
+      const link = controller.pos.findInRange(FIND_MY_STRUCTURES, 2, {
+        filter: (s): s is StructureLink =>
+          s.structureType === STRUCTURE_LINK &&
+          (s.store[RESOURCE_ENERGY] ?? 0) > 0,
+      })[0];
+      if (link) {
+        if (creep.withdraw(link, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          creep.moveTo(link);
+        }
+        return;
+      }
       const container = controller.pos.findInRange(FIND_STRUCTURES, 3, {
         filter: (s): s is StructureContainer =>
           s.structureType === STRUCTURE_CONTAINER &&
