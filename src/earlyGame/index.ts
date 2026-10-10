@@ -79,6 +79,7 @@ export {
   applyRcl5ModeQuotas,
   isRcl5Mode,
   maybeArmRcl5AftercareMode,
+  maybeArmRcl5PostHubMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
   type Rcl5Mode,

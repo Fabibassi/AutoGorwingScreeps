@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   applyRcl5ModeQuotas,
   maybeArmRcl5AftercareMode,
+  maybeArmRcl5PostHubMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
 } from "../src/earlyGame/rcl5Mode";
@@ -30,6 +31,27 @@ describe("rcl5Mode", () => {
     expect(maybeArmRcl5AftercareMode(5, "build_heavy")).toBeUndefined();
     expect(maybeArmRcl5AftercareMode(5, "hub_spend")).toBeUndefined();
     expect(maybeArmRcl5AftercareMode(6, "")).toBe("build_heavy");
+  });
+
+  test("maybeArmRcl5PostHubMode switches build_heavy → fat_first when hub ready", () => {
+    expect(
+      maybeArmRcl5PostHubMode(5, "build_heavy", { extensions: 29, towers: 2 }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl5PostHubMode(5, "build_heavy", { extensions: 30, towers: 1 }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl5PostHubMode(5, "build_heavy", { extensions: 30, towers: 2 }),
+    ).toBe("fat_first");
+    expect(
+      maybeArmRcl5PostHubMode(5, "fat_first", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl5PostHubMode(5, "upgrade_rush", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl5PostHubMode(4, "build_heavy", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
   });
 
   test("upgrade_rush prioritizes upgraders and pauses extension spam", () => {
