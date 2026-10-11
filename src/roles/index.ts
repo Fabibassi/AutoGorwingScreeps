@@ -5,6 +5,9 @@ import { runHauler } from "./hauler";
 import { evictIdleFromSpawnRing } from "./idlePark";
 import { runMiner } from "./miner";
 import { moveOffSpawn } from "./moveOffSpawn";
+import { runRemoteHauler } from "./remoteHauler";
+import { runRemoteMiner } from "./remoteMiner";
+import { runReserver } from "./reserver";
 import { runUpgrader } from "./upgrader";
 
 /** Energy harvested this tick; 0 for non-harvest roles. */
@@ -27,6 +30,15 @@ const roleRunners: Record<string, RoleRunner> = {
   },
   upgrader: (creep) => {
     runUpgrader(creep);
+    return 0;
+  },
+  remoteMiner: runRemoteMiner,
+  remoteHauler: (creep) => {
+    runRemoteHauler(creep);
+    return 0;
+  },
+  reserver: (creep) => {
+    runReserver(creep);
     return 0;
   },
 };

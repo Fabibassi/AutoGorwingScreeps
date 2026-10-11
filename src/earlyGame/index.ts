@@ -112,3 +112,29 @@ export {
   type WallArmInput,
   type WallPolicy,
 } from "./wallArm";
+export {
+  REMOTE_BAKEOFF_WINNER,
+  REMOTE_PLANS,
+  maybeArmRemotePlanPostRcl6,
+  parseRemotePlan,
+  pickFirstExitRoom,
+  remotePlanIsActive,
+  remotePlanNeedsContainer,
+  remotePlanNeedsReserve,
+  remoteQuotasForPlan,
+  remoteSpawnGatesOk,
+  type RemotePlan,
+  type RemoteQuotas,
+} from "./remotePlan";
+export {
+  REMOTE_VARIANT_WINNER,
+  REMOTE_VARIANTS,
+  parseRemoteVariant,
+  tuningForRemoteVariant,
+  type RemoteVariant,
+} from "./remoteVariant";
+export {
+  evaluateRemoteEconomics,
+  type RemoteEconPlan,
+  type RemoteEconResult,
+} from "./remoteEconomics";

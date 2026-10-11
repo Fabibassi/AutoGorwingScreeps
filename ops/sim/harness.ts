@@ -265,6 +265,8 @@ export async function driveHostilesToward(
 }
 
 export const ROOM = "W0N1";
+/** Adjacent remote room used by remote-income sims (south of home). */
+export const REMOTE_ROOM = "W0N0";
 export const SPAWN_X = 25;
 export const SPAWN_Y = 25;
 
@@ -413,6 +415,56 @@ export async function setBotWallPolicy(
   await bot.console(
     `${ensureAgsPreamble()} Memory.ags.wallPolicy = "${safe}"; ${armed}`,
   );
+}
+
+/** Inject remote plan + room + path length (+ optional variant). */
+export async function setBotRemotePlan(
+  bot: SimBot,
+  opts: {
+    plan: string;
+    room: string;
+    pathLength: number;
+    variant?: string;
+  },
+): Promise<void> {
+  const plan = opts.plan.replace(/[^a-z0-9_]/gi, "");
+  const room = opts.room.replace(/[^a-zA-Z0-9]/g, "");
+  const pathLength = Math.max(1, Math.floor(Number(opts.pathLength) || 50));
+  const variant = (opts.variant ?? "baseline").replace(/[^a-z0-9_]/gi, "");
+  await bot.console(
+    [
+      ensureAgsPreamble(),
+      `Memory.ags.remotePlan = "${plan}";`,
+      `Memory.ags.remoteRoom = "${room}";`,
+      `Memory.ags.remotePathLength = ${pathLength};`,
+      `Memory.ags.remoteVariant = "${variant}";`,
+    ].join(" "),
+  );
+}
+
+/** Add an adjacent remote room with controller + 2 sources. */
+export async function addRemoteRoom(
+  server: SimServer,
+  opts: { haulRange: "short" | "mid" },
+): Promise<void> {
+  const terrain = new TerrainMatrix();
+  await server.world.addRoom(REMOTE_ROOM);
+  await server.world.setTerrain(REMOTE_ROOM, terrain);
+  await server.world.addRoomObject(REMOTE_ROOM, "controller", 25, 25, {
+    level: 0,
+  });
+  // short: near north exit toward home W0N1; mid: farther south.
+  const y = opts.haulRange === "short" ? 5 : 35;
+  await server.world.addRoomObject(REMOTE_ROOM, "source", 20, y, {
+    energy: 1500,
+    energyCapacity: 1500,
+    ticksToRegeneration: 300,
+  });
+  await server.world.addRoomObject(REMOTE_ROOM, "source", 30, y, {
+    energy: 1500,
+    energyCapacity: 1500,
+    ticksToRegeneration: 300,
+  });
 }
 
 /** Kill every live creep and clear haul reservations (wipe-recovery sims). */
