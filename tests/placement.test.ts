@@ -2,13 +2,17 @@ import { describe, expect, test } from "vitest";
 import {
   HUB_EXTENSION_STAMP,
   HUB_ROAD_STAMP,
+  MIN_STORAGE_ACCESS,
   SPAWN_EXIT_MIN_RANGE,
   clearBlockingSitesOnRoads,
   clearSpawnExitRing,
+  clearStorageAccessRing,
   countFreeSpawnExits,
+  countFreeStorageAccess,
   findBuildSpotNear,
   isHubCorridor,
   isSpawnExitTile,
+  isStorageAccessTile,
   tryPlaceExtension,
 } from "../src/construction/placement";
 
@@ -75,6 +79,8 @@ function makeRoom(opts: {
   (globalThis as { STRUCTURE_STORAGE?: string }).STRUCTURE_STORAGE = "storage";
   (globalThis as { STRUCTURE_EXTENSION?: string }).STRUCTURE_EXTENSION =
     "extension";
+  (globalThis as { STRUCTURE_TOWER?: string }).STRUCTURE_TOWER = "tower";
+  (globalThis as { STRUCTURE_LINK?: string }).STRUCTURE_LINK = "link";
   (globalThis as { RESOURCE_ENERGY?: string }).RESOURCE_ENERGY = "energy";
   (globalThis as { LOOK_STRUCTURES?: string }).LOOK_STRUCTURES = "structures";
   (globalThis as { LOOK_CONSTRUCTION_SITES?: string }).LOOK_CONSTRUCTION_SITES =
@@ -217,6 +223,65 @@ describe("spawn exit ring stays open", () => {
     });
     const spawnPos = new RoomPosition(25, 25, room.name);
     expect(countFreeSpawnExits(room, spawnPos)).toBe(8);
+  });
+});
+
+describe("storage access ring stays open", () => {
+  test("isStorageAccessTile is the Chebyshev-1 ring", () => {
+    const storagePos = new RoomPosition(25, 27, "W0N0");
+    expect(isStorageAccessTile(storagePos, 26, 27)).toBe(true);
+    expect(isStorageAccessTile(storagePos, 25, 27)).toBe(false);
+    expect(isStorageAccessTile(storagePos, 27, 29)).toBe(false);
+  });
+
+  test("clearStorageAccessRing frees sealed storage by destroying extensions", () => {
+    const room = makeRoom({
+      structures: [
+        { x: 25, y: 27, structureType: "storage", energy: 150_000 },
+        { x: 26, y: 27, structureType: "extension" },
+        { x: 24, y: 27, structureType: "extension" },
+        { x: 25, y: 26, structureType: "extension" },
+        { x: 25, y: 28, structureType: "extension" },
+        { x: 26, y: 26, structureType: "extension" },
+        { x: 26, y: 28, structureType: "extension" },
+        { x: 24, y: 26, structureType: "extension" },
+        { x: 24, y: 28, structureType: "extension" },
+      ],
+    });
+    const storagePos = new RoomPosition(25, 27, room.name);
+    expect(countFreeStorageAccess(room, storagePos)).toBe(0);
+    const cleared = clearStorageAccessRing(room, storagePos);
+    expect(cleared.destroyedStructures).toBeGreaterThanOrEqual(MIN_STORAGE_ACCESS);
+    expect(countFreeStorageAccess(room, storagePos)).toBeGreaterThanOrEqual(
+      MIN_STORAGE_ACCESS,
+    );
+  });
+
+  test("clearStorageAccessRing prefers extensions over links", () => {
+    const room = makeRoom({
+      structures: [
+        { x: 25, y: 27, structureType: "storage", energy: 1000 },
+        { x: 26, y: 27, structureType: "link" },
+        { x: 24, y: 27, structureType: "extension" },
+        { x: 25, y: 26, structureType: "extension" },
+        { x: 25, y: 28, structureType: "extension" },
+        { x: 26, y: 26, structureType: "extension" },
+        { x: 26, y: 28, structureType: "extension" },
+        { x: 24, y: 26, structureType: "extension" },
+        { x: 24, y: 28, structureType: "extension" },
+      ],
+    });
+    const storagePos = new RoomPosition(25, 27, room.name);
+    clearStorageAccessRing(room, storagePos);
+    const linkStillThere = new RoomPosition(26, 27, room.name)
+      .lookFor(LOOK_STRUCTURES)
+      .some(
+        (s) => (s as Structure).structureType === STRUCTURE_LINK,
+      );
+    expect(linkStillThere).toBe(true);
+    expect(countFreeStorageAccess(room, storagePos)).toBeGreaterThanOrEqual(
+      MIN_STORAGE_ACCESS,
+    );
   });
 });
 

@@ -239,18 +239,132 @@ export function tooCloseToWalkwayObstruction(
   return false;
 }
 
+/** Minimum walkable seats next to storage so filler/hauler can withdraw. */
+export const MIN_STORAGE_ACCESS = 2;
+
+/** True if (x,y) is on storage's Chebyshev-range-1 ring. */
+export function isStorageAccessTile(
+  storagePos: RoomPosition,
+  x: number,
+  y: number,
+): boolean {
+  const chebyshev = Math.max(
+    Math.abs(x - storagePos.x),
+    Math.abs(y - storagePos.y),
+  );
+  return chebyshev === 1;
+}
+
+/** Walkable adjacent tiles around storage (roads/containers OK; blockers count). */
+export function countFreeStorageAccess(
+  room: Room,
+  storagePos: RoomPosition,
+): number {
+  let free = 0;
+  for (const [dx, dy] of ADJACENT_DELTAS) {
+    const x = storagePos.x + dx;
+    const y = storagePos.y + dy;
+    if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+    if (!isBuildableTerrain(room, x, y)) continue;
+    const pos = new RoomPosition(x, y, room.name);
+    if (tileHasBlockingStructure(pos)) continue;
+    if (
+      pos
+        .lookFor(LOOK_CONSTRUCTION_SITES)
+        .some((s) => blocksSpawnLanding(s.structureType))
+    ) {
+      continue;
+    }
+    free++;
+  }
+  return free;
+}
+
+/**
+ * Tear down blockers on storage's access ring until ≥ MIN_STORAGE_ACCESS seats.
+ * Prefer extensions, then towers; keep links if possible. Live softlock: spawn
+ * empty while storage full because filler cannot stand next to storage.
+ */
+export function clearStorageAccessRing(
+  room: Room,
+  storagePos: RoomPosition,
+): { removedSites: number; destroyedStructures: number } {
+  let removedSites = 0;
+  let destroyedStructures = 0;
+
+  const accessTiles: RoomPosition[] = [];
+  for (const [dx, dy] of ADJACENT_DELTAS) {
+    const x = storagePos.x + dx;
+    const y = storagePos.y + dy;
+    if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+    accessTiles.push(new RoomPosition(x, y, room.name));
+  }
+
+  for (const pos of accessTiles) {
+    for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES)) {
+      if (!blocksSpawnLanding(site.structureType)) continue;
+      if (site.structureType === STRUCTURE_LINK) continue;
+      if (site.remove() === OK) removedSites++;
+    }
+  }
+
+  const destroyPriority = (type: StructureConstant): number => {
+    if (type === STRUCTURE_EXTENSION) return 0;
+    if (type === STRUCTURE_TOWER) return 1;
+    if (type === STRUCTURE_LINK) return 2;
+    return 3;
+  };
+
+  while (countFreeStorageAccess(room, storagePos) < MIN_STORAGE_ACCESS) {
+    let victim: Structure | null = null;
+    let bestPri = 99;
+    for (const pos of accessTiles) {
+      for (const s of pos.lookFor(LOOK_STRUCTURES)) {
+        const type = s.structureType;
+        if (!blocksSpawnLanding(type)) continue;
+        if (type === STRUCTURE_STORAGE || type === STRUCTURE_SPAWN) continue;
+        const pri = destroyPriority(type);
+        if (pri < bestPri) {
+          bestPri = pri;
+          victim = s as Structure;
+        }
+      }
+    }
+    if (!victim) break;
+    if (victim.destroy() === OK) destroyedStructures++;
+    else break;
+  }
+
+  if (removedSites > 0 || destroyedStructures > 0) {
+    console.log(
+      `[storage-access] ${room.name} cleared sites=${removedSites} structs=${destroyedStructures} free=${countFreeStorageAccess(room, storagePos)}`,
+    );
+  }
+  return { removedSites, destroyedStructures };
+}
+
 /** Tile free for a blocking structure (extension/tower/storage). */
 function isFreeBuildTile(
   room: Room,
   x: number,
   y: number,
   spawnPos?: RoomPosition,
-  opts?: { walkwayBuffer?: boolean },
+  opts?: { walkwayBuffer?: boolean; allowStorageAccess?: boolean },
 ): boolean {
   if (x < 1 || x > 48 || y < 1 || y > 48) return false;
   if (!isBuildableTerrain(room, x, y)) return false;
   if (spawnPos && isHubCorridor(spawnPos, x, y)) return false;
   if (opts?.walkwayBuffer && tooCloseToWalkwayObstruction(room, x, y)) {
+    return false;
+  }
+  const storage = room.storage;
+  if (
+    storage &&
+    !opts?.allowStorageAccess &&
+    isStorageAccessTile(storage.pos, x, y) &&
+    countFreeStorageAccess(room, storage.pos) <= MIN_STORAGE_ACCESS
+  ) {
+    // Do not seal the last filler seats around storage.
     return false;
   }
   const pos = new RoomPosition(x, y, room.name);
@@ -528,6 +642,9 @@ export function tryPlaceStorageLink(
   spawnPos: RoomPosition,
   storagePos: RoomPosition,
 ): boolean {
+  // Links may sit on a storage access tile only while ≥ MIN seats remain after.
+  const allowAccess =
+    countFreeStorageAccess(room, storagePos) > MIN_STORAGE_ACCESS;
   for (const useBuffer of [true, false]) {
     for (const [dx, dy] of HUB_EXTENSION_STAMP) {
       const x = spawnPos.x + dx;
@@ -538,7 +655,10 @@ export function tryPlaceStorageLink(
       );
       if (chebyshev > 2) continue;
       if (
-        !isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: useBuffer })
+        !isFreeBuildTile(room, x, y, spawnPos, {
+          walkwayBuffer: useBuffer,
+          allowStorageAccess: allowAccess,
+        })
       ) {
         continue;
       }

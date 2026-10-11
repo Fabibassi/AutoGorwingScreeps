@@ -39,6 +39,7 @@ import {
 import {
   clearBlockingSitesOnRoads,
   clearSpawnExitRing,
+  clearStorageAccessRing,
   tryPlaceContainer,
   tryPlaceControllerLink,
   tryPlaceExtension,
@@ -127,6 +128,17 @@ export function runConstruction(room: Room): void {
   // Priority 0: never seal the spawn — creeps cannot walk through structures.
   const cleared = clearSpawnExitRing(room, spawn.pos);
   if (cleared.removedSites > 0 || cleared.destroyedStructures > 0) return;
+  // Priority 0b: never seal storage — filler withdraw needs ≥2 adjacent seats.
+  // Live W21N35: extensions boxed storage → spawn~empty while storage~150k (T1 spiral).
+  if (room.storage) {
+    const storageClear = clearStorageAccessRing(room, room.storage.pos);
+    if (
+      storageClear.removedSites > 0 ||
+      storageClear.destroyedStructures > 0
+    ) {
+      return;
+    }
+  }
   // Extensions on roads plug the hub corridors (live W21N35 south exit).
   if (clearBlockingSitesOnRoads(room) > 0) return;
 
