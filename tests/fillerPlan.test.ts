@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   FILLER_PLANS,
   fillerMaxCostForPlan,
@@ -7,7 +7,7 @@ import {
   parseFillerPlan,
 } from "../src/earlyGame/fillerPlan";
 import { bodyForRole } from "../src/earlyGame/bodies";
-import { fillerTargetCarry } from "../src/spawn";
+import { fillerTargetCarry, promoteHaulerToFiller } from "../src/spawn";
 
 describe("fillerPlan", () => {
   test("parse defaults to fat (live softlock override)", () => {
@@ -61,5 +61,25 @@ describe("fillerPlan", () => {
   test("fillerTargetCarry matches CARRY+MOVE pairs in budget", () => {
     expect(fillerTargetCarry(300)).toBe(3);
     expect(fillerTargetCarry(800)).toBe(8);
+  });
+});
+
+describe("promoteHaulerToFiller", () => {
+  test("promotes fattest hauler when no mid filler and ≥2 haulers", () => {
+    vi.stubGlobal("CARRY", "carry");
+    const room = { name: "W1N1" } as Room;
+    const thin = {
+      room,
+      memory: { role: "hauler" },
+      getActiveBodyparts: (p: string) => (p === "carry" ? 2 : 0),
+    };
+    const fat = {
+      room,
+      memory: { role: "hauler" },
+      getActiveBodyparts: (p: string) => (p === "carry" ? 6 : 0),
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { a: thin, b: fat } };
+    expect(promoteHaulerToFiller(room, 8)).toBe(true);
+    expect(fat.memory.role).toBe("filler");
   });
 });
