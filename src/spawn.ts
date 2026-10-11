@@ -23,6 +23,7 @@ import {
   sourceIdForReplacementMiner,
 } from "./earlyGame/minerHandoff";
 import { resolveExperiment } from "./earlyGame/experimentPolicy";
+import { fillerMaxCostForPlan } from "./earlyGame/fillerPlan";
 import {
   countCreepsByRole,
   countSourceContainers,
@@ -460,6 +461,68 @@ export function recycleWeakMiners(
   return false;
 }
 
+/** CARRY parts for a full-budget filler (100 energy per CARRY+MOVE pair). */
+export function fillerTargetCarry(maxCost: number): number {
+  return Math.max(1, Math.floor(maxCost / 100));
+}
+
+export function countStrongFillers(
+  roomName: string,
+  minCarry: number,
+): number {
+  let n = 0;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== roomName) continue;
+    if (creep.memory.role !== "filler") continue;
+    if (creep.getActiveBodyparts(CARRY) >= minCarry) n += 1;
+  }
+  return n;
+}
+
+/**
+ * After a fat filler is online, recycle thin leftover so quota stays at 1.
+ */
+export function recycleWeakFillers(
+  spawn: StructureSpawn,
+  minCarry: number,
+  energyAvailable: number,
+  targetCost: number,
+): boolean {
+  if (spawn.spawning) return false;
+  if (minCarry <= 3) return false;
+  if (energyAvailable < targetCost) return false;
+
+  let strongCount = 0;
+  let best: Creep | null = null;
+  let bestCarry = Infinity;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== spawn.room.name) continue;
+    if (creep.memory.role !== "filler") continue;
+    const carry = creep.getActiveBodyparts(CARRY);
+    if (carry >= minCarry) {
+      strongCount += 1;
+      continue;
+    }
+    if (
+      !best ||
+      carry < bestCarry ||
+      (carry === bestCarry && creep.pos.isNearTo(spawn))
+    ) {
+      best = creep;
+      bestCarry = carry;
+    }
+  }
+  if (!best || strongCount === 0) return false;
+
+  if (best.pos.isNearTo(spawn)) {
+    return spawn.recycleCreep(best) === OK;
+  }
+  best.moveTo(spawn);
+  return false;
+}
+
 function clearHaulerRecycling(roomName: string): void {
   markHaulerRecycling(roomName, null);
 }
@@ -601,6 +664,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     sourceContainerEnergy: sumSourceContainerEnergy(room),
     rcl5Mode: Memory.ags?.rcl5Mode,
     rcl5Plan: Memory.ags?.rcl5Plan,
+    fillerPlan: Memory.ags?.fillerPlan,
     extensionCount:
       countStructures(room, STRUCTURE_EXTENSION) +
       room
@@ -817,6 +881,13 @@ export function runSpawn(spawn: StructureSpawn): void {
   ) {
     return;
   }
+  const fillerMaxCost = fillerMaxCostForPlan(Memory.ags?.fillerPlan);
+  const fillerMinCarry = fillerTargetCarry(fillerMaxCost);
+  if (
+    recycleWeakFillers(spawn, fillerMinCarry, energyAvailable, fillerMaxCost)
+  ) {
+    return;
+  }
   const economyFloorMet =
     liveCounts.harvester + liveCounts.miner >= sourceCount;
   const minersBelowQuota =
@@ -860,8 +931,13 @@ export function runSpawn(spawn: StructureSpawn): void {
             buildersBelowQuota
             ? liveCounts.hauler
             : haulersDurable
-          : liveCounts[role];
+          : role === "filler" && fillerMaxCost > 300
+            ? // Thin leftover must not block the fat refill upgrade.
+              countStrongFillers(room.name, fillerMinCarry)
+            : liveCounts[role];
     if (filled >= roleWant) continue;
+    // Wait for a full-budget fat filler — partial bodies keep the softlock.
+    if (role === "filler" && energyAvailable < fillerMaxCost) continue;
     if (
       role === "harvester" &&
       liveCounts.miner > 0 &&
@@ -910,6 +986,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       role === "miner" && roleMinerMinWork < minerMinWork;
     const body = bodyForRole(role, energyAvailable, {
       haulerMaxCost,
+      fillerMaxCost: fillerMaxCostForPlan(Memory.ags?.fillerPlan),
       minerMinWork: roleMinerMinWork,
       minerMaxWork: bridgingThin ? roleMinerMinWork : undefined,
     });

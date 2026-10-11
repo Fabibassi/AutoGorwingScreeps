@@ -16,6 +16,18 @@
 
 **Live:** Deploy main + sticky `Memory.ags.rcl5Plan=link_boost` (Code: PR [#60](https://github.com/Fabibassi/AutoGorwingScreeps/pull/60); Arming nach Confirm).
 
+### Filler-Größe (hub bench 20k + live override)
+
+Sim: `thin` gewann auf floorOk. **Live** (Probe 2026-10-11): hub≈162 bei storage≈120k mit 1× thin → Softlock. **Live-Arm = `fat`.**
+
+| Plan | ok | floorOk | starveMedian | meanHub | minStorage |
+|------|----|---------|--------------|---------|------------|
+| thin (sim) | 1/1 | ✅ | **418** | 1273 | 73 046 |
+| fat (sim) | 0/1 | ❌ | 802 | 1239 | 0 |
+| duo_fat (sim) | 0/1 | ❌ | 2352 | 999 | 0 |
+
+Live: sticky `Memory.ags.fillerPlan=fat` (auto-arm nach Hub; thin/duo nur Sim).
+
 | Priorität | Was | Warum |
 |-----------|-----|--------|
 | P0 done | Hub: 30 Ext + 2 Towers | RCL5 Cap + Defense; live erledigt |

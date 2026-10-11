@@ -995,8 +995,14 @@ describe("bodyForRole", () => {
     );
   });
 
-  test("filler is a small hub hauler capped at 300", () => {
+  test("filler defaults to thin hub hauler capped at 300", () => {
     expect(bodyForRole("filler", 800)).toEqual(bodyForRole("hauler", 300));
+  });
+
+  test("filler can grow when fillerMaxCost is raised", () => {
+    expect(bodyForRole("filler", 800, { fillerMaxCost: 800 })).toEqual(
+      bodyForRole("hauler", 800),
+    );
   });
 
   test("worker refuses WORK+MOVE bootstrap (carry-less creeps cannot refill spawn)", () => {

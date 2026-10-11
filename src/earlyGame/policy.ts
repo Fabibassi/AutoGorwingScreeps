@@ -6,6 +6,7 @@ import {
   type ExperimentProfile,
   BASELINE_PROFILE,
 } from "./experimentPolicy";
+import { fillerQuotaForPlan } from "./fillerPlan";
 import {
   applyRcl5ModeQuotas,
   applyRcl5PlanQuotas,
@@ -170,6 +171,8 @@ export interface EconomyContext {
   linkCount?: number;
   /** Post-hub RCL5 plan (link_boost | none). */
   rcl5Plan?: string;
+  /** Hub filler sizing: thin | fat | duo_fat. */
+  fillerPlan?: string;
 }
 
 /**
@@ -606,7 +609,9 @@ export function desiredCreeps(
   const fill = (q: Omit<CreepQuotas, "filler">): CreepQuotas => {
     const out: CreepQuotas = {
       ...q,
-      filler: economy?.hasStorage ? 1 : 0,
+      filler: economy?.hasStorage
+        ? fillerQuotaForPlan(economy?.fillerPlan)
+        : 0,
     };
     // RCL2+: never park the downgrade timer (wipe / infra / extension push).
     if (rcl >= 2) out.upgrader = Math.max(1, out.upgrader);
@@ -772,7 +777,9 @@ export function desiredCreeps(
             ? Math.min(2, Math.max(1, infraBuilders))
             : Math.max(4, infraBuilders)
           : 0,
-    filler: economy?.hasStorage ? 1 : 0,
+    filler: economy?.hasStorage
+      ? fillerQuotaForPlan(economy?.fillerPlan)
+      : 0,
   };
 
   if (needsBootstrapHarvester(true, economy)) {
