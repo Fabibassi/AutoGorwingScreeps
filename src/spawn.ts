@@ -36,6 +36,7 @@ import {
   sumSourceContainerEnergy,
 } from "./room/queries";
 import { storageBlackoutReserve } from "./roles/hauler";
+import { trySpawnRemote } from "./spawnRemote";
 
 export { desiredCreeps, type CreepQuotas };
 
@@ -1086,4 +1087,11 @@ export function runSpawn(spawn: StructureSpawn): void {
       return;
     }
   }
+
+  // Home queue empty / unaffordable this tick — try post-RCL6 remotes.
+  trySpawnRemote(spawn, {
+    homeMiners: liveCounts.miner,
+    homeMinerWant: minerSeatWant,
+    homeFillers: liveCounts.filler,
+  });
 }

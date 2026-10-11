@@ -4,11 +4,13 @@ import {
   maybeArmRcl5PostHubMode,
   maybeArmRcl5PostHubPlan,
 } from "./earlyGame/rcl5Mode";
+import { maybeArmRemotePlanPostRcl6 } from "./earlyGame/remotePlan";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
 import { runLinks } from "./links";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
+import { runRemoteConstruction } from "./remote/run";
 import { healCreepRoles, pickHomeRoom } from "./room/queries";
 import { runCreep } from "./roles";
 import { maybeUpdateHealthCheck } from "./selfCheck";
@@ -35,6 +37,10 @@ export function loop(): void {
   const rcl5ModeSticky = Memory.ags?.rcl5Mode;
   const rcl5PlanSticky = Memory.ags?.rcl5Plan;
   const fillerPlanSticky = Memory.ags?.fillerPlan;
+  const remotePlanSticky = Memory.ags?.remotePlan;
+  const remoteRoomSticky = Memory.ags?.remoteRoom;
+  const remotePathLengthSticky = Memory.ags?.remotePathLength;
+  const remoteVariantSticky = Memory.ags?.remoteVariant;
   const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
   const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
   const wallPolicySticky = Memory.ags?.wallPolicy;
@@ -122,6 +128,15 @@ export function loop(): void {
     if (rcl5PlanNow) Memory.ags.rcl5Plan = rcl5PlanNow;
     const fillerPlanNow = Memory.ags?.fillerPlan ?? fillerPlanSticky;
     if (fillerPlanNow) Memory.ags.fillerPlan = fillerPlanNow;
+    const remotePlanNow = Memory.ags?.remotePlan ?? remotePlanSticky;
+    if (remotePlanNow) Memory.ags.remotePlan = remotePlanNow;
+    const remoteRoomNow = Memory.ags?.remoteRoom ?? remoteRoomSticky;
+    if (remoteRoomNow) Memory.ags.remoteRoom = remoteRoomNow;
+    if (Memory.ags?.remotePathLength == null && remotePathLengthSticky != null) {
+      Memory.ags.remotePathLength = remotePathLengthSticky;
+    }
+    const remoteVariantNow = Memory.ags?.remoteVariant ?? remoteVariantSticky;
+    if (remoteVariantNow) Memory.ags.remoteVariant = remoteVariantNow;
     // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
     const armed = maybeArmRcl5AftercareMode(rcl, Memory.ags?.rcl5Mode);
     if (armed) Memory.ags.rcl5Mode = armed;
@@ -155,6 +170,18 @@ export function loop(): void {
         { extensions, towers },
       );
       if (fillerArmed) Memory.ags.fillerPlan = fillerArmed;
+      const remoteArmed = maybeArmRemotePlanPostRcl6(
+        rcl,
+        Memory.ags?.remotePlan,
+        { storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0 },
+      );
+      if (remoteArmed) Memory.ags.remotePlan = remoteArmed;
+      try {
+        runRemoteConstruction(room);
+      } catch (e) {
+        console.log("remote construction error", e);
+        errorsThisTick++;
+      }
     }
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
@@ -176,6 +203,15 @@ export function loop(): void {
     if (rcl5PlanKeep) Memory.ags.rcl5Plan = rcl5PlanKeep;
     const fillerPlanKeep = Memory.ags?.fillerPlan ?? fillerPlanSticky;
     if (fillerPlanKeep) Memory.ags.fillerPlan = fillerPlanKeep;
+    const remotePlanKeep = Memory.ags?.remotePlan ?? remotePlanSticky;
+    if (remotePlanKeep) Memory.ags.remotePlan = remotePlanKeep;
+    const remoteRoomKeep = Memory.ags?.remoteRoom ?? remoteRoomSticky;
+    if (remoteRoomKeep) Memory.ags.remoteRoom = remoteRoomKeep;
+    if (Memory.ags?.remotePathLength == null && remotePathLengthSticky != null) {
+      Memory.ags.remotePathLength = remotePathLengthSticky;
+    }
+    const remoteVariantKeep = Memory.ags?.remoteVariant ?? remoteVariantSticky;
+    if (remoteVariantKeep) Memory.ags.remoteVariant = remoteVariantKeep;
     const wallPolicyKeep = Memory.ags?.wallPolicy ?? wallPolicySticky;
     if (wallPolicyKeep) Memory.ags.wallPolicy = wallPolicyKeep;
     if (Memory.ags?.wallsArmed || wallsArmedSticky) {

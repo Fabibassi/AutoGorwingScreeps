@@ -89,6 +89,20 @@ export interface AgsMemory {
    */
   fillerPlan?: string;
   /**
+   * Post-RCL6 remote plan: off (default) | drop_unreserved | reserved_drop |
+   * reserved_container. home_only aliases off.
+   */
+  remotePlan?: string;
+  /** Adjacent room name for remote mining (sim / sticky). */
+  remoteRoom?: string;
+  /** Approximate one-way haul tiles for remote hauler quota (sim). */
+  remotePathLength?: number;
+  /**
+   * reserved_drop tuning: baseline | fat_hauler | thin_hauler | lean_haul |
+   * fat_haul | fat_miner | dual_claim
+   */
+  remoteVariant?: string;
+  /**
    * Convert surplus builders → upgraders when quota drops (no sites).
    * Default true; set false for sim control arms.
    */
@@ -134,6 +148,12 @@ declare global {
     haulWithdrawn?: number;
     /** Park until death — TTL too short for another haul trip. */
     haulRetire?: boolean;
+    /** Remote mining target room. */
+    targetRoom?: string;
+    /** Home room for remote haulers delivering to storage. */
+    homeRoom?: string;
+    /** Remote hauler returning with energy. */
+    hauling?: boolean;
   }
   interface Memory {
     ags?: AgsMemory;
