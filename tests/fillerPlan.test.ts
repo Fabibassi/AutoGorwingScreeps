@@ -5,6 +5,7 @@ import {
   fillerQuotaForPlan,
   maybeArmFillerPlanPostHub,
   parseFillerPlan,
+  shouldDeferFatFillerSpawn,
 } from "../src/earlyGame/fillerPlan";
 import { bodyForRole } from "../src/earlyGame/bodies";
 import { fillerTargetCarry, promoteHaulerToFiller } from "../src/spawn";
@@ -62,6 +63,27 @@ describe("fillerPlan", () => {
     expect(fillerTargetCarry(300)).toBe(3);
     expect(fillerTargetCarry(800)).toBe(8);
   });
+
+  test("shouldDeferFatFillerSpawn never blocks when zero fillers", () => {
+    expect(
+      shouldDeferFatFillerSpawn({
+        fillerMaxCost: 800,
+        energyAvailable: 150,
+        liveFillerCount: 0,
+        midFillerCount: 0,
+        roleWant: 1,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeferFatFillerSpawn({
+        fillerMaxCost: 800,
+        energyAvailable: 150,
+        liveFillerCount: 1,
+        midFillerCount: 0,
+        roleWant: 1,
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("promoteHaulerToFiller", () => {
@@ -81,5 +103,18 @@ describe("promoteHaulerToFiller", () => {
     (globalThis as { Game?: unknown }).Game = { creeps: { a: thin, b: fat } };
     expect(promoteHaulerToFiller(room, 8)).toBe(true);
     expect(fat.memory.role).toBe("filler");
+  });
+
+  test("emergency: promotes sole thin hauler when zero fillers", () => {
+    vi.stubGlobal("CARRY", "carry");
+    const room = { name: "W1N1" } as Room;
+    const only = {
+      room,
+      memory: { role: "hauler" },
+      getActiveBodyparts: (p: string) => (p === "carry" ? 1 : 0),
+    };
+    (globalThis as { Game?: unknown }).Game = { creeps: { a: only } };
+    expect(promoteHaulerToFiller(room, 8)).toBe(true);
+    expect(only.memory.role).toBe("filler");
   });
 });

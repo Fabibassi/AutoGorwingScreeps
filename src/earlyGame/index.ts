@@ -98,5 +98,6 @@ export {
   isFillerPlan,
   maybeArmFillerPlanPostHub,
   parseFillerPlan,
+  shouldDeferFatFillerSpawn,
   type FillerPlan,
 } from "./fillerPlan";
