@@ -60,3 +60,26 @@ export function fillerMaxCostForPlan(
       return 300;
   }
 }
+
+/**
+ * Fat-filler upgrade deferral. NEVER defer when the hub has zero fillers —
+ * that softlocks (need filler to refill spawn to afford a fat body).
+ */
+export function shouldDeferFatFillerSpawn(opts: {
+  fillerMaxCost: number;
+  energyAvailable: number;
+  liveFillerCount: number;
+  midFillerCount: number;
+  roleWant: number;
+}): boolean {
+  if (opts.fillerMaxCost <= 300) return false;
+  if (opts.liveFillerCount <= 0) return false;
+  if (opts.energyAvailable < 400) return true;
+  if (
+    opts.midFillerCount >= opts.roleWant &&
+    opts.energyAvailable < opts.fillerMaxCost
+  ) {
+    return true;
+  }
+  return false;
+}
