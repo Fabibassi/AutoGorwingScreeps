@@ -5,6 +5,7 @@ import {
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
   maybeArmRcl5PostHubPlan,
+  maybeArmRcl6SpendMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
   shouldPlaceRcl5Links,
@@ -54,6 +55,31 @@ describe("rcl5Mode", () => {
     ).toBeUndefined();
     expect(
       maybeArmRcl5PostHubMode(4, "build_heavy", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
+  });
+
+  test("maybeArmRcl6SpendMode switches fat_first → upgrade_rush at RCL6 with remotes", () => {
+    expect(
+      maybeArmRcl6SpendMode(5, "fat_first", { remotePlan: "reserved_drop" }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: "off" }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: "reserved_drop" }),
+    ).toBe("upgrade_rush");
+    expect(
+      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: undefined }),
+    ).toBe("upgrade_rush");
+    expect(
+      maybeArmRcl6SpendMode(6, "upgrade_rush", {
+        remotePlan: "reserved_drop",
+      }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl6SpendMode(6, "build_heavy", {
+        remotePlan: "reserved_drop",
+      }),
     ).toBeUndefined();
   });
 

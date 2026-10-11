@@ -105,6 +105,25 @@ export function maybeArmRcl5PostHubMode(
 }
 
 /**
+ * Post-RCL6 spend (rcl6-spend bench 2026-10-11, 5k ticks):
+ * with remotes on, upgrade_rush beats fat_first on netStorage and progress
+ * while floorOk. Never arm when remotePlan is explicitly off (home-only
+ * upgrade_rush blackout risk from Wave-2).
+ */
+export function maybeArmRcl6SpendMode(
+  rcl: number,
+  currentMode: string | undefined,
+  opts: { remotePlan?: string },
+): Rcl5Mode | undefined {
+  if (rcl < 6) return undefined;
+  const remote = opts.remotePlan;
+  if (remote === "off" || remote === "home_only") return undefined;
+  if (currentMode === "upgrade_rush") return undefined;
+  if (currentMode === "fat_first") return "upgrade_rush";
+  return undefined;
+}
+
+/**
  * After hub-ready, arm link_boost plan (gameplan confirm 2026-10-11:
  * RCL6 @132k vs no-links ETA ~173k). Skip explicit none/off control arms.
  */

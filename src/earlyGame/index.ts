@@ -84,6 +84,7 @@ export {
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
   maybeArmRcl5PostHubPlan,
+  maybeArmRcl6SpendMode,
   parseRcl5Mode,
   parseRcl5Plan,
   rcl5ModePausesExtensionSpam,
