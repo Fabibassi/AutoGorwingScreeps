@@ -47,6 +47,8 @@
     "sim:remote:income": "npm run build && tsx ops/sim/remoteIncome.ts",
     "sim:remote:income:bench": "tsx ops/sim/remoteIncomeBench.ts --replicates 1 --ticks 15000 --concurrency 2 --base-port 28500",
     "sim:remote:variant:bench": "tsx ops/sim/remoteVariantBench.ts --replicates 1 --ticks 12000 --concurrency 2 --base-port 28600",
+    "sim:rcl6:spend": "npm run build && tsx ops/sim/rcl6Spend.ts",
+    "sim:rcl6:spend:bench": "tsx ops/sim/rcl6SpendBench.ts --ticks 12000 --base-port 29600",
     "sim:rcl5:gameplan": "tsx ops/sim/rcl5ToRcl6Bench.ts --modes fat_first --plans fat_first,link_boost --replicates 1 --ticks 50000 --concurrency 2 --base-port 27900",
     "sim:real:loop": "npm run build && tsx ops/sim/realLoop.ts --max-rounds 20 --ticks 50000",
     "sim:master": "tsx ops/sim/masterAgent.ts",
