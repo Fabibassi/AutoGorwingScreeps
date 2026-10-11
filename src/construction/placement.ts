@@ -284,6 +284,9 @@ export function countFreeStorageAccess(
  * Tear down blockers on storage's access ring until ≥ MIN_STORAGE_ACCESS seats.
  * Prefer extensions, then towers; keep links if possible. Live softlock: spawn
  * empty while storage full because filler cannot stand next to storage.
+ *
+ * Blocking sites on the ring are always removed (links exempt). Placement must
+ * not re-site there — otherwise place→clear thrash under storage (live W21N35).
  */
 export function clearStorageAccessRing(
   room: Room,
@@ -361,10 +364,9 @@ function isFreeBuildTile(
   if (
     storage &&
     !opts?.allowStorageAccess &&
-    isStorageAccessTile(storage.pos, x, y) &&
-    countFreeStorageAccess(room, storage.pos) <= MIN_STORAGE_ACCESS
+    isStorageAccessTile(storage.pos, x, y)
   ) {
-    // Do not seal the last filler seats around storage.
+    // Entire Chebyshev-1 ring stays walkable for filler/hauler (links may opt in).
     return false;
   }
   const pos = new RoomPosition(x, y, room.name);
