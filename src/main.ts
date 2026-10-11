@@ -3,6 +3,7 @@ import {
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
   maybeArmRcl5PostHubPlan,
+  maybeArmRcl6SpendMode,
 } from "./earlyGame/rcl5Mode";
 import { maybeArmRemotePlanPostRcl6 } from "./earlyGame/remotePlan";
 import { applyParsedMemoryReuse } from "./loop/memHack";
@@ -176,6 +177,11 @@ export function loop(): void {
         { storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0 },
       );
       if (remoteArmed) Memory.ags.remotePlan = remoteArmed;
+      // rcl6-spend bench: fat_first → upgrade_rush once remotes are in play.
+      const rcl6Spend = maybeArmRcl6SpendMode(rcl, Memory.ags?.rcl5Mode, {
+        remotePlan: Memory.ags?.remotePlan,
+      });
+      if (rcl6Spend) Memory.ags.rcl5Mode = rcl6Spend;
       try {
         runRemoteConstruction(room);
       } catch (e) {

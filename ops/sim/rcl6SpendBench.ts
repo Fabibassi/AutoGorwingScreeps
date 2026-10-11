@@ -127,7 +127,6 @@ async function main(): Promise<void> {
     const progressGain = Number(reason.match(/progressGain=(\d+)/)?.[1] ?? NaN);
     const floorOk = /floorOk=1/.test(reason);
     rows.push({
-      key: arm.key,
       ...arm,
       ok: Boolean(live?.ok),
       floorOk,
