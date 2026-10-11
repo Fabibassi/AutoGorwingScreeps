@@ -87,8 +87,15 @@ function makeRoom(opts: {
     "sites";
   (globalThis as { OK?: number }).OK = 0;
 
+  const storageSpec = (opts.structures ?? []).find(
+    (s) => s.structureType === "storage",
+  );
+
   const room = {
     name: "W0N0",
+    storage: storageSpec
+      ? { pos: new RoomPosition(storageSpec.x, storageSpec.y, "W0N0") }
+      : undefined,
     find(type: number) {
       if (type === 111) {
         const out: Array<FakeSite & { pos: RoomPosition }> = [];
@@ -282,6 +289,51 @@ describe("storage access ring stays open", () => {
     expect(countFreeStorageAccess(room, storagePos)).toBeGreaterThanOrEqual(
       MIN_STORAGE_ACCESS,
     );
+  });
+
+  test("place↔clear thrash: clear drops under-storage site and place does not recreate it", () => {
+    // Live W21N35: extension site south of storage removed every tick, then
+    // re-placed because isFreeBuildTile allowed surplus access seats.
+    const storage = { x: 25, y: 27 };
+    const spawn = { x: 25, y: 25 };
+    const occupied = HUB_EXTENSION_STAMP.filter(([dx, dy]) => {
+      const x = spawn.x + dx;
+      const y = spawn.y + dy;
+      const chebyshev = Math.max(
+        Math.abs(x - storage.x),
+        Math.abs(y - storage.y),
+      );
+      return chebyshev !== 1;
+    }).map(([dx, dy]) => ({
+      x: spawn.x + dx,
+      y: spawn.y + dy,
+      structureType: "extension" as const,
+    }));
+    const room = makeRoom({
+      structures: [
+        { x: storage.x, y: storage.y, structureType: "storage", energy: 50_000 },
+        ...occupied,
+      ],
+      sites: [{ x: 25, y: 28, structureType: "extension" }],
+    });
+    const storagePos = new RoomPosition(storage.x, storage.y, room.name);
+    const spawnPos = new RoomPosition(spawn.x, spawn.y, room.name);
+
+    const cleared = clearStorageAccessRing(room, storagePos);
+    expect(cleared.removedSites).toBe(1);
+    expect(
+      new RoomPosition(25, 28, room.name).lookFor(LOOK_CONSTRUCTION_SITES),
+    ).toHaveLength(0);
+
+    tryPlaceExtension(room, spawnPos);
+    const sites = room.find(FIND_CONSTRUCTION_SITES) as Array<{
+      pos: RoomPosition;
+    }>;
+    for (const site of sites) {
+      expect(isStorageAccessTile(storagePos, site.pos.x, site.pos.y)).toBe(
+        false,
+      );
+    }
   });
 });
 
