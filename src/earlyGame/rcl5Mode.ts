@@ -105,6 +105,22 @@ export function maybeArmRcl5PostHubMode(
 }
 
 /**
+ * After hub-ready, arm link_boost plan (gameplan confirm 2026-10-11:
+ * RCL6 @132k vs no-links ETA ~173k). Skip explicit none/off control arms.
+ */
+export function maybeArmRcl5PostHubPlan(
+  rcl: number,
+  currentPlan: string | undefined,
+  opts: { extensions: number; towers: number },
+): Rcl5Plan | undefined {
+  if (rcl < 5) return undefined;
+  if (opts.extensions < 30 || opts.towers < 2) return undefined;
+  if (currentPlan === "none" || currentPlan === "off") return undefined;
+  if (currentPlan === "link_boost") return undefined;
+  return "link_boost";
+}
+
+/**
  * After storage exists at RCL4+, reshape quotas for the RCL5 climb experiment.
  * Remotes are intentionally out of scope — home controller is the sink.
  */

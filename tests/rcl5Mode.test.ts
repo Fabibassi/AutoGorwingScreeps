@@ -4,6 +4,7 @@ import {
   applyRcl5PlanQuotas,
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
+  maybeArmRcl5PostHubPlan,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
   shouldPlaceRcl5Links,
@@ -53,6 +54,24 @@ describe("rcl5Mode", () => {
     ).toBeUndefined();
     expect(
       maybeArmRcl5PostHubMode(4, "build_heavy", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
+  });
+
+  test("maybeArmRcl5PostHubPlan arms link_boost after hub (gameplan confirm)", () => {
+    expect(
+      maybeArmRcl5PostHubPlan(5, undefined, { extensions: 30, towers: 2 }),
+    ).toBe("link_boost");
+    expect(
+      maybeArmRcl5PostHubPlan(5, "fat_first", { extensions: 30, towers: 2 }),
+    ).toBe("link_boost");
+    expect(
+      maybeArmRcl5PostHubPlan(5, "link_boost", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl5PostHubPlan(5, "none", { extensions: 30, towers: 2 }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl5PostHubPlan(5, undefined, { extensions: 29, towers: 2 }),
     ).toBeUndefined();
   });
 
