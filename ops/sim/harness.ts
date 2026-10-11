@@ -233,6 +233,17 @@ export async function setBotRcl5Plan(
   );
 }
 
+/** Inject hub filler plan (thin | fat | duo_fat). */
+export async function setBotFillerPlan(
+  bot: SimBot,
+  plan: string,
+): Promise<void> {
+  const safe = plan.replace(/[^a-z0-9_]/gi, "");
+  await bot.console(
+    `${ensureAgsPreamble()} Memory.ags.fillerPlan = "${safe}";`,
+  );
+}
+
 /** Kill every live creep and clear haul reservations (wipe-recovery sims). */
 export async function wipeAllCreeps(bot: SimBot): Promise<void> {
   await bot.console(

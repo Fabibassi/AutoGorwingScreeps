@@ -1,3 +1,4 @@
+import { maybeArmFillerPlanPostHub } from "./earlyGame/fillerPlan";
 import {
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
@@ -33,6 +34,7 @@ export function loop(): void {
   const profileSticky = Memory.ags?.profile;
   const rcl5ModeSticky = Memory.ags?.rcl5Mode;
   const rcl5PlanSticky = Memory.ags?.rcl5Plan;
+  const fillerPlanSticky = Memory.ags?.fillerPlan;
   const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
   const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
 
@@ -115,6 +117,8 @@ export function loop(): void {
     if (rcl5ModeNow) Memory.ags.rcl5Mode = rcl5ModeNow;
     const rcl5PlanNow = Memory.ags?.rcl5Plan ?? rcl5PlanSticky;
     if (rcl5PlanNow) Memory.ags.rcl5Plan = rcl5PlanNow;
+    const fillerPlanNow = Memory.ags?.fillerPlan ?? fillerPlanSticky;
+    if (fillerPlanNow) Memory.ags.fillerPlan = fillerPlanNow;
     // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
     const armed = maybeArmRcl5AftercareMode(rcl, Memory.ags?.rcl5Mode);
     if (armed) Memory.ags.rcl5Mode = armed;
@@ -141,6 +145,13 @@ export function loop(): void {
         towers,
       });
       if (postHubPlan) Memory.ags.rcl5Plan = postHubPlan;
+      // Live softlock: thin leaves hub ~empty with fat storage → arm fat.
+      const fillerArmed = maybeArmFillerPlanPostHub(
+        rcl,
+        Memory.ags?.fillerPlan,
+        { extensions, towers },
+      );
+      if (fillerArmed) Memory.ags.fillerPlan = fillerArmed;
     }
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
@@ -160,6 +171,8 @@ export function loop(): void {
     if (rcl5ModeKeep) Memory.ags.rcl5Mode = rcl5ModeKeep;
     const rcl5PlanKeep = Memory.ags?.rcl5Plan ?? rcl5PlanSticky;
     if (rcl5PlanKeep) Memory.ags.rcl5Plan = rcl5PlanKeep;
+    const fillerPlanKeep = Memory.ags?.fillerPlan ?? fillerPlanSticky;
+    if (fillerPlanKeep) Memory.ags.fillerPlan = fillerPlanKeep;
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }

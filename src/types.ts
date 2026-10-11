@@ -85,6 +85,10 @@ export interface AgsMemory {
    */
   rcl5Plan?: string;
   /**
+   * Hub filler sizing: fat (live default) | thin | duo_fat (sim A/B).
+   */
+  fillerPlan?: string;
+  /**
    * Convert surplus builders → upgraders when quota drops (no sites).
    * Default true; set false for sim control arms.
    */

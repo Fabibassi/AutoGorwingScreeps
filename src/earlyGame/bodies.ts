@@ -85,6 +85,8 @@ export function bodyForRole(
   energyAvailable: number,
   opts?: {
     haulerMaxCost?: number;
+    /** Cap filler CARRY+MOVE budget (default 300 thin). */
+    fillerMaxCost?: number;
     minerMinWork?: number;
     /** Cap WORK when bridging (e.g. 1W only — do not grow into 2–4W mid bodies). */
     minerMaxWork?: number;
@@ -97,9 +99,12 @@ export function bodyForRole(
         maxWork: opts?.minerMaxWork,
       });
     case "hauler":
+      return buildHaulerBody(energyAvailable, {
+        maxCost: opts?.haulerMaxCost,
+      });
     case "filler":
       return buildHaulerBody(energyAvailable, {
-        maxCost: role === "filler" ? 300 : opts?.haulerMaxCost,
+        maxCost: opts?.fillerMaxCost ?? 300,
       });
     case "builder":
     case "harvester":
