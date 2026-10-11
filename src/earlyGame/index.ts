@@ -101,3 +101,14 @@ export {
   shouldDeferFatFillerSpawn,
   type FillerPlan,
 } from "./fillerPlan";
+export {
+  WALL_ARM_MIN_RCL,
+  WALL_ARM_MIN_STORAGE,
+  decideWallArm,
+  maybeArmWalls,
+  parseWallPolicy,
+  shouldPlaceHubRamparts,
+  type WallArmDecision,
+  type WallArmInput,
+  type WallPolicy,
+} from "./wallArm";

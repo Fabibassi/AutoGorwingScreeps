@@ -99,6 +99,14 @@ export interface AgsMemory {
    */
   storageBlackoutReserve?: number;
   /**
+   * Wall/rampart arming: auto (default) | off | force | raid_only (sim).
+   */
+  wallPolicy?: string;
+  /** Sticky: hub ramparts armed (economy or raid at RCL≥6). */
+  wallsArmed?: boolean;
+  /** Last arm reason from decideWallArm. */
+  wallArmReason?: string;
+  /**
    * Active hauler pickup reservations (haulerName → order).
    * See src/logistics/haulOrders.ts.
    */

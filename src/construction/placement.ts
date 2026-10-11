@@ -578,6 +578,32 @@ export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
 }
 
 /** Tower in a stamp pocket near spawn (same diamond gaps as extensions). */
+/**
+ * Place rampart sites on spawn (+ storage) tiles when walls are armed.
+ * Ramparts share the structure tile and are the only early "gate" that matters.
+ */
+export function tryPlaceHubRamparts(room: Room): boolean {
+  const anchors: RoomPosition[] = [];
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
+  if (spawn) anchors.push(spawn.pos);
+  if (room.storage) anchors.push(room.storage.pos);
+
+  for (const pos of anchors) {
+    const hasRampart = pos
+      .lookFor(LOOK_STRUCTURES)
+      .some((s) => s.structureType === STRUCTURE_RAMPART);
+    if (hasRampart) continue;
+    const hasSite = pos
+      .lookFor(LOOK_CONSTRUCTION_SITES)
+      .some((s) => s.structureType === STRUCTURE_RAMPART);
+    if (hasSite) continue;
+    if (room.createConstructionSite(pos, STRUCTURE_RAMPART) === OK) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function tryPlaceTower(room: Room, spawnPos: RoomPosition): boolean {
   for (const useBuffer of [true, false]) {
     for (const [dx, dy] of HUB_EXTENSION_STAMP) {
