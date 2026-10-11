@@ -4,14 +4,17 @@
 > Design-Spec: `docs/superpowers/specs/2026-10-11-rcl5-gameplan-design.md`  
 > Live: W21N35 shard3 — Hub fertig, `rcl5Mode=fat_first`, Storage ~170k.
 
-## Verdict (working — sims refine overnight)
+## Verdict (Confirm 160k — fertig)
 
-**Der echte RCL5-Gameplan ist nicht `fat_first`.**  
-`fat_first` ist nur die **Quota-Baseline** (≈3 Upgrader, Storage-Floor OK, ~155k Ticks → RCL6 in Wave-2).  
-Community/OSS-Konsens: **2 Links nutzen** (Storage↔Controller), dann kontrolliert upgraden bis RCL6.
+**RCL5-Gameplan = `link_boost` (Storage↔Controller Links) → Endziel RCL6.**  
+`fat_first` bleibt die Quota nach Hub; ohne Links ist der Push langsamer.
 
-**Code-Stand overnight:** `link_boost` MVP liegt im Tree (`src/links/*`, Placement, Filler/Upgrader, `Memory.ags.rcl5Plan`).  
-Sim-Matrix: `fat_first+none` vs `fat_first+link_boost` → Ranking in `.sim-learn/rcl5-gameplan-status.json`.
+| Arm (160k confirm) | RCL6 @ | rate | minStorage | Ergebnis |
+|--------------------|--------|------|------------|----------|
+| **fat_first+link_boost** | **132 378** | **9.18** | 75 926 | **Winner** |
+| fat_first+fat_first (no links) | — (p=1 126 114) | 7.04 | 76 706 | ETA ~173k, kein RCL6 in 160k |
+
+**Live:** Deploy main + sticky `Memory.ags.rcl5Plan=link_boost` (Code: PR [#60](https://github.com/Fabibassi/AutoGorwingScreeps/pull/60); Arming nach Confirm).
 
 | Priorität | Was | Warum |
 |-----------|-----|--------|
@@ -92,26 +95,27 @@ Begründung: Upgrade-Sink ist der Bottleneck nach Hub; Hauler Source→Storage l
 
 ## 5. Sim-Matrix (Overnight)
 
-| ID | Ansatz | Erwartung |
-|----|--------|-----------|
-| A | `fat_first` Baseline | ~155k, Floor OK |
-| B | `upgrade_pressure` (U=4 + Floor) | Evtl. schneller; Risiko Blackout ohne Floor-Guard |
-| C | `link_boost` (Phase B+C) | Community-Default; soll A schlagen wenn Pipeline greift |
+| ID | Ansatz | Wave-1 (50k) | Confirm (160k) |
+|----|--------|--------------|----------------|
+| A | `fat_first` (no links) | rate 7.22, ETA ~168k | kein RCL6; ETA ~173k |
+| **C** | **`link_boost`** | rate 8.70, ETA ~140k | **RCL6 @ 132 378** |
+| B | `upgrade_pressure` | deferred | nicht nötig |
 
 **Ranking (locked):** Floor-OK → niedrigstes `ticks_to_rcl6` → progress/tick → minStorage.
 
 Status-Pull: `.sim-learn/rcl5-gameplan-status.json`  
-Bench-Runner: `ops/sim/rcl5ToRcl6Bench.ts` (+ `link_boost` Plan)
+CLI: `npm run sim:rcl5:gameplan`
 
 ---
 
-## 6. Live-Checkliste (nach Sim-Winner)
+## 6. Live-Checkliste (morgen)
 
-- [ ] Winner ≠ Status-quo → PR: Placement + `runLinks` + Upgrader-Prefer + Arming  
-- [ ] Deploy Screeps; Memory `rcl5Plan=link_boost` (oder Winner-Name)  
+- [x] Code: Placement + `runLinks` + Upgrader-Prefer (PR #60)  
+- [x] Confirm 160k: `link_boost` → RCL6 @132 378 (Baseline ohne Links: kein RCL6)  
+- [ ] Deploy Screeps; `rcl5Plan=link_boost` sticky arm after hub  
 - [ ] Probe: 2 Links built, Transfers sichtbar, Progress-Rate vs Pre-Deploy  
 - [ ] Storage nicht unter 20k für &gt;N Ticks  
-- [ ] RCL6 erreichen → dieses Doc abhaken, RCL6-Gameplan öffnen
+- [ ] RCL6 erreichen → RCL6-Gameplan öffnen
 
 ---
 
@@ -120,10 +124,11 @@ Bench-Runner: `ops/sim/rcl5ToRcl6Bench.ts` (+ `link_boost` Plan)
 | Check | Status |
 |-------|--------|
 | Hub 30+2 | ✅ |
-| 2 Links live | ❌ (Code overnight) |
-| Link-Pipeline | ❌ |
-| Sim-Winner encoded | ⏳ overnight |
-| RCL6 | ❌ |
+| 2 Links code | ✅ (#60) |
+| 2 Links live | ❌ (Deploy morgen) |
+| Link-Pipeline live | ❌ |
+| Sim-Winner encoded | ✅ `link_boost` (160k confirm) |
+| RCL6 | ❌ live / ✅ sim @132k |
 
 ---
 

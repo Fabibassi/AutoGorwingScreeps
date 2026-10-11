@@ -1,6 +1,7 @@
 import {
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
+  maybeArmRcl5PostHubPlan,
 } from "./earlyGame/rcl5Mode";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
@@ -134,7 +135,12 @@ export function loop(): void {
         towers,
       });
       if (postHub) Memory.ags.rcl5Mode = postHub;
-      // rcl5Plan is sticky / harness-set only (link_boost after sim win).
+      // Gameplan confirm (160k): link_boost → RCL6 @132k; encode for live.
+      const postHubPlan = maybeArmRcl5PostHubPlan(rcl, Memory.ags?.rcl5Plan, {
+        extensions,
+        towers,
+      });
+      if (postHubPlan) Memory.ags.rcl5Plan = postHubPlan;
     }
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;

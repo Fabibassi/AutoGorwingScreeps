@@ -83,6 +83,7 @@ export {
   isRcl5Plan,
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
+  maybeArmRcl5PostHubPlan,
   parseRcl5Mode,
   parseRcl5Plan,
   rcl5ModePausesExtensionSpam,
