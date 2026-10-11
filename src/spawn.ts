@@ -523,6 +523,38 @@ export function recycleWeakFillers(
   return false;
 }
 
+/**
+ * Hub softlock: promote a fat hauler → filler when spawn pool cannot fund
+ * an 800 body yet (storage full, hub empty).
+ */
+export function promoteHaulerToFiller(
+  room: Room,
+  minCarry: number,
+): boolean {
+  if (minCarry <= 3) return false;
+  if (countStrongFillers(room.name, Math.min(minCarry, 4)) > 0) return false;
+
+  let best: Creep | null = null;
+  let bestCarry = 0;
+  let haulerCount = 0;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name) continue;
+    if (creep.memory.role !== "hauler") continue;
+    haulerCount += 1;
+    const carry = creep.getActiveBodyparts(CARRY);
+    if (carry < 4) continue;
+    if (!best || carry > bestCarry) {
+      best = creep;
+      bestCarry = carry;
+    }
+  }
+  // Keep at least one hauler on logistics.
+  if (!best || haulerCount <= 1) return false;
+  best.memory.role = "filler";
+  return true;
+}
+
 function clearHaulerRecycling(roomName: string): void {
   markHaulerRecycling(roomName, null);
 }
@@ -884,7 +916,22 @@ export function runSpawn(spawn: StructureSpawn): void {
   const fillerMaxCost = fillerMaxCostForPlan(Memory.ags?.fillerPlan);
   const fillerMinCarry = fillerTargetCarry(fillerMaxCost);
   if (
-    recycleWeakFillers(spawn, fillerMinCarry, energyAvailable, fillerMaxCost)
+    fillerMaxCost > 300 &&
+    (room.storage?.store[RESOURCE_ENERGY] ?? 0) >= 20_000 &&
+    energyAvailable < fillerMaxCost &&
+    promoteHaulerToFiller(room, fillerMinCarry)
+  ) {
+    return;
+  }
+  // Mid-size upgrade (4C) already beats thin; recycle leftover once any ≥4C lives.
+  const fillerRecycleMinCarry = Math.min(fillerMinCarry, 4);
+  if (
+    recycleWeakFillers(
+      spawn,
+      fillerRecycleMinCarry,
+      energyAvailable,
+      Math.min(fillerMaxCost, 400),
+    )
   ) {
     return;
   }
@@ -936,8 +983,13 @@ export function runSpawn(spawn: StructureSpawn): void {
               countStrongFillers(room.name, fillerMinCarry)
             : liveCounts[role];
     if (filled >= roleWant) continue;
-    // Wait for a full-budget fat filler — partial bodies keep the softlock.
-    if (role === "filler" && energyAvailable < fillerMaxCost) continue;
+    // Hub softlock: cannot wait for 800 — spawn mid upgrade at ≥400, full at 800.
+    // While a mid (4C+) filler lives, hold for a full-budget body.
+    if (role === "filler" && fillerMaxCost > 300) {
+      const midFillers = countStrongFillers(room.name, 4);
+      if (energyAvailable < 400) continue;
+      if (midFillers >= roleWant && energyAvailable < fillerMaxCost) continue;
+    }
     if (
       role === "harvester" &&
       liveCounts.miner > 0 &&
