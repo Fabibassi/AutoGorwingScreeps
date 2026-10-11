@@ -37,6 +37,9 @@ export function loop(): void {
   const fillerPlanSticky = Memory.ags?.fillerPlan;
   const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
   const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
+  const wallPolicySticky = Memory.ags?.wallPolicy;
+  const wallsArmedSticky = Memory.ags?.wallsArmed;
+  const wallArmReasonSticky = Memory.ags?.wallArmReason;
 
   try {
     applyParsedMemoryReuse();
@@ -173,6 +176,14 @@ export function loop(): void {
     if (rcl5PlanKeep) Memory.ags.rcl5Plan = rcl5PlanKeep;
     const fillerPlanKeep = Memory.ags?.fillerPlan ?? fillerPlanSticky;
     if (fillerPlanKeep) Memory.ags.fillerPlan = fillerPlanKeep;
+    const wallPolicyKeep = Memory.ags?.wallPolicy ?? wallPolicySticky;
+    if (wallPolicyKeep) Memory.ags.wallPolicy = wallPolicyKeep;
+    if (Memory.ags?.wallsArmed || wallsArmedSticky) {
+      Memory.ags.wallsArmed = true;
+    }
+    const wallArmReasonKeep =
+      Memory.ags?.wallArmReason ?? wallArmReasonSticky;
+    if (wallArmReasonKeep) Memory.ags.wallArmReason = wallArmReasonKeep;
     if (idleBuilderUpgradeSticky !== undefined) {
       Memory.ags.idleBuilderUpgrade = idleBuilderUpgradeSticky;
     }

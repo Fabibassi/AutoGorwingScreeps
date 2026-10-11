@@ -9,6 +9,10 @@ import {
   stagedExtensionBuildCap,
 } from "../earlyGame";
 import {
+  maybeArmWalls,
+  shouldPlaceHubRamparts,
+} from "../earlyGame/wallArm";
+import {
   parseRcl5Mode,
   shouldPlaceRcl5Links,
 } from "../earlyGame/rcl5Mode";
@@ -46,6 +50,7 @@ import {
   tryPlaceHubRoad,
   tryPlaceRoadOnPath,
   tryPlaceStorageLink,
+  tryPlaceHubRamparts,
   tryPlaceStorageNearSpawn,
   tryPlaceTower,
 } from "./placement";
@@ -115,6 +120,15 @@ export function runConstruction(room: Room): void {
   const rcl = room.controller?.level ?? 1;
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   if (!spawn || !room.controller?.my) return;
+
+  // Hub ramparts: arm (economy/raid) then place sites on spawn/storage tiles.
+  maybeArmWalls(room);
+  if (
+    shouldPlaceHubRamparts({ wallsArmed: Boolean(Memory.ags?.wallsArmed) }) &&
+    tryPlaceHubRamparts(room)
+  ) {
+    return;
+  }
 
   // Before any early-return cleanup: drop ghost / orphan container sites
   // (live W21N35 @ 14,32 kept growing while spawn-exit clears returned every tick).

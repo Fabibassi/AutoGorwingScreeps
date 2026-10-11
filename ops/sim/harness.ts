@@ -106,10 +106,163 @@ export type SimServer = {
           update: (q: object, u: object) => Promise<unknown>;
           insert: (doc: object) => Promise<unknown>;
         };
+        users?: {
+          find: (q: object) => Promise<Array<Record<string, unknown>>>;
+          insert: (doc: object) => Promise<Record<string, unknown>>;
+        };
+        "users.code"?: {
+          insert: (doc: object) => Promise<unknown>;
+        };
+      };
+      env?: {
+        keys: { MEMORY: string };
+        set: (key: string, value: string) => Promise<unknown>;
       };
     };
   };
 };
+
+/** Invader system user created by mockup `world.reset()`. */
+export const INVADER_USER_ID = "2";
+
+const PART_HITS = 100;
+
+/** Build mockup creep body docs from part type names. */
+export function creepBodyFromParts(
+  parts: string[],
+): Array<{ type: string; hits: number }> {
+  return parts.map((type) => ({ type, hits: PART_HITS }));
+}
+
+/**
+ * Inject hostile creeps owned by Invader (or a custom user id).
+ * Bodies are arrays of part-type strings (e.g. ["move","attack"]).
+ */
+export async function injectInvaderCreeps(
+  server: SimServer,
+  opts: {
+    bodies: string[][];
+    x?: number;
+    y?: number;
+    room?: string;
+    userId?: string;
+    namePrefix?: string;
+  },
+): Promise<number> {
+  const room = opts.room ?? ROOM;
+  const baseX = opts.x ?? 5;
+  const baseY = opts.y ?? 25;
+  const userId = opts.userId ?? INVADER_USER_ID;
+  const prefix = opts.namePrefix ?? "raid";
+  let n = 0;
+  for (const parts of opts.bodies) {
+    const body = creepBodyFromParts(parts);
+    const hitsMax = body.length * PART_HITS;
+    const x = Math.min(49, Math.max(0, baseX + (n % 3)));
+    const y = Math.min(49, Math.max(0, baseY + Math.floor(n / 3)));
+    await server.common.storage.db["rooms.objects"].insert({
+      room,
+      type: "creep",
+      x,
+      y,
+      user: userId,
+      name: `${prefix}-${n}-${Date.now().toString(36)}`,
+      body,
+      hits: hitsMax,
+      hitsMax,
+      fatigue: 0,
+      spawning: false,
+      store: {},
+      storeCapacity: 0,
+    });
+    n++;
+  }
+  return n;
+}
+
+export async function countHostiles(
+  server: SimServer,
+  opts?: { room?: string; excludeUserId?: string },
+): Promise<number> {
+  const room = opts?.room ?? ROOM;
+  const exclude = opts?.excludeUserId;
+  const objects = await server.common.storage.db["rooms.objects"].find({
+    room,
+    type: "creep",
+  });
+  let n = 0;
+  for (const o of objects) {
+    const user = String(o.user ?? "");
+    if (exclude && user === exclude) continue;
+    if (!exclude && user === INVADER_USER_ID) {
+      n++;
+      continue;
+    }
+    if (exclude && user && user !== exclude) n++;
+  }
+  return n;
+}
+
+export async function countSpawns(
+  server: SimServer,
+  room = ROOM,
+): Promise<number> {
+  const objects = await server.common.storage.db["rooms.objects"].find({
+    room,
+    type: "spawn",
+  });
+  return objects.length;
+}
+
+export async function minTowerEnergy(
+  server: SimServer,
+  room = ROOM,
+): Promise<number> {
+  const objects = await server.common.storage.db["rooms.objects"].find({
+    room,
+    type: "tower",
+  });
+  if (objects.length === 0) return 0;
+  let min = Number.POSITIVE_INFINITY;
+  for (const o of objects) {
+    const store = o.store as Record<string, number> | undefined;
+    const e = store?.energy ?? 0;
+    if (e < min) min = e;
+  }
+  return min === Number.POSITIVE_INFINITY ? 0 : min;
+}
+
+/**
+ * Fallback if raider user code does not tick: step hostiles toward a target.
+ * Moves at most 1 tile/tick (Chebyshev).
+ */
+export async function driveHostilesToward(
+  server: SimServer,
+  opts: {
+    targetX: number;
+    targetY: number;
+    room?: string;
+    hostileUserId: string;
+  },
+): Promise<void> {
+  const room = opts.room ?? ROOM;
+  const objects = await server.common.storage.db["rooms.objects"].find({
+    room,
+    type: "creep",
+  });
+  for (const o of objects) {
+    if (String(o.user ?? "") !== opts.hostileUserId) continue;
+    const x = Number(o.x);
+    const y = Number(o.y);
+    const dx = Math.sign(opts.targetX - x);
+    const dy = Math.sign(opts.targetY - y);
+    if (dx === 0 && dy === 0) continue;
+    await server.common.storage.db["rooms.objects"].update(
+      { _id: o._id },
+      { $set: { x: x + dx, y: y + dy, fatigue: 0 } },
+    );
+  }
+}
 
 export const ROOM = "W0N1";
 export const SPAWN_X = 25;
@@ -241,6 +394,24 @@ export async function setBotFillerPlan(
   const safe = plan.replace(/[^a-z0-9_]/gi, "");
   await bot.console(
     `${ensureAgsPreamble()} Memory.ags.fillerPlan = "${safe}";`,
+  );
+}
+
+/** Inject wall/rampart policy (off | auto | force | raid_only). */
+export async function setBotWallPolicy(
+  bot: SimBot,
+  policy: string,
+  opts?: { wallsArmed?: boolean },
+): Promise<void> {
+  const safe = policy.replace(/[^a-z0-9_]/gi, "");
+  const armed =
+    opts?.wallsArmed === true
+      ? "Memory.ags.wallsArmed = true;"
+      : opts?.wallsArmed === false
+        ? "Memory.ags.wallsArmed = false;"
+        : "";
+  await bot.console(
+    `${ensureAgsPreamble()} Memory.ags.wallPolicy = "${safe}"; ${armed}`,
   );
 }
 
