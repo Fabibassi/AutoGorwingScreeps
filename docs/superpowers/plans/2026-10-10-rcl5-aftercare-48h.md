@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Find the most efficient first ~48h after live hits RCL5 (W21N35 home-only), encode the winner, and apply it on live when RCL≥5.
+**Goal:** Find the most efficient first ~48h after live hits RCL5 (W0N0 home-only), encode the winner, and apply it on live when RCL≥5.
 
 **Architecture:** Keep climb winner `upgrade_rush` for RCL4→5. At RCL5, stop pausing hub build (2nd tower + extensions→30). Bench post-RCL5 modes from a live-like seed (15 ext, 1 tower, fat storage) over a ~48h tick window (~50k ticks @ ~3.2s/tick). Score: time to hub-ready (towers≥2 ∧ ext≥30), then RCL6 progress, then storage floor.
 
@@ -65,7 +65,7 @@ Probe [38002766116](https://github.com/Fabibassi/AutoGorwingScreeps/actions/runs
 
 1. Confirm bot binary on World includes hub-wave + auto-arm + RCL5 extension unpause (deploy from `main` after merge).
 2. On first tick with `rcl >= 5`, main sets `rcl5Mode=build_heavy` once if still climb-default (no console needed). Explicit non-default modes are left alone.
-3. Run GitHub **Live Probe** `room=W21N35` → expect `rcl5Mode=build_heavy`, builders≥3–4 while hub incomplete, tower sites/built → 2, extensions rising toward 30.
+3. Run GitHub **Live Probe** `room=<SCREEPS_ROOM>` → expect `rcl5Mode=build_heavy`, builders≥3–4 while hub incomplete, tower sites/built → 2, extensions rising toward 30.
 4. Optional: after hub-ready (`ext≥30` ∧ `towers≥2`), switch back to `upgrade_rush` or `hub_spend` for RCL6 progress (bench: upgrade_rush gained most progress after hub).
 
 **Success metrics (48h window):** hub-ready ASAP without storage blackout; no soft-lock; progress toward RCL6 secondary.

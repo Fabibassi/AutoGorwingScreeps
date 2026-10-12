@@ -104,7 +104,7 @@ export function loop(): void {
     }
 
     // Never use Game.rooms[0] — adjacent vision can make health report another room's
-    // containersAtSources (live false 1/2 while W21N35 already had both seats).
+    // containersAtSources (live false 1/2 while W0N0 already had both seats).
     const room = pickHomeRoom(Game.rooms, Game.spawns);
     const rcl = room?.controller?.level ?? 1;
     const nextAgs = tickTelemetry({

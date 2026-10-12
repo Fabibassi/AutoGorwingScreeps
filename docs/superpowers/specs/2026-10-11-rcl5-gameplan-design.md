@@ -2,7 +2,7 @@
 
 > Overnight research design (2026-10-10/11). Morning deliverable companion: `docs/superpowers/plans/2026-10-11-rcl5-gameplan.md`.
 
-## Context (live W21N35)
+## Context (live home)
 
 - Hub-ready **done**: 30 ext, 2 towers, storage fat, `rcl5Mode=fat_first`.
 - `fat_first` is a **quota default** (≈3 upgraders), not a full midgame plan.

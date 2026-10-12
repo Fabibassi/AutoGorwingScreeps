@@ -22,7 +22,7 @@ if [[ "$RCL" -lt 5 ]]; then
   exit 0
 fi
 
-ROOM="$(jq -r '.room // "W21N35"' "$SUMMARY")"
+ROOM="$(jq -r '.room // "home"' "$SUMMARY")"
 MODE="$(jq -r '.rcl5Mode // "null"' "$SUMMARY")"
 ARMED="$(jq -r '.aftercareArmed // false' "$SUMMARY")"
 PROG="$(jq -r '.progress // "?"' "$SUMMARY")"

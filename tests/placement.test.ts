@@ -292,7 +292,7 @@ describe("storage access ring stays open", () => {
   });
 
   test("place↔clear thrash: clear drops under-storage site and place does not recreate it", () => {
-    // Live W21N35: extension site south of storage removed every tick, then
+    // live home: extension site south of storage removed every tick, then
     // re-placed because isFreeBuildTile allowed surplus access seats.
     const storage = { x: 25, y: 27 };
     const spawn = { x: 25, y: 25 };

@@ -23,7 +23,7 @@ jobs:
           SCREEPS_EMAIL: ${{ secrets.SCREEPS_EMAIL }}
           SCREEPS_PASSWORD: ${{ secrets.SCREEPS_PASSWORD }}
           SCREEPS_BRANCH: ${{ vars.SCREEPS_BRANCH }}
-          SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
+          SCREEPS_SHARD: ${{ secrets.SCREEPS_SHARD }}
           # Empty = https://screeps.com (World). Set only if World proxy differs.
-          SCREEPS_HOSTNAME: ${{ vars.SCREEPS_HOSTNAME }}
+          SCREEPS_HOSTNAME: ${{ secrets.SCREEPS_HOSTNAME || vars.SCREEPS_HOSTNAME }}
         run: npx tsx ops/deploy.ts

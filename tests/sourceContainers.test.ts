@@ -50,19 +50,19 @@ describe("source container proximity", () => {
 
   test("pickHomeRoom prefers spawn room over random vision rooms", () => {
     const home = {
-      name: "W21N35",
+      name: "W0N0",
       controller: { my: true },
     } as unknown as Room;
     const scout = {
-      name: "W22N35",
+      name: "W1N0",
       controller: { my: false },
     } as unknown as Room;
     const spawn = { room: home } as unknown as StructureSpawn;
     expect(
       pickHomeRoom(
-        { W22N35: scout, W21N35: home },
+        { W1N0: scout, W0N0: home },
         { Spawn1: spawn },
       )?.name,
-    ).toBe("W21N35");
+    ).toBe("W0N0");
   });
 });

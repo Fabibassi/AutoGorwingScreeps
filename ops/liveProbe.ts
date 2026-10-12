@@ -1,6 +1,7 @@
 /**
  * One-shot Screeps live status for ops (Memory.ags + creeps + room objects).
- * Usage: SCREEPS_TOKEN=... SCREEPS_SHARD=shard3 npx tsx ops/liveProbe.ts [ROOM]
+ * Usage: SCREEPS_TOKEN=... SCREEPS_SHARD=... SCREEPS_ROOM=... npx tsx ops/liveProbe.ts [ROOM]
+ * Room must come from argv or SCREEPS_ROOM (no hardcoded home room in repo).
  */
 import { writeFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
@@ -10,7 +11,6 @@ import { maybeArmRcl5AftercareMode } from "../src/earlyGame/rcl5Mode";
 import { fetchMemoryPath, screepsHeaders } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 
-const DEFAULT_ROOM = "W21N35";
 /** Machine-readable SitRep for CI (cron / RCL5 issue notify). */
 const PROBE_SUMMARY_PATH = ".probe-summary.json";
 
@@ -369,7 +369,11 @@ function summarizeObjects(objects: unknown[]): {
 }
 
 export async function main(): Promise<void> {
-  const room = (process.argv[2] ?? process.env.SCREEPS_ROOM ?? DEFAULT_ROOM).trim();
+  const room = (process.argv[2] ?? process.env.SCREEPS_ROOM ?? "").trim();
+  if (!room) {
+    console.error("Room required: pass argv or set SCREEPS_ROOM");
+    process.exit(1);
+  }
   const hostname = resolveHostname();
   const shard = resolveShard();
   const token = await resolveToken(hostname);

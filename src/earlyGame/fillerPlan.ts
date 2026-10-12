@@ -10,7 +10,7 @@ export function isFillerPlan(raw: unknown): raw is FillerPlan {
 
 /**
  * Production default = fat.
- * Sim hub-bench preferred thin on floorOk, but live W21N35 softlocks with
+ * Sim hub-bench preferred thin on floorOk, but live home softlocks with
  * thin (hub energyAvailable≈160 while storage≫100k) — fat refill needed.
  */
 export function parseFillerPlan(raw?: string): FillerPlan {

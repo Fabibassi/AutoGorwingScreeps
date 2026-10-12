@@ -131,7 +131,7 @@ export function runConstruction(room: Room): void {
   }
 
   // Before any early-return cleanup: drop ghost / orphan container sites
-  // (live W21N35 @ 14,32 kept growing while spawn-exit clears returned every tick).
+  // (live home @ 14,32 kept growing while spawn-exit clears returned every tick).
   if (
     removeRedundantSourceContainerSites(room) > 0 ||
     removeOrphanContainerSites(room) > 0
@@ -143,7 +143,7 @@ export function runConstruction(room: Room): void {
   const cleared = clearSpawnExitRing(room, spawn.pos);
   if (cleared.removedSites > 0 || cleared.destroyedStructures > 0) return;
   // Priority 0b: never seal storage — filler withdraw needs ≥2 adjacent seats.
-  // Live W21N35: extensions boxed storage → spawn~empty while storage~150k (T1 spiral).
+  // live home: extensions boxed storage → spawn~empty while storage~150k (T1 spiral).
   if (room.storage) {
     const storageClear = clearStorageAccessRing(room, room.storage.pos);
     if (
@@ -153,7 +153,7 @@ export function runConstruction(room: Room): void {
       return;
     }
   }
-  // Extensions on roads plug the hub corridors (live W21N35 south exit).
+  // Extensions on roads plug the hub corridors (live home south exit).
   if (clearBlockingSitesOnRoads(room) > 0) return;
 
   const policy = parseRoadPolicy(Memory.ags?.roadPolicy);
@@ -211,7 +211,7 @@ export function runConstruction(room: Room): void {
       : stageTarget;
   const needExtensions = extensionCount < extCap;
   // Only starve roads during RCL2 extension bootstrap. At RCL3+ unfinished
-  // extensions must not permanently block source roads (live W21N35 symptom).
+  // extensions must not permanently block source roads (live home symptom).
   const roadsBlockedByExtensionPush = rcl < 3 && needExtensions;
 
   if (roadsBlockedByExtensionPush) {
@@ -253,7 +253,7 @@ export function runConstruction(room: Room): void {
 
   // At the 3-site cap: never sacrifice source-container / tower / storage sites.
   // Roads do NOT count toward this cap — when full of extensions we must still
-  // place roads (live W21N35: 3 extension sites forever blocked all roads).
+  // place roads (live home: 3 extension sites forever blocked all roads).
   let skipNonRoadPlacement = false;
   if (nonRoadSites.length >= MAX_NON_ROAD_SITES) {
     if (needSourceContainers || (needStorage && storageSites === 0)) {

@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       room:
-        description: "Room to probe"
+        description: "Room to probe (empty = secret SCREEPS_ROOM)"
         required: false
-        default: "W21N35"
+        default: ""
 jobs:
   probe:
     runs-on: ubuntu-latest
@@ -27,9 +27,9 @@ jobs:
           SCREEPS_TOKEN: ${{ secrets.SCREEPS_TOKEN }}
           SCREEPS_EMAIL: ${{ secrets.SCREEPS_EMAIL }}
           SCREEPS_PASSWORD: ${{ secrets.SCREEPS_PASSWORD }}
-          SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
-          SCREEPS_HOSTNAME: ${{ vars.SCREEPS_HOSTNAME }}
-          SCREEPS_ROOM: ${{ inputs.room || 'W21N35' }}
+          SCREEPS_SHARD: ${{ secrets.SCREEPS_SHARD }}
+          SCREEPS_HOSTNAME: ${{ secrets.SCREEPS_HOSTNAME || vars.SCREEPS_HOSTNAME }}
+          SCREEPS_ROOM: ${{ inputs.room != '' && inputs.room || secrets.SCREEPS_ROOM }}
         run: npx tsx ops/liveProbe.ts
 
       - name: Upload probe summary
