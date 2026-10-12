@@ -15,6 +15,8 @@ import {
   minerMinWorkForSpawn,
   sourceContainerEnergySurplus,
   stagedExtensionBuildCap,
+  STORAGE_FLOOR_ENERGY,
+  storageBelowFloor,
   shouldBuildContainers,
   shouldBuildRoads,
   shouldBuildStorage,
@@ -335,7 +337,7 @@ describe("desiredCreeps", () => {
       desiredCreeps(4, 2, 2, true, {
         energyIncomePerTick: 6,
         hasStorage: true,
-        storageEnergy: 1200,
+        storageEnergy: 25_000,
         minerWorkParts: 10,
         energyCapacityAvailable: 1300,
         rcl5Mode: "hub_spend",
@@ -348,7 +350,7 @@ describe("desiredCreeps", () => {
       desiredCreeps(4, 2, 2, true, {
         energyIncomePerTick: 6,
         hasStorage: true,
-        storageEnergy: 200,
+        storageEnergy: 25_000,
         sourceContainerEnergy: 3500,
         energyAvailable: 1300,
         energyCapacityAvailable: 1300,
@@ -363,7 +365,7 @@ describe("desiredCreeps", () => {
       desiredCreeps(4, 2, 2, true, {
         energyIncomePerTick: 10,
         hasStorage: true,
-        storageEnergy: 2000,
+        storageEnergy: 25_000,
         minerWorkParts: 10,
         energyCapacityAvailable: 1300,
       }),
@@ -1053,12 +1055,24 @@ describe("minerMinWorkForSpawn", () => {
     ).toBe(5);
   });
 
-  test("bridges with 1W when a seat is empty and energy is under the fat body", () => {
+  test("waits for fat when capacity can fund it even if spawn pool is thin", () => {
     expect(
       minerMinWorkForSpawn({
         preferredMinWork: 5,
         energyAvailable: 500,
         seatsUncovered: true,
+        energyCapacityAvailable: 1300,
+      }),
+    ).toBe(5);
+  });
+
+  test("bridges with 1W only when capacity cannot fund the fat body", () => {
+    expect(
+      minerMinWorkForSpawn({
+        preferredMinWork: 5,
+        energyAvailable: 500,
+        seatsUncovered: true,
+        energyCapacityAvailable: 300,
       }),
     ).toBe(1);
   });
@@ -1086,7 +1100,7 @@ describe("minerMinWorkForSpawn", () => {
     ).toBe(5);
   });
 
-  test("pre-spawn still bridges when storage is too lean to justify waiting", () => {
+  test("pre-spawn still bridges when capacity is early-game and storage lean", () => {
     expect(
       minerMinWorkForSpawn({
         preferredMinWork: 5,
@@ -1095,11 +1109,12 @@ describe("minerMinWorkForSpawn", () => {
         isPrespawn: true,
         storageEnergy: 1500,
         storageWaitReserve: 2000,
+        energyCapacityAvailable: 300,
       }),
     ).toBe(1);
   });
 
-  test("true uncovered seat bridges even with a fat storage bank", () => {
+  test("uncovered seat waits when capacity can fund fat (no T1 spiral)", () => {
     expect(
       minerMinWorkForSpawn({
         preferredMinWork: 5,
@@ -1108,8 +1123,9 @@ describe("minerMinWorkForSpawn", () => {
         isPrespawn: false,
         storageEnergy: 100_000,
         storageWaitReserve: 2000,
+        energyCapacityAvailable: 1300,
       }),
-    ).toBe(1);
+    ).toBe(5);
   });
 });
 
@@ -1118,5 +1134,32 @@ describe("threshold constants", () => {
     expect(EARLY_GAME_THRESHOLDS.minRclForContainers).toBe(2);
     expect(EARLY_GAME_THRESHOLDS.minRclForWalls).toBe(3);
     expect(EARLY_GAME_THRESHOLDS.minRclForStorage).toBe(4);
+    expect(STORAGE_FLOOR_ENERGY).toBe(20_000);
+  });
+});
+
+describe("storageBelowFloor", () => {
+  test("gates RCL4+ when storage is at or under floor", () => {
+    expect(
+      storageBelowFloor({
+        rcl: 5,
+        hasStorage: true,
+        storageEnergy: 20_000,
+      }),
+    ).toBe(true);
+    expect(
+      storageBelowFloor({
+        rcl: 5,
+        hasStorage: true,
+        storageEnergy: 20_001,
+      }),
+    ).toBe(false);
+    expect(
+      storageBelowFloor({
+        rcl: 3,
+        hasStorage: true,
+        storageEnergy: 0,
+      }),
+    ).toBe(false);
   });
 });

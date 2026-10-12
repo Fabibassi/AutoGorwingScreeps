@@ -33,6 +33,25 @@ export interface CreepQuotas {
   filler: number;
 }
 
+/**
+ * Absolute storage floor (RCL4+): below this, throttle upgrade/link spend and
+ * never bridge T1 miners when capacity can fund fat bodies (blackout spiral).
+ * Gameplan / Wave-2: ~20k; override via Memory.ags.storageBlackoutReserve.
+ */
+export const STORAGE_FLOOR_ENERGY = 20_000;
+
+/** True when owned storage is at/under the blackout floor (RCL≥4). */
+export function storageBelowFloor(opts: {
+  rcl: number;
+  hasStorage: boolean;
+  storageEnergy: number;
+  floor?: number;
+}): boolean {
+  if (!opts.hasStorage || opts.rcl < 4) return false;
+  const floor = opts.floor ?? STORAGE_FLOOR_ENERGY;
+  return opts.storageEnergy <= floor;
+}
+
 export const EARLY_GAME_THRESHOLDS = {
   minRclForContainers: 2,
   minRclForDedicatedMiners: 2,
@@ -242,12 +261,10 @@ export function effectiveMinerMinWork(
 }
 
 /**
- * Prefer fat miners, but never leave a mining seat empty because the bank is
- * momentarily under the 5W cost (live W21N35: ~500 available, 550 needed).
- *
- * Pre-spawn (TTL handoff while the incumbent still mines) waits for the
- * capacity-sized body when storage can fund the refill — thin 1–4W bridges
- * only for true uncovered seats, or when the storage reserve is too lean.
+ * Prefer fat miners. When room capacity can fund the preferred body, always
+ * wait (even on uncovered seats) — bridging 1W after a storage blackout is a
+ * permanent T1 spiral. Bridge 1W only when capacity cannot fund preferred
+ * (true early-game) or pre-spawn with no capacity signal and lean storage.
  */
 export function minerMinWorkForSpawn(opts: {
   preferredMinWork: number;
@@ -258,10 +275,14 @@ export function minerMinWorkForSpawn(opts: {
   storageEnergy?: number;
   /** Wait only while storage is above this (default: never wait on lean/absent bank). */
   storageWaitReserve?: number;
+  /** Spawn+extensions capacity — if ≥ preferred cost, never bridge thin. */
+  energyCapacityAvailable?: number;
 }): number {
   const preferred = Math.max(1, opts.preferredMinWork);
   if (!opts.seatsUncovered) return preferred;
   if (opts.energyAvailable >= minerBodyCost(preferred)) return preferred;
+  const capacity = opts.energyCapacityAvailable ?? 0;
+  if (capacity >= minerBodyCost(preferred)) return preferred;
   if (opts.isPrespawn) {
     const reserve = Math.max(0, opts.storageWaitReserve ?? 0);
     const storage = Math.max(0, opts.storageEnergy ?? 0);
@@ -803,6 +824,7 @@ export function desiredCreeps(
       sources,
       extensionCount: economy?.extensionCount,
       towerCount: economy?.towerCount,
+      storageEnergy: economy?.storageEnergy,
     },
   );
   return applyRcl5PlanQuotas(modeQuotas, economy?.rcl5Plan, {

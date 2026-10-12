@@ -53,8 +53,11 @@ export function classifyLinkRole(opts: {
 export function shouldFillStorageLink(opts: {
   linkEnergy: number;
   storageEnergy: number;
+  /** Room storage floor — do not pull controller feed at/under floor. */
+  storageFloor?: number;
 }): boolean {
-  if (opts.storageEnergy <= 0) return false;
+  const floor = opts.storageFloor ?? 0;
+  if (opts.storageEnergy <= floor) return false;
   return opts.linkEnergy < STORAGE_LINK_FILL_THRESHOLD;
 }
 
@@ -63,11 +66,21 @@ export function shouldTransferStorageToController(opts: {
   controllerEnergy: number;
   storageCooldown: number;
   controllerFree: number;
+  /** Room storage energy (not link). Gate controller pipeline on floor. */
+  roomStorageEnergy?: number;
+  storageFloor?: number;
 }): boolean {
   if (opts.storageCooldown > 0) return false;
   if (opts.storageEnergy < STORAGE_LINK_SEND_MIN) return false;
   if (opts.controllerEnergy >= CONTROLLER_LINK_RECEIVE_THRESHOLD) return false;
   if (opts.controllerFree <= 0) return false;
+  const floor = opts.storageFloor ?? 0;
+  if (
+    opts.roomStorageEnergy !== undefined &&
+    opts.roomStorageEnergy <= floor
+  ) {
+    return false;
+  }
   return true;
 }
 

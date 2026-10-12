@@ -1,3 +1,4 @@
+import { STORAGE_FLOOR_ENERGY } from "../earlyGame/policy";
 import { classifyLinkRole } from "../links/plan";
 import { HAUL_THRESHOLDS } from "./hauler";
 
@@ -50,7 +51,9 @@ function findFillTarget(creep: Creep): FillTarget | null {
 
   if (spawn && spawn.store.getFreeCapacity(RESOURCE_ENERGY) > 0) return spawn;
 
-  // Hub spawn/ext/towers full: top storage link for controller feed.
+  // Hub spawn/ext/towers full: top storage link — but not under blackout floor.
+  const storageEnergy = creep.room.storage?.store[RESOURCE_ENERGY] ?? 0;
+  if (storageEnergy <= STORAGE_FLOOR_ENERGY) return null;
   return findStorageLink(creep.room);
 }
 

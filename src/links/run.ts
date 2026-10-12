@@ -1,3 +1,4 @@
+import { STORAGE_FLOOR_ENERGY } from "../earlyGame/policy";
 import {
   classifyLinkRole,
   shouldFillStorageLink,
@@ -40,6 +41,7 @@ function tryFillStorageLink(room: Room, storageLink: StructureLink): void {
     !shouldFillStorageLink({
       linkEnergy,
       storageEnergy: storage.store[RESOURCE_ENERGY] ?? 0,
+      storageFloor: STORAGE_FLOOR_ENERGY,
     })
   ) {
     return;
@@ -88,6 +90,8 @@ export function runLinks(room: Room): void {
       controllerEnergy,
       storageCooldown: storageLink.cooldown,
       controllerFree,
+      roomStorageEnergy: room.storage.store[RESOURCE_ENERGY] ?? 0,
+      storageFloor: STORAGE_FLOOR_ENERGY,
     })
   ) {
     return;

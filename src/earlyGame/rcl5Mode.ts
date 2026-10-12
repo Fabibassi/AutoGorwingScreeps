@@ -1,4 +1,7 @@
-import type { CreepQuotas } from "./policy";
+import {
+  storageBelowFloor,
+  type CreepQuotas,
+} from "./policy";
 
 /** Home-room RCL4→5 spend experiments (no remotes). */
 export const RCL5_MODES = [
@@ -108,19 +111,53 @@ export function maybeArmRcl5PostHubMode(
  * Post-RCL6 spend (rcl6-spend bench 2026-10-11, 5k ticks):
  * with remotes on, upgrade_rush beats fat_first on netStorage and progress
  * while floorOk. Never arm when remotePlan is explicitly off (home-only
- * upgrade_rush blackout risk from Wave-2).
+ * upgrade_rush blackout risk from Wave-2). Never arm under storage floor.
  */
 export function maybeArmRcl6SpendMode(
   rcl: number,
   currentMode: string | undefined,
-  opts: { remotePlan?: string },
+  opts: { remotePlan?: string; storageEnergy?: number },
 ): Rcl5Mode | undefined {
   if (rcl < 6) return undefined;
   const remote = opts.remotePlan;
   if (remote === "off" || remote === "home_only") return undefined;
+  if (
+    storageBelowFloor({
+      rcl,
+      hasStorage: true,
+      storageEnergy: opts.storageEnergy ?? 0,
+    })
+  ) {
+    return undefined;
+  }
   if (currentMode === "upgrade_rush") return undefined;
   if (currentMode === "fat_first") return "upgrade_rush";
   return undefined;
+}
+
+/**
+ * Drop upgrade_rush → fat_first when storage hits the blackout floor so
+ * remotes-on spend cannot re-drain into a T1 spiral (live / Wave-2).
+ */
+export function maybeDisarmRcl6SpendMode(
+  rcl: number,
+  currentMode: string | undefined,
+  opts: { remotePlan?: string; storageEnergy?: number },
+): Rcl5Mode | undefined {
+  if (rcl < 6) return undefined;
+  if (currentMode !== "upgrade_rush") return undefined;
+  const remote = opts.remotePlan;
+  if (remote === "off" || remote === "home_only") return undefined;
+  if (
+    !storageBelowFloor({
+      rcl,
+      hasStorage: true,
+      storageEnergy: opts.storageEnergy ?? 0,
+    })
+  ) {
+    return undefined;
+  }
+  return "fat_first";
 }
 
 /**
@@ -160,6 +197,8 @@ export function applyRcl5ModeQuotas(
     linkCount?: number;
     /** Post-hub plan: link_boost briefly prioritizes builders until 2 links. */
     rcl5Plan?: string;
+    /** Storage energy — below floor throttles upgrade/builder spend. */
+    storageEnergy?: number;
   },
 ): CreepQuotas {
   if (opts.rcl < 4 || !opts.hasStorage) return quotas;
@@ -172,6 +211,21 @@ export function applyRcl5ModeQuotas(
   const hubIncomplete =
     opts.rcl >= 5 &&
     ((opts.extensionCount ?? 0) < 30 || (opts.towerCount ?? 0) < 2);
+
+  // Blackout floor: keep one upgrader + at most one hub builder; never 4× upgrade.
+  // Only when storageEnergy is known (spawn always passes it).
+  if (
+    opts.storageEnergy !== undefined &&
+    storageBelowFloor({
+      rcl: opts.rcl,
+      hasStorage: opts.hasStorage,
+      storageEnergy: opts.storageEnergy,
+    })
+  ) {
+    q.upgrader = 1;
+    q.builder = hubIncomplete ? 1 : 0;
+    return q;
+  }
 
   if (hubIncomplete) {
     q.upgrader = 1;
