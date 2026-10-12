@@ -14,6 +14,7 @@ import {
   rcl5ModePausesExtensionSpam,
   type Rcl5Mode,
 } from "./rcl5Mode";
+export { STORAGE_FLOOR_ENERGY, storageBelowFloor } from "./storageFloor";
 
 /**
  * Early-game policy derived from common Screeps guides:
@@ -31,25 +32,6 @@ export interface CreepQuotas {
   builder: number;
   /** Hub creep: storage → spawn/extensions (0 until storage exists). */
   filler: number;
-}
-
-/**
- * Absolute storage floor (RCL4+): below this, throttle upgrade/link spend and
- * never bridge T1 miners when capacity can fund fat bodies (blackout spiral).
- * Gameplan / Wave-2: ~20k; override via Memory.ags.storageBlackoutReserve.
- */
-export const STORAGE_FLOOR_ENERGY = 20_000;
-
-/** True when owned storage is at/under the blackout floor (RCL≥4). */
-export function storageBelowFloor(opts: {
-  rcl: number;
-  hasStorage: boolean;
-  storageEnergy: number;
-  floor?: number;
-}): boolean {
-  if (!opts.hasStorage || opts.rcl < 4) return false;
-  const floor = opts.floor ?? STORAGE_FLOOR_ENERGY;
-  return opts.storageEnergy <= floor;
 }
 
 export const EARLY_GAME_THRESHOLDS = {

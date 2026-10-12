@@ -1,7 +1,5 @@
-import {
-  storageBelowFloor,
-  type CreepQuotas,
-} from "./policy";
+import type { CreepQuotas } from "./policy";
+import { storageBelowFloor } from "./storageFloor";
 
 /** Home-room RCL4→5 spend experiments (no remotes). */
 export const RCL5_MODES = [
