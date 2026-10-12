@@ -32,7 +32,7 @@ const SOURCES: Array<[number, number]> = [
   [40, 10],
 ];
 
-/** Match live W21N35-ish footprint (~15 ext under climb pause). */
+/** Match live home-ish footprint (~15 ext under climb pause). */
 const EXT_STAMP: Array<[number, number]> = [
   [2, 1],
   [2, -1],
@@ -117,7 +117,7 @@ export async function runRcl5AftercareScenario(opts: {
       });
     }
 
-    // Live W21N35 already has a controller container — seed it so aftercare
+    // live home already has a controller container — seed it so aftercare
     // WORK is not diluted across new container sites while finishing ext→30.
     await server.world.addRoomObject(ROOM, "container", SPAWN_X, SPAWN_Y - 4, {
       store: { energy: 500 },

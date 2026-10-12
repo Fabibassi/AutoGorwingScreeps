@@ -95,7 +95,7 @@ Kein Live-Arm, kein sticky Memory auf Production, bis explizit freigegeben.
 - Player PvP strategy / remote defense
 - RCL7+ (3. Tower) / bunker layout overhaul
 - Nuke / stronghold
-- Live Deploy, main merge, Memory-Arm auf W21N35
+- Live Deploy, main merge, Memory-Arm auf home room
 
 ## Deliverables
 

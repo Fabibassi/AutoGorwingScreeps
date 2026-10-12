@@ -53,7 +53,7 @@ export function countCreepsByRole(): CreepQuotas {
 /**
  * How close a container may sit to count as a source-mining seat.
  * Range 1 is ideal; range 2 still covers real rooms where the only free tile
- * ended up one step farther (live W21N35 falsely reported 1/2 containers).
+ * ended up one step farther (live home falsely reported 1/2 containers).
  */
 export const SOURCE_CONTAINER_RANGE = 2;
 
@@ -182,7 +182,7 @@ export function findSourceContainerSites(room: Room): ConstructionSite[] {
 /**
  * Cancel container sites next to a source that already has a finished container.
  * Live symptom: bot counted range-1 only → thought a source was bare → kept a
- * duplicate site (e.g. W21N35 @ 14,32) while both seats already stood.
+ * duplicate site (e.g. W0N0 @ 14,32) while both seats already stood.
  */
 export function removeRedundantSourceContainerSites(room: Room): number {
   let removed = 0;
@@ -206,7 +206,7 @@ export function removeRedundantSourceContainerSites(room: Room): number {
 
 /**
  * Cancel container sites that sit near neither a source nor the controller.
- * Live W21N35 kept building (14,32) — far from both sources — while both seats
+ * live home kept building (14,32) — far from both sources — while both seats
  * already stood at (23,9) and (42,23).
  */
 export function removeOrphanContainerSites(room: Room): number {

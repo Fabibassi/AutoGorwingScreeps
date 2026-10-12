@@ -2,7 +2,7 @@
 
 > Morgen-Deliverable (Overnight 2026-10-10/11).  
 > Design-Spec: `docs/superpowers/specs/2026-10-11-rcl5-gameplan-design.md`  
-> Live: W21N35 shard3 — Hub fertig, `rcl5Mode=fat_first`, Storage ~170k.
+> Live: home room — Hub fertig, `rcl5Mode=fat_first`, Storage ~170k.
 
 ## Verdict (Confirm 160k — fertig)
 

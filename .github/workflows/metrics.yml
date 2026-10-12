@@ -32,8 +32,8 @@ jobs:
           SCREEPS_TOKEN: ${{ secrets.SCREEPS_TOKEN }}
           SCREEPS_EMAIL: ${{ secrets.SCREEPS_EMAIL }}
           SCREEPS_PASSWORD: ${{ secrets.SCREEPS_PASSWORD }}
-          SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
-          SCREEPS_HOSTNAME: ${{ vars.SCREEPS_HOSTNAME }}
+          SCREEPS_SHARD: ${{ secrets.SCREEPS_SHARD }}
+          SCREEPS_HOSTNAME: ${{ secrets.SCREEPS_HOSTNAME || vars.SCREEPS_HOSTNAME }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
           FORCE_ACTION: ${{ inputs.force_action || 'none' }}

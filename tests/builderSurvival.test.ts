@@ -26,7 +26,7 @@ import {
 
 describe("pickBuildSite", () => {
   test("finishes nearly complete extensions instead of the closest unfinished tile", () => {
-    // W21N35: haulers park on 2553/3000 next to spawn; path-closest skipped it for 1847.
+    // W0N0: haulers park on 2553/3000 next to spawn; path-closest skipped it for 1847.
     const nearDone = { id: "lead", progress: 2553, progressTotal: 3000, range: 1 };
     const mid = { id: "mid", progress: 1847, progressTotal: 3000, range: 1 };
     const low = { id: "low", progress: 625, progressTotal: 3000, range: 1 };
@@ -200,11 +200,11 @@ describe("hasNoEconomyCreeps", () => {
 
 describe("reassignForEconomySurvival", () => {
   test("converts a lone builder into a harvester", () => {
-    const builder = { room: { name: "W21N35" }, memory: { role: "builder" } };
+    const builder = { room: { name: "W0N0" }, memory: { role: "builder" } };
     const creeps = { "builder-1": builder };
     (globalThis as { Game?: unknown }).Game = { creeps };
     reassignForEconomySurvival(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 0,
         miner: 0,
@@ -218,13 +218,13 @@ describe("reassignForEconomySurvival", () => {
   });
 
   test("converts every builder when mining capacity is zero", () => {
-    const a = { room: { name: "W21N35" }, memory: { role: "builder" } };
-    const b = { room: { name: "W21N35" }, memory: { role: "builder" } };
+    const a = { room: { name: "W0N0" }, memory: { role: "builder" } };
+    const b = { room: { name: "W0N0" }, memory: { role: "builder" } };
     (globalThis as { Game?: unknown }).Game = {
       creeps: { "builder-1": a, "builder-2": b },
     };
     reassignForEconomySurvival(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 0,
         miner: 0,
@@ -242,7 +242,7 @@ describe("reassignForEconomySurvival", () => {
 describe("reassignSurplusBuilderToUpgrader", () => {
   test("converts surplus builders into upgraders when builder quota drops", () => {
     const builder = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "builder" },
       getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
     };
@@ -251,7 +251,7 @@ describe("reassignSurplusBuilderToUpgrader", () => {
     };
     vi.stubGlobal("WORK", "work");
     const ok = reassignSurplusBuilderToUpgrader(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 0,
         miner: 2,
@@ -275,7 +275,7 @@ describe("reassignSurplusBuilderToUpgrader", () => {
 
   test("leaves builders alone while still under builder quota", () => {
     const builder = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "builder" },
       getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
     };
@@ -284,7 +284,7 @@ describe("reassignSurplusBuilderToUpgrader", () => {
     };
     vi.stubGlobal("WORK", "work");
     const ok = reassignSurplusBuilderToUpgrader(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 0,
         miner: 2,
@@ -310,14 +310,14 @@ describe("reassignSurplusBuilderToUpgrader", () => {
 describe("reassignUpgraderToExtensionBuilder", () => {
   test("converts surplus upgraders into builders during extension push", () => {
     const upgrader = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "upgrader" },
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: { "upgrader-1": upgrader },
     };
     const ok = reassignUpgraderToExtensionBuilder(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 0,
         miner: 2,
@@ -343,7 +343,7 @@ describe("reassignUpgraderToExtensionBuilder", () => {
 describe("reassignForControllerSurvival", () => {
   test("promotes a builder to upgrader when the emergency seat is empty", () => {
     const builder = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "builder" },
       getActiveBodyparts: (part: string) => (part === "work" ? 1 : 0),
     };
@@ -352,7 +352,7 @@ describe("reassignForControllerSurvival", () => {
     };
     vi.stubGlobal("WORK", "work");
     const ok = reassignForControllerSurvival(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 2,
         miner: 0,
@@ -376,7 +376,7 @@ describe("reassignForControllerSurvival", () => {
 
   test("promotes via body[] when getActiveBodyparts reports 0 WORK", () => {
     const builder = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "builder" },
       getActiveBodyparts: () => 0,
       body: [{ type: "work" }, { type: "carry" }, { type: "move" }],
@@ -386,7 +386,7 @@ describe("reassignForControllerSurvival", () => {
     };
     vi.stubGlobal("WORK", "work");
     const ok = reassignForControllerSurvival(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 0,
         miner: 2,
@@ -412,14 +412,14 @@ describe("reassignForControllerSurvival", () => {
 describe("reassignSpareHarvesterToInfraBuilder", () => {
   test("converts a spare harvester into builder when infra builders collapse", () => {
     const harvester = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "harvester", sourceId: "s1" },
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: { "harvester-1": harvester },
     };
     const ok = reassignSpareHarvesterToInfraBuilder(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 3,
         miner: 0,
@@ -446,7 +446,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
 
   test("keeps one harvester per source", () => {
     const harvester = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "harvester" },
     };
     (globalThis as { Game?: unknown }).Game = {
@@ -454,7 +454,7 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
     };
     expect(
       reassignSpareHarvesterToInfraBuilder(
-        { name: "W21N35" } as Room,
+        { name: "W0N0" } as Room,
         {
           harvester: 3,
           miner: 0,
@@ -480,14 +480,14 @@ describe("reassignSpareHarvesterToInfraBuilder", () => {
 
   test("converts spare harvester when a miner already covers a container source", () => {
     const harvester = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "harvester", sourceId: "s1" },
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: { "harvester-1": harvester },
     };
     const ok = reassignSpareHarvesterToInfraBuilder(
-      { name: "W21N35" } as Room,
+      { name: "W0N0" } as Room,
       {
         harvester: 1,
         miner: 1,
@@ -531,18 +531,18 @@ describe("reassignSpareHarvesterToMiner", () => {
       },
     };
     const harvester = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "harvester" as string, sourceId: undefined as string | undefined },
     };
     const miner = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "miner", sourceId: "source-1" },
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: { "miner-1": miner, "harvester-1": harvester },
     };
     const room = {
-      name: "W21N35",
+      name: "W0N0",
       find: (constType: number) =>
         constType === FIND_SOURCES ? [coveredSource, freeSource] : [],
     } as unknown as Room;
@@ -563,7 +563,7 @@ describe("recycleExcessHaulers", () => {
     vi.stubGlobal("OK", 0);
     const spawnPos = { x: 10, y: 10 };
     const hauler = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "hauler" },
       pos: {
         isNearTo: (s: { pos: { x: number; y: number } }) =>
@@ -576,7 +576,7 @@ describe("recycleExcessHaulers", () => {
     let recycled = false;
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: spawnPos,
       recycleCreep: (c: unknown) => {
         recycled = c === hauler;
@@ -612,7 +612,7 @@ describe("recycleExcessHaulers", () => {
     vi.stubGlobal("OK", 0);
     const spawnPos = { x: 10, y: 10 };
     const hauler = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "hauler" },
       store: { energy: 0 },
       pos: {
@@ -625,7 +625,7 @@ describe("recycleExcessHaulers", () => {
     let recycled = false;
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: spawnPos,
       recycleCreep: (c: unknown) => {
         recycled = c === hauler;
@@ -661,14 +661,14 @@ describe("recycleExcessHaulers", () => {
   test("keeps extra haulers while TTL handoff still needs them", () => {
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 10, y: 10 },
       recycleCreep: () => OK,
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: {
         "hauler-1": {
-          room: { name: "W21N35" },
+          room: { name: "W0N0" },
           memory: { role: "hauler" },
           pos: { isNearTo: () => true },
         },
@@ -703,7 +703,7 @@ describe("recycleExcessHaulers", () => {
     vi.stubGlobal("OK", 0);
     const spawnPos = { x: 10, y: 10 };
     const hauler = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "hauler" },
       pos: {
         isNearTo: (s: { pos: { x: number; y: number } }) =>
@@ -716,7 +716,7 @@ describe("recycleExcessHaulers", () => {
     let recycled = false;
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: spawnPos,
       recycleCreep: (c: unknown) => {
         recycled = c === hauler;
@@ -754,14 +754,14 @@ describe("recycleWeakMiners", () => {
     vi.stubGlobal("OK", 0);
     vi.stubGlobal("WORK", "work");
     const weak = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "miner" },
       pos: { isNearTo: () => true },
       moveTo: () => 0,
       getActiveBodyparts: (p: string) => (p === "work" ? 1 : 0),
     };
     const strong = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "miner" },
       pos: { isNearTo: () => false },
       moveTo: () => 0,
@@ -770,7 +770,7 @@ describe("recycleWeakMiners", () => {
     let recycled = false;
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 10, y: 10 },
       recycleCreep: (c: unknown) => {
         recycled = c === weak;
@@ -793,20 +793,20 @@ describe("recycleWeakMiners", () => {
     vi.stubGlobal("WORK", "work");
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 10, y: 10 },
       recycleCreep: () => OK,
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: {
         "miner-1": {
-          room: { name: "W21N35" },
+          room: { name: "W0N0" },
           memory: { role: "miner" },
           pos: { isNearTo: () => true },
           getActiveBodyparts: (p: string) => (p === "work" ? 1 : 0),
         },
         "miner-2": {
-          room: { name: "W21N35" },
+          room: { name: "W0N0" },
           memory: { role: "miner" },
           pos: { isNearTo: () => true },
           getActiveBodyparts: (p: string) => (p === "work" ? 1 : 0),
@@ -823,14 +823,14 @@ describe("recycleWeakMiners", () => {
   test("keeps thin miners while energyAvailable cannot fund the upgrade", () => {
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 10, y: 10 },
       recycleCreep: () => OK,
     };
     (globalThis as { Game?: unknown }).Game = {
       creeps: {
         "miner-1": {
-          room: { name: "W21N35" },
+          room: { name: "W0N0" },
           memory: { role: "miner" },
           pos: { isNearTo: () => true },
           getActiveBodyparts: () => 1,
@@ -847,7 +847,7 @@ describe("recycleExcessMiners", () => {
   test("recycles unassigned surplus miners at spawn after seats are covered", () => {
     vi.stubGlobal("OK", 0);
     const miner = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "miner" },
       pos: { isNearTo: () => true },
       moveTo: () => 0,
@@ -855,7 +855,7 @@ describe("recycleExcessMiners", () => {
     let recycled = false;
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 10, y: 10 },
       recycleCreep: (c: unknown) => {
         recycled = c === miner;
@@ -880,14 +880,14 @@ describe("recycleExcessMiners", () => {
 
   test("does not recycle while a replacement seat is open (TTL handoff)", () => {
     const miner = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       memory: { role: "miner" },
       pos: { isNearTo: () => true },
       moveTo: () => 0,
     };
     const spawn = {
       spawning: null,
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 10, y: 10 },
       recycleCreep: () => OK,
     };
@@ -943,7 +943,7 @@ describe("reclaimStrandedEmergencyHauler", () => {
         h1: {
           name: "h1",
           room: {
-            name: "W21N35",
+            name: "W0N0",
             storage: { store: { energy: 2000 }, pos: { x: 32, y: 8 } },
           },
           memory: { role: "hauler" },
@@ -955,7 +955,7 @@ describe("reclaimStrandedEmergencyHauler", () => {
       },
     };
     const spawn = {
-      room: { name: "W21N35" },
+      room: { name: "W0N0" },
       pos: { x: 31, y: 8 },
       recycleCreep,
     };
@@ -979,7 +979,7 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "hauler-1", remainingTime: 0, cancel },
-      room: { name: "W21N35", energyAvailable: 300 },
+      room: { name: "W0N0", energyAvailable: 300 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
@@ -999,7 +999,7 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "ghost-1", remainingTime: 0, cancel },
-      room: { name: "W21N35", energyAvailable: 300 },
+      room: { name: "W0N0", energyAvailable: 300 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
     expect(cancel).toHaveBeenCalled();
@@ -1014,7 +1014,7 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "miner-1", remainingTime: 5, cancel },
-      room: { name: "W21N35", energyAvailable: 300 },
+      room: { name: "W0N0", energyAvailable: 300 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(false);
     expect(cancel).not.toHaveBeenCalled();
@@ -1032,7 +1032,7 @@ describe("clearZombieSpawn", () => {
     (globalThis as { Memory?: unknown }).Memory = { ags: {} };
     const spawn = {
       spawning: { name: "hauler-1", remainingTime: 0, cancel },
-      room: { name: "W21N35", energyAvailable: 67 },
+      room: { name: "W0N0", energyAvailable: 67 },
     };
     expect(clearZombieSpawn(spawn as unknown as StructureSpawn)).toBe(true);
     expect(cancel).toHaveBeenCalled();

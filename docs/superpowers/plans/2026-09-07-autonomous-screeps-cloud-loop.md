@@ -23,7 +23,7 @@
 - Metrics minimum: energy income + error rate; composite score later.
 - Safety: CI gate, rollback workflow, scoped Issues, rate limit **4 agent runs / hour**.
 - Defaults locked here: metrics cron `*/15 * * * *`; stagnation = `|Δ energyIncomePerTick| < 5%` over **4** consecutive pulls and no open blocking condition listed in Task 8; rollback if energyIncome drops **≥ 30%** vs `Memory.ags.baseline.energyIncomePerTick` or `errorCount ≥ 10` in last window.
-- Secrets: `CURSOR_API_KEY`, `SCREEPS_TOKEN`; vars: `SCREEPS_BRANCH=default`, `SCREEPS_SHARD` (set at setup; empty string means omit shard header), `GITHUB_REPO` full name for cloud agent (e.g. `owner/AutoGorwingScreeps`).
+- Secrets: `CURSOR_API_KEY`, `SCREEPS_TOKEN`; vars: `SCREEPS_BRANCH=default`, ``SCREEPS_SHARD` secret (set at setup; empty string means omit shard header), `GITHUB_REPO` full name for cloud agent (e.g. `owner/AutoGorwingScreeps`).
 - Do not commit secrets. Do not use `git commit --amend` unless the plan step explicitly says so.
 - Prefer small commits per task. German or English commit messages are fine; prefer English conventional commits: `feat:`, `fix:`, `ci:`, `docs:`, `test:`, `chore:`.
 
@@ -845,14 +845,14 @@ jobs:
         env:
           SCREEPS_TOKEN: ${{ secrets.SCREEPS_TOKEN }}
           SCREEPS_BRANCH: ${{ vars.SCREEPS_BRANCH || 'default' }}
-          SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
+          SCREEPS_SHARD: ${{ secrets.SCREEPS_SHARD }}
         run: npx tsx ops/deploy.ts
 ```
 
 - [ ] **Step 3: Document required secrets in README section (draft)**
 
 Repo Settings → Secrets: `SCREEPS_TOKEN`, `CURSOR_API_KEY`  
-Vars: `SCREEPS_BRANCH=default`, `SCREEPS_SHARD=<your shard>`, `REPO_FULL_NAME=owner/name`
+Vars: `SCREEPS_BRANCH=default`; Secrets: `SCREEPS_SHARD`, `SCREEPS_ROOM`, `REPO_FULL_NAME=owner/name`
 
 - [ ] **Step 4: Commit**
 
@@ -1155,7 +1155,7 @@ jobs:
       - name: Pull metrics / open issues
         env:
           SCREEPS_TOKEN: ${{ secrets.SCREEPS_TOKEN }}
-          SCREEPS_SHARD: ${{ vars.SCREEPS_SHARD }}
+          SCREEPS_SHARD: ${{ secrets.SCREEPS_SHARD }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: npx tsx ops/metricsPull.ts

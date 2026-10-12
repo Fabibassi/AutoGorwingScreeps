@@ -23,6 +23,9 @@ Unter **Settings → Secrets and variables → Actions**:
 |------|---------|--------------|
 | `SCREEPS_TOKEN` | ja | Screeps Auth-Token (Account → Auth Tokens) |
 | `CURSOR_API_KEY` | ja | Cursor API Key für den Evolve-Agent |
+| `SCREEPS_SHARD` | ja (World) | Shard-Name; als Secret, nicht als Variable (Account-Lage) |
+| `SCREEPS_ROOM` | ja (Live Probe) | Home-Room für Metrics/Probe-Cron |
+| `SCREEPS_HOSTNAME` | optional | leer = `https://screeps.com` |
 | `AGS_GH_TOKEN` | optional | PAT mit `contents`/`pull-requests`, falls `GITHUB_TOKEN` für Auto-Merge (z. B. mit Branch Protection) nicht reicht |
 
 ### Variables
@@ -30,8 +33,6 @@ Unter **Settings → Secrets and variables → Actions**:
 | Name | Empfehlung | Beschreibung |
 |------|------------|--------------|
 | `SCREEPS_BRANCH` | `default` | Ziel-Branch in Screeps (Code-Push) |
-| `SCREEPS_SHARD` | z. B. `shard3` | Shard; leer lassen, wenn der Header weggelassen werden soll |
-| `SCREEPS_HOSTNAME` | leer | Optional; leer = `https://screeps.com`. Nur setzen, wenn die World-API umgeleitet wird |
 
 Optional für **Dedicated/Private Server** (Workflow **Deploy Private Server**) — nicht der Browser-Sim:
 
@@ -98,7 +99,7 @@ Derselbe Bot-Code. Ziel-URL über `SCREEPS_HOSTNAME` (z. B. `http://127.0.0.1:
    ```powershell
    $env:SCREEPS_HOSTNAME="http://127.0.0.1:21025"
    $env:SCREEPS_TOKEN="..."   # oder SCREEPS_EMAIL + SCREEPS_PASSWORD
-   $env:SCREEPS_SHARD=""      # kein Shard auf Private Server
+   $env:SCREEPS_SHARD=""  # secret in CI; local only      # kein Shard auf Private Server
    npm run deploy:private
    ```
 2. **Oder** Self-hosted GitHub Runner auf dem PC + Workflow **Deploy Private Server** mit `SCREEPS_PRIVATE_*`.

@@ -286,7 +286,7 @@ export function countFreeStorageAccess(
  * empty while storage full because filler cannot stand next to storage.
  *
  * Blocking sites on the ring are always removed (links exempt). Placement must
- * not re-site there — otherwise place→clear thrash under storage (live W21N35).
+ * not re-site there — otherwise place→clear thrash under storage (live home).
  */
 export function clearStorageAccessRing(
   room: Room,
