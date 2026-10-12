@@ -1048,6 +1048,7 @@ export function runSpawn(spawn: StructureSpawn): void {
               !hasUncoveredMinerSeat(minerSnapshots, minerSourceIds),
             storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
             storageWaitReserve: storageBlackoutReserve(),
+            energyCapacityAvailable,
           })
         : minerMinWork;
     // Bridge only: keep maxWork=minWork so partial spawn energy cannot grow 1→2–4W.

@@ -99,5 +99,12 @@ describe("link placement priority", () => {
     expect(shouldFillStorageLink({ linkEnergy: 0, storageEnergy: 0 })).toBe(
       false,
     );
+    expect(
+      shouldFillStorageLink({
+        linkEnergy: 0,
+        storageEnergy: 15_000,
+        storageFloor: 20_000,
+      }),
+    ).toBe(false);
   });
 });

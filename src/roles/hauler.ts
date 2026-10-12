@@ -66,8 +66,9 @@ export const HAUL_THRESHOLDS = {
    * Keep this much energy in storage as a blackout buffer so a filler can
    * still top spawn after income dips. Urgent spawn may dip into it.
    * Override with Memory.ags.storageBlackoutReserve (0 disables).
+   * Aligned with STORAGE_FLOOR_ENERGY (RCL4+ spend throttle).
    */
-  storageBlackoutReserve: 2000,
+  storageBlackoutReserve: 20_000,
 } as const;
 
 export interface StorageHaulContext {

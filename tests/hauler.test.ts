@@ -192,7 +192,7 @@ describe("storage haul policy (absolute spawn energy)", () => {
         spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
-        storageEnergy: 2500,
+        storageEnergy: 25_000,
       }),
     ).toBe(true);
   });
@@ -205,7 +205,7 @@ describe("storage haul policy (absolute spawn energy)", () => {
         spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
-        storageEnergy: 2000,
+        storageEnergy: 20_000,
       }),
     ).toBe(false);
   });
@@ -232,7 +232,7 @@ describe("storage haul policy (absolute spawn energy)", () => {
         spawnCapacity: 300,
         extensionsNeedingEnergy: 0,
         storageExists: true,
-        storageEnergy: 5000,
+        storageEnergy: 25_000,
       }),
     ).toBe(true);
   });

@@ -6,6 +6,7 @@ import {
   maybeArmRcl5PostHubMode,
   maybeArmRcl5PostHubPlan,
   maybeArmRcl6SpendMode,
+  maybeDisarmRcl6SpendMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
   shouldPlaceRcl5Links,
@@ -59,26 +60,65 @@ describe("rcl5Mode", () => {
   });
 
   test("maybeArmRcl6SpendMode switches fat_first → upgrade_rush at RCL6 with remotes", () => {
+    const fat = { storageEnergy: 50_000 };
     expect(
-      maybeArmRcl6SpendMode(5, "fat_first", { remotePlan: "reserved_drop" }),
+      maybeArmRcl6SpendMode(5, "fat_first", {
+        remotePlan: "reserved_drop",
+        ...fat,
+      }),
     ).toBeUndefined();
     expect(
-      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: "off" }),
+      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: "off", ...fat }),
     ).toBeUndefined();
     expect(
-      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: "reserved_drop" }),
+      maybeArmRcl6SpendMode(6, "fat_first", {
+        remotePlan: "reserved_drop",
+        ...fat,
+      }),
     ).toBe("upgrade_rush");
     expect(
-      maybeArmRcl6SpendMode(6, "fat_first", { remotePlan: undefined }),
+      maybeArmRcl6SpendMode(6, "fat_first", {
+        remotePlan: undefined,
+        ...fat,
+      }),
     ).toBe("upgrade_rush");
     expect(
       maybeArmRcl6SpendMode(6, "upgrade_rush", {
         remotePlan: "reserved_drop",
+        ...fat,
       }),
     ).toBeUndefined();
     expect(
       maybeArmRcl6SpendMode(6, "build_heavy", {
         remotePlan: "reserved_drop",
+        ...fat,
+      }),
+    ).toBeUndefined();
+    expect(
+      maybeArmRcl6SpendMode(6, "fat_first", {
+        remotePlan: "reserved_drop",
+        storageEnergy: 20_000,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("maybeDisarmRcl6SpendMode drops upgrade_rush → fat_first under floor", () => {
+    expect(
+      maybeDisarmRcl6SpendMode(6, "upgrade_rush", {
+        remotePlan: "reserved_drop",
+        storageEnergy: 20_000,
+      }),
+    ).toBe("fat_first");
+    expect(
+      maybeDisarmRcl6SpendMode(6, "upgrade_rush", {
+        remotePlan: "reserved_drop",
+        storageEnergy: 50_000,
+      }),
+    ).toBeUndefined();
+    expect(
+      maybeDisarmRcl6SpendMode(6, "fat_first", {
+        remotePlan: "reserved_drop",
+        storageEnergy: 0,
       }),
     ).toBeUndefined();
   });
@@ -108,9 +148,24 @@ describe("rcl5Mode", () => {
       hasConstructionSites: true,
       minerWorkParts: 10,
       sources: 2,
+      storageEnergy: 50_000,
     });
     expect(q).toMatchObject({ upgrader: 4, builder: 1, filler: 1 });
     expect(rcl5ModePausesExtensionSpam("upgrade_rush")).toBe(true);
+  });
+
+  test("storage floor throttles upgrade_rush to 1 upgrader", () => {
+    const q = applyRcl5ModeQuotas(base, "upgrade_rush", {
+      rcl: 5,
+      hasStorage: true,
+      hasConstructionSites: false,
+      minerWorkParts: 10,
+      sources: 2,
+      extensionCount: 30,
+      towerCount: 2,
+      storageEnergy: 15_000,
+    });
+    expect(q).toMatchObject({ upgrader: 1, builder: 0, filler: 1 });
   });
 
   test("shouldPlaceRcl5Links only for explicit link_boost after hub", () => {
@@ -193,7 +248,7 @@ describe("rcl5Mode", () => {
       desiredCreeps(4, 2, 2, true, {
         energyIncomePerTick: 10,
         hasStorage: true,
-        storageEnergy: 2000,
+        storageEnergy: 25_000,
         minerWorkParts: 10,
         energyCapacityAvailable: 1300,
         rcl5Mode: "upgrade_rush",
