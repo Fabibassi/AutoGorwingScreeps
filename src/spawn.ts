@@ -1,5 +1,6 @@
 import {
   bodyForRole,
+  homeHaulerBodyBudget,
   desiredCreeps,
   effectiveMinerMinWork,
   hasNoEconomyCreeps,
@@ -659,6 +660,26 @@ export function hasRecoverableEnergyBeside(spawn: StructureSpawn): boolean {
   );
 }
 
+const PART_COST: Record<string, number> = {
+  work: 100,
+  carry: 50,
+  move: 50,
+  attack: 80,
+  ranged_attack: 150,
+  heal: 250,
+  claim: 600,
+  tough: 10,
+};
+
+function noteSpawnSpend(role: string, body: BodyPartConstant[]): void {
+  if (!Memory.ags) return;
+  let cost = 0;
+  for (const part of body) cost += PART_COST[part] ?? 0;
+  const spent = Memory.ags.spawnSpent ?? {};
+  spent[role] = (spent[role] ?? 0) + cost;
+  Memory.ags.spawnSpent = spent;
+}
+
 export function runSpawn(spawn: StructureSpawn): void {
   healCreepRoles();
   clearZombieSpawn(spawn);
@@ -707,6 +728,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     rcl5Mode: Memory.ags?.rcl5Mode,
     rcl5Plan: Memory.ags?.rcl5Plan,
     fillerPlan: Memory.ags?.fillerPlan,
+    haulerCap: Memory.ags?.haulerCap,
     extensionCount:
       countStructures(room, STRUCTURE_EXTENSION) +
       room
@@ -842,8 +864,13 @@ export function runSpawn(spawn: StructureSpawn): void {
     if (creep.room.name !== room.name || creep.memory.role !== "hauler") continue;
     haulerSnapshots.push({ ticksToLive: creep.ticksToLive });
   }
+  const haulerBodyBudget = homeHaulerBodyBudget({
+    emergency: false,
+    experimentMax: exp.haulerMaxCost,
+    override: Memory.ags?.haulerBudget,
+  });
   const nextHaulerBody = bodyForRole("hauler", energyAvailable, {
-    haulerMaxCost: exp.haulerMaxCost,
+    haulerMaxCost: haulerBodyBudget,
   });
   const haulerLead = minerReplacementLeadTime({
     bodyParts: nextHaulerBody.length || 2,
@@ -970,11 +997,13 @@ export function runSpawn(spawn: StructureSpawn): void {
   );
   // Cap haulers when economy is empty — a 300-energy hauler blocks the first harvester.
   // Experiment haulerCap (thin) also caps when economy is healthy.
-  const haulerMaxCost =
-    hasNoEconomyCreeps(liveCounts) ||
-    (liveCounts.miner === 0 && infrastructureDedicated)
-      ? 100
-      : exp.haulerMaxCost;
+  const haulerMaxCost = homeHaulerBodyBudget({
+    emergency:
+      hasNoEconomyCreeps(liveCounts) ||
+      (liveCounts.miner === 0 && infrastructureDedicated),
+    experimentMax: exp.haulerMaxCost,
+    override: Memory.ags?.haulerBudget,
+  });
 
   for (const role of spawnOrder) {
     const roleWant = role === "miner" ? minerSeatWant : want[role];
@@ -1085,6 +1114,7 @@ export function runSpawn(spawn: StructureSpawn): void {
       };
     }
     if (result === OK) {
+      noteSpawnSpend(role, body);
       return;
     }
   }

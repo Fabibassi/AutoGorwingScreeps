@@ -3,6 +3,8 @@ export {
   buildHaulerBody,
   buildMinerBody,
   buildWorkerBody,
+  HAULER_BODY_BUDGET,
+  homeHaulerBodyBudget,
 } from "./bodies";
 export {
   parseRoadPolicy,

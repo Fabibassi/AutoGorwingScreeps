@@ -9,6 +9,7 @@ import {
   extensionQuota,
   extensionsNeededForMinerWork,
   haulerCountForMining,
+  homeHaulerBodyBudget,
   isSoftLocked,
   minerTargetWorkParts,
   shouldBankForBetterMiners,
@@ -173,6 +174,17 @@ describe("desiredCreeps", () => {
         haulRange: 20,
       }),
     ).toMatchObject({ miner: 2, hauler: 4 });
+  });
+
+  test("haulerCap clamps the mining formula", () => {
+    expect(
+      desiredCreeps(4, 2, 2, false, {
+        energyIncomePerTick: 10,
+        minerWorkParts: 10,
+        haulRange: 20,
+        haulerCap: 2,
+      }),
+    ).toMatchObject({ hauler: 2 });
   });
 
   test("b_chain baseline drop-mines without containers", () => {
@@ -988,6 +1000,17 @@ describe("bodyForRole", () => {
     expect(
       bodyForRole("miner", 300, { minerMinWork: 1, minerMaxWork: 1 }),
     ).toEqual(["work", "move"]);
+  });
+
+  test("home hauler budget is 6 carry+move pairs", () => {
+    const body = bodyForRole("hauler", 1800, { haulerMaxCost: 600 });
+    expect(body.filter((p) => p === "carry")).toHaveLength(6);
+    expect(body.filter((p) => p === "move")).toHaveLength(6);
+    expect(homeHaulerBodyBudget({ emergency: false })).toBe(600);
+    expect(homeHaulerBodyBudget({ emergency: true })).toBe(100);
+    expect(
+      homeHaulerBodyBudget({ emergency: false, experimentMax: 200 }),
+    ).toBe(200);
   });
 
   test("hauler uses carry/move pairs", () => {

@@ -45,6 +45,8 @@ export function loop(): void {
   const remoteVariantSticky = Memory.ags?.remoteVariant;
   const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
   const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
+  const haulerCapSticky = Memory.ags?.haulerCap;
+  const haulerBudgetSticky = Memory.ags?.haulerBudget;
   const wallPolicySticky = Memory.ags?.wallPolicy;
   const wallsArmedSticky = Memory.ags?.wallsArmed;
   const wallArmReasonSticky = Memory.ags?.wallArmReason;
@@ -204,6 +206,12 @@ export function loop(): void {
     if (storageBlackoutReserveSticky !== undefined) {
       Memory.ags.storageBlackoutReserve = storageBlackoutReserveSticky;
     }
+    if (haulerCapSticky !== undefined) {
+      Memory.ags.haulerCap = haulerCapSticky;
+    }
+    if (haulerBudgetSticky !== undefined) {
+      Memory.ags.haulerBudget = haulerBudgetSticky;
+    }
     const withHealth = maybeUpdateHealthCheck(room, Memory.ags);
     if (withHealth && withHealth !== Memory.ags) {
       Object.assign(Memory.ags, withHealth);
@@ -240,6 +248,12 @@ export function loop(): void {
     }
     if (storageBlackoutReserveSticky !== undefined) {
       Memory.ags.storageBlackoutReserve = storageBlackoutReserveSticky;
+    }
+    if (haulerCapSticky !== undefined) {
+      Memory.ags.haulerCap = haulerCapSticky;
+    }
+    if (haulerBudgetSticky !== undefined) {
+      Memory.ags.haulerBudget = haulerBudgetSticky;
     }
 
     logPlanStatusIfDue(room, Memory.ags);

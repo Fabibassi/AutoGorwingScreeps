@@ -40,6 +40,25 @@ export function buildMinerBody(
   return body;
 }
 
+/**
+ * Home hauler body cap (spend bench 2026-10-16): 6×CARRY+MOVE.
+ * Full RCL5 bodies (~1800) were the largest spawn bill and did not raise
+ * upgrade rate. Seat count stays on the mining formula.
+ */
+export const HAULER_BODY_BUDGET = 600;
+
+/** Emergency recovery stays at 100. Experiments may set a tighter cap. */
+export function homeHaulerBodyBudget(opts: {
+  emergency: boolean;
+  experimentMax?: number;
+  override?: number;
+}): number {
+  if (opts.emergency) return 100;
+  const budget = opts.override ?? HAULER_BODY_BUDGET;
+  if (opts.experimentMax != null) return Math.min(opts.experimentMax, budget);
+  return budget;
+}
+
 export function buildHaulerBody(
   energyAvailable: number,
   opts?: { maxCost?: number },
