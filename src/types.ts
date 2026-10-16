@@ -112,6 +112,12 @@ export interface AgsMemory {
    * Default 2000; set 0 to disable for sim control arms.
    */
   storageBlackoutReserve?: number;
+  /** Sim-only hauler seat cap. Unset on live (formula decides). */
+  haulerCap?: number;
+  /** Sim-only max energy for a hauler body. Unset = full spawn budget. */
+  haulerBudget?: number;
+  /** Energy spent on successful spawns this run, by role. */
+  spawnSpent?: Record<string, number>;
   /**
    * Wall/rampart arming: auto (default) | off | force | raid_only (sim).
    */
