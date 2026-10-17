@@ -176,6 +176,30 @@ describe("desiredCreeps", () => {
     ).toMatchObject({ miner: 2, hauler: 4 });
   });
 
+  test("upgraderSeats overrides fat_first and the storage floor", () => {
+    const econ = {
+      hasStorage: true,
+      storageEnergy: 50_000,
+      minerWorkParts: 10,
+      rcl5Mode: "fat_first",
+      extensionCount: 30,
+      towerCount: 2,
+      linkCount: 2,
+      rcl5Plan: "link_boost",
+    };
+    expect(desiredCreeps(5, 2, 2, false, econ).upgrader).toBe(3);
+    expect(
+      desiredCreeps(5, 2, 2, false, { ...econ, upgraderSeats: 2 }).upgrader,
+    ).toBe(2);
+    expect(
+      desiredCreeps(5, 2, 2, false, {
+        ...econ,
+        storageEnergy: 1000,
+        upgraderSeats: 4,
+      }).upgrader,
+    ).toBe(4);
+  });
+
   test("haulerCap clamps the mining formula", () => {
     expect(
       desiredCreeps(4, 2, 2, false, {
@@ -1000,6 +1024,16 @@ describe("bodyForRole", () => {
     expect(
       bodyForRole("miner", 300, { minerMinWork: 1, minerMaxWork: 1 }),
     ).toEqual(["work", "move"]);
+  });
+
+  test("static upgrader is WORK-heavy with one carry and one move", () => {
+    const body = bodyForRole("upgrader", 1800, { staticUpgrader: true });
+    expect(body.filter((p) => p === "work")).toHaveLength(17);
+    expect(body.filter((p) => p === "carry")).toHaveLength(1);
+    expect(body.filter((p) => p === "move")).toHaveLength(1);
+    expect(bodyForRole("upgrader", 1800).filter((p) => p === "move")).toHaveLength(
+      9,
+    );
   });
 
   test("home hauler budget is 6 carry+move pairs", () => {

@@ -1,20 +1,36 @@
+import {
+  parseUpgradeStyle,
+  upgradeStyleParks,
+} from "../earlyGame/upgradeStyle";
 import { isIncomeStalled } from "../telemetry";
 import { canWithdrawFromSpawn } from "./builder";
 import { storageBlackoutReserve } from "./hauler";
 
 export function runUpgrader(creep: Creep): void {
+  const park = upgradeStyleParks(parseUpgradeStyle(Memory.ags?.upgradeStyle));
   if (creep.store[RESOURCE_ENERGY] === 0) {
     const controller = creep.room.controller;
     if (controller) {
       // RCL5 link_boost: prefer controller link over walking to storage.
+      // Park arms wait on an empty link instead of hiking to a source container.
       const link = controller.pos.findInRange(FIND_MY_STRUCTURES, 2, {
         filter: (s): s is StructureLink =>
           s.structureType === STRUCTURE_LINK &&
-          (s.store[RESOURCE_ENERGY] ?? 0) > 0,
+          (park || (s.store[RESOURCE_ENERGY] ?? 0) > 0),
       })[0];
       if (link) {
-        if (creep.withdraw(link, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+        if ((link.store[RESOURCE_ENERGY] ?? 0) > 0) {
+          if (creep.withdraw(link, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+            creep.moveTo(link);
+          }
+        } else if (!creep.pos.inRangeTo(link, 1)) {
           creep.moveTo(link);
+        }
+        return;
+      }
+      if (park) {
+        if (!creep.pos.inRangeTo(controller, 3)) {
+          creep.moveTo(controller, { range: 3 });
         }
         return;
       }

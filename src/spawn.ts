@@ -25,6 +25,10 @@ import {
 } from "./earlyGame/minerHandoff";
 import { resolveExperiment } from "./earlyGame/experimentPolicy";
 import {
+  parseUpgradeStyle,
+  upgradeStyleStatic,
+} from "./earlyGame/upgradeStyle";
+import {
   fillerMaxCostForPlan,
   shouldDeferFatFillerSpawn,
 } from "./earlyGame/fillerPlan";
@@ -729,6 +733,7 @@ export function runSpawn(spawn: StructureSpawn): void {
     rcl5Plan: Memory.ags?.rcl5Plan,
     fillerPlan: Memory.ags?.fillerPlan,
     haulerCap: Memory.ags?.haulerCap,
+    upgraderSeats: Memory.ags?.upgraderSeats,
     extensionCount:
       countStructures(room, STRUCTURE_EXTENSION) +
       room
@@ -1088,6 +1093,9 @@ export function runSpawn(spawn: StructureSpawn): void {
       fillerMaxCost: fillerMaxCostForPlan(Memory.ags?.fillerPlan),
       minerMinWork: roleMinerMinWork,
       minerMaxWork: bridgingThin ? roleMinerMinWork : undefined,
+      staticUpgrader:
+        role === "upgrader" &&
+        upgradeStyleStatic(parseUpgradeStyle(Memory.ags?.upgradeStyle)),
     });
     if (body.length === 0) continue;
     const name = `${role}-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;

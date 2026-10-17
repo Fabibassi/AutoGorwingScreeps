@@ -174,6 +174,13 @@ export interface EconomyContext {
   rcl5Plan?: string;
   /** Hub filler sizing: thin | fat | duo_fat. */
   fillerPlan?: string;
+  /**
+   * Optional hard cap on hauler seats (sim sweep). Unset = formula only.
+   * Live stays unset; values ≥1 clamp the mining formula.
+   */
+  haulerCap?: number;
+  /** Sim sweep: force upgrader seats (ignores floor throttle and mode default). */
+  upgraderSeats?: number;
 }
 
 /**
@@ -784,6 +791,10 @@ export function desiredCreeps(
       ? fillerQuotaForPlan(economy?.fillerPlan)
       : 0,
   };
+  const haulerCap = economy?.haulerCap;
+  if (haulerCap != null && haulerCap >= 1) {
+    quotas.hauler = Math.min(quotas.hauler, Math.floor(haulerCap));
+  }
 
   if (needsBootstrapHarvester(true, economy)) {
     quotas.harvester = 1;
@@ -809,10 +820,15 @@ export function desiredCreeps(
       storageEnergy: economy?.storageEnergy,
     },
   );
-  return applyRcl5PlanQuotas(modeQuotas, economy?.rcl5Plan, {
+  const planned = applyRcl5PlanQuotas(modeQuotas, economy?.rcl5Plan, {
     linksBuilt: economy?.linkCount ?? 0,
     hasConstructionSites,
   });
+  const seats = economy?.upgraderSeats;
+  if (seats != null && seats >= 1) {
+    planned.upgrader = Math.floor(seats);
+  }
+  return planned;
 }
 
 /** Ordered build priorities for early rooms (extensions before containers/storage). */

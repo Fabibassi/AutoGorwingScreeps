@@ -1,10 +1,14 @@
-import { STORAGE_FLOOR_ENERGY } from "../earlyGame/policy";
+import { linkFeedFloor, parseUpgradeStyle } from "../earlyGame/upgradeStyle";
 import {
   classifyLinkRole,
   shouldFillStorageLink,
   shouldTransferStorageToController,
   transferAmount,
 } from "./plan";
+
+function feedFloor(): number {
+  return linkFeedFloor(parseUpgradeStyle(Memory.ags?.upgradeStyle));
+}
 
 function ownedLinks(room: Room): StructureLink[] {
   return room.find(FIND_MY_STRUCTURES, {
@@ -41,7 +45,7 @@ function tryFillStorageLink(room: Room, storageLink: StructureLink): void {
     !shouldFillStorageLink({
       linkEnergy,
       storageEnergy: storage.store[RESOURCE_ENERGY] ?? 0,
-      storageFloor: STORAGE_FLOOR_ENERGY,
+      storageFloor: feedFloor(),
     })
   ) {
     return;
@@ -91,7 +95,7 @@ export function runLinks(room: Room): void {
       storageCooldown: storageLink.cooldown,
       controllerFree,
       roomStorageEnergy: room.storage.store[RESOURCE_ENERGY] ?? 0,
-      storageFloor: STORAGE_FLOOR_ENERGY,
+      storageFloor: feedFloor(),
     })
   ) {
     return;
