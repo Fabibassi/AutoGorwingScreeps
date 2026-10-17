@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   applyRcl5ModeQuotas,
+  upgraderSeatsForStorage,
   applyRcl5PlanQuotas,
   maybeArmRcl5AftercareMode,
   maybeArmRcl5PostHubMode,
@@ -229,6 +230,44 @@ describe("rcl5Mode", () => {
       sources: 2,
     });
     expect(fat.upgrader).toBe(3);
+  });
+
+  test("fat_first steps upgraders 1 / 2 / 3 with storage once miners are fat", () => {
+    expect(upgraderSeatsForStorage(20_000)).toBe(1);
+    expect(upgraderSeatsForStorage(20_001)).toBe(2);
+    expect(upgraderSeatsForStorage(30_000)).toBe(2);
+    expect(upgraderSeatsForStorage(30_001)).toBe(3);
+    const mid = applyRcl5ModeQuotas(base, "fat_first", {
+      rcl: 5,
+      hasStorage: true,
+      hasConstructionSites: false,
+      minerWorkParts: 10,
+      sources: 2,
+      extensionCount: 30,
+      towerCount: 2,
+      storageEnergy: 25_000,
+    });
+    expect(mid.upgrader).toBe(2);
+    const high = applyRcl5ModeQuotas(base, "fat_first", {
+      rcl: 5,
+      hasStorage: true,
+      hasConstructionSites: false,
+      minerWorkParts: 10,
+      sources: 2,
+      extensionCount: 30,
+      towerCount: 2,
+      storageEnergy: 35_000,
+    });
+    expect(high.upgrader).toBe(3);
+    const floor = applyRcl5ModeQuotas(base, "fat_first", {
+      rcl: 5,
+      hasStorage: true,
+      hasConstructionSites: false,
+      minerWorkParts: 10,
+      sources: 2,
+      storageEnergy: 19_000,
+    });
+    expect(floor.upgrader).toBe(1);
   });
 
   test("build_heavy keeps extension flood", () => {

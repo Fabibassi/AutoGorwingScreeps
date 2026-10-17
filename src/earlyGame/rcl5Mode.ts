@@ -1,5 +1,18 @@
 import type { CreepQuotas } from "./policy";
-import { storageBelowFloor } from "./storageFloor";
+import { STORAGE_FLOOR_ENERGY, storageBelowFloor } from "./storageFloor";
+
+/** Above this, fat_first wants 3 upgraders. 20k–30k wants 2. */
+export const UPGRADER_BAND_HIGH = 30_000;
+
+/**
+ * fat_first seats once miners are fat and storage is known.
+ * At or under the 20k floor: 1. Through 30k: 2. Above 30k: 3.
+ */
+export function upgraderSeatsForStorage(storageEnergy: number): 1 | 2 | 3 {
+  if (storageEnergy <= STORAGE_FLOOR_ENERGY) return 1;
+  if (storageEnergy <= UPGRADER_BAND_HIGH) return 2;
+  return 3;
+}
 
 /** Home-room RCL4→5 spend experiments (no remotes). */
 export const RCL5_MODES = [
@@ -241,7 +254,12 @@ export function applyRcl5ModeQuotas(
     case "fat_first": {
       const fatEnough =
         opts.minerWorkParts >= Math.max(1, opts.sources) * 5;
-      q.upgrader = fatEnough ? 3 : 1;
+      q.upgrader =
+        fatEnough && opts.storageEnergy !== undefined
+          ? upgraderSeatsForStorage(opts.storageEnergy)
+          : fatEnough
+            ? 3
+            : 1;
       q.builder = opts.hasConstructionSites ? 1 : 0;
       return q;
     }
