@@ -116,6 +116,13 @@ export interface AgsMemory {
   haulerCap?: number;
   /** Sim-only max energy for a hauler body. Unset = full spawn budget. */
   haulerBudget?: number;
+  /** Sim-only forced upgrader seats. Unset on live. */
+  upgraderSeats?: number;
+  /**
+   * Sim arm: baseline | park | feed | static | static_park | static_feed.
+   * Unset on live (baseline).
+   */
+  upgradeStyle?: string;
   /** Energy spent on successful spawns this run, by role. */
   spawnSpent?: Record<string, number>;
   /**

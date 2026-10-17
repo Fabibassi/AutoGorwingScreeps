@@ -83,6 +83,23 @@ export function buildHaulerBody(
   return body;
 }
 
+/**
+ * Link upgrader: one CARRY + one MOVE, every other 100 energy is WORK.
+ * Needs 200. At 1800 that is 16 WORK? 1800-100 = 1700 → 17 WORK.
+ */
+export function buildStaticUpgraderBody(
+  energyAvailable: number,
+): BodyPartConstant[] {
+  const tail = PART_COST.carry + PART_COST.move;
+  const workCost = PART_COST.work;
+  if (energyAvailable < workCost + tail) return [];
+  const workParts = Math.floor((energyAvailable - tail) / workCost);
+  const body: BodyPartConstant[] = [];
+  for (let i = 0; i < workParts; i++) body.push("work");
+  body.push("carry", "move");
+  return body;
+}
+
 export function buildWorkerBody(energyAvailable: number): BodyPartConstant[] {
   const unit = PART_COST.work + PART_COST.carry + PART_COST.move;
   if (energyAvailable >= unit) {
@@ -109,6 +126,8 @@ export function bodyForRole(
     minerMinWork?: number;
     /** Cap WORK when bridging (e.g. 1W only — do not grow into 2–4W mid bodies). */
     minerMaxWork?: number;
+    /** Link upgrader: WORK-heavy, one CARRY, one MOVE. */
+    staticUpgrader?: boolean;
   },
 ): BodyPartConstant[] {
   switch (role) {
@@ -128,7 +147,9 @@ export function bodyForRole(
     case "builder":
     case "harvester":
     case "upgrader":
-      return buildWorkerBody(energyAvailable);
+      return opts?.staticUpgrader
+        ? buildStaticUpgraderBody(energyAvailable)
+        : buildWorkerBody(energyAvailable);
     default:
       return ["work", "carry", "move"];
   }
