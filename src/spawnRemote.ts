@@ -9,6 +9,7 @@ import {
   remoteSpawnGatesOk,
   parseRemotePlan,
   REMOTE_PATH_DEFAULT,
+  type RemoteQuotas,
 } from "./earlyGame/remotePlan";
 import {
   buildRemoteHaulerBody,
@@ -33,6 +34,84 @@ export function countRemoteRoles(): Record<RemoteRole, number> {
     if (role && role in counts) counts[role]++;
   }
   return counts;
+}
+
+/** Live remote quota for the armed plan (path + sources). */
+export function currentRemoteQuotas(home: Room): RemoteQuotas {
+  const plan = parseRemotePlan(Memory.ags?.remotePlan);
+  const remoteRoom = Memory.ags?.remoteRoom ?? pickFirstExitRoom(home.name);
+  const pathLength = Memory.ags?.remotePathLength ?? REMOTE_PATH_DEFAULT;
+  const variant = parseRemoteVariant(Memory.ags?.remoteVariant);
+  const tuning = tuningForRemoteVariant(variant);
+  const remoteSources = remoteRoom
+    ? (Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2)
+    : 2;
+  return remoteQuotasForPlan(plan, {
+    sources: Math.max(1, remoteSources),
+    pathLength,
+    haulerQuotaScale: tuning.haulerQuotaScale,
+  });
+}
+
+/**
+ * Surplus remoteHaulers walk home and recycle so CAPEX builders get spawn.
+ * Prefer empty + near spawn; carrying haulers still deliver via role until empty.
+ */
+export function recycleExcessRemoteHaulers(spawn: StructureSpawn): boolean {
+  if (spawn.spawning) return false;
+  const want = currentRemoteQuotas(spawn.room).remoteHauler;
+  const counts = countRemoteRoles();
+  if (counts.remoteHauler <= want) {
+    for (const name in Game.creeps) {
+      const creep = Game.creeps[name];
+      if (creep.memory.role !== "remoteHauler") continue;
+      if (creep.memory.homeRoom && creep.memory.homeRoom !== spawn.room.name) {
+        continue;
+      }
+      if (creep.memory.recycling) delete creep.memory.recycling;
+    }
+    return false;
+  }
+
+  let best: Creep | null = null;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.memory.role !== "remoteHauler") continue;
+    if (creep.memory.homeRoom && creep.memory.homeRoom !== spawn.room.name) {
+      continue;
+    }
+    const carried =
+      creep.store?.getUsedCapacity?.(RESOURCE_ENERGY) ??
+      (creep.store as { energy?: number } | undefined)?.energy ??
+      0;
+    const empty = carried <= 0;
+    const near = creep.room.name === spawn.room.name && creep.pos.isNearTo(spawn);
+    if (!best) {
+      best = creep;
+      continue;
+    }
+    const bestCarried =
+      best.store?.getUsedCapacity?.(RESOURCE_ENERGY) ??
+      (best.store as { energy?: number } | undefined)?.energy ??
+      0;
+    const bestEmpty = bestCarried <= 0;
+    const bestNear =
+      best.room.name === spawn.room.name && best.pos.isNearTo(spawn);
+    if (empty && !bestEmpty) best = creep;
+    else if (empty === bestEmpty && near && !bestNear) best = creep;
+  }
+  if (!best) return false;
+
+  best.memory.recycling = true;
+  if (best.room.name !== spawn.room.name) {
+    best.moveTo(spawn, { reusePath: 20 });
+    return true;
+  }
+  if (best.pos.isNearTo(spawn)) {
+    return spawn.recycleCreep(best) === OK;
+  }
+  best.moveTo(spawn, { reusePath: 10 });
+  return true;
 }
 
 /** True when home mining seats look staffed enough to spare spawn for remotes. */

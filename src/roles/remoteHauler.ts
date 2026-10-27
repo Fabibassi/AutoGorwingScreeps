@@ -38,6 +38,27 @@ export function runRemoteHauler(creep: Creep): void {
   const carrying = creep.store[RESOURCE_ENERGY] ?? 0;
   const cap = creep.store.getCapacity(RESOURCE_ENERGY) ?? 0;
 
+  // Spawn marked us surplus — deliver cargo then walk home for recycle.
+  if (creep.memory.recycling) {
+    if (carrying > 0) {
+      const storage = homeStorage(creep);
+      if (storage) {
+        if (creep.room.name !== storage.room.name) {
+          creep.moveTo(storage, { reusePath: 20 });
+          return;
+        }
+        if (creep.transfer(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+          creep.moveTo(storage, { reusePath: 10 });
+        }
+        return;
+      }
+    }
+    if (home && creep.room.name !== home) {
+      creep.moveTo(new RoomPosition(25, 25, home), { reusePath: 20 });
+    }
+    return;
+  }
+
   if (carrying > 0 && (carrying >= cap || creep.memory.hauling)) {
     creep.memory.hauling = true;
     const storage = homeStorage(creep);

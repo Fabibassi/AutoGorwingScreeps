@@ -186,8 +186,8 @@ export function maybeDisarmRcl6SpendMode(
 }
 
 /**
- * During hub rampart CAPEX, keep builders and trim upgraders so spawn is not
- * eaten by remote haulers / upgrade_rush.
+ * During hub rampart / RCL6 CAPEX (3rd link, terminal, extractor), keep
+ * builders and trim upgraders so spawn is not eaten by remotes / upgrade_rush.
  */
 export function applyHubDefenseQuotas(
   quotas: CreepQuotas,
@@ -196,15 +196,35 @@ export function applyHubDefenseQuotas(
     rampartSitesOpen: number;
     hubRampartsReady: boolean;
     hasConstructionSites: boolean;
+    /** True while RCL6 structures/sites (link/terminal/extractor) unfinished. */
+    rcl6CapexOpen?: boolean;
   },
 ): CreepQuotas {
-  if (!opts.wallsArmed) return quotas;
-  if (opts.hubRampartsReady && opts.rampartSitesOpen <= 0) return quotas;
+  const defenseBusy =
+    opts.wallsArmed &&
+    (!opts.hubRampartsReady || opts.rampartSitesOpen > 0);
+  const capexBusy = opts.rcl6CapexOpen === true;
+  if (!defenseBusy && !capexBusy) return quotas;
   return {
     ...quotas,
     upgrader: Math.min(1, quotas.upgrader),
     builder: Math.max(3, opts.hasConstructionSites ? 3 : 2),
   };
+}
+
+/** Unfinished RCL6 hub unlocks that should claim spawn before upgrade_rush. */
+export function rcl6CapexIncomplete(opts: {
+  rcl: number;
+  linkCount: number;
+  linkQuota: number;
+  hasTerminal: boolean;
+  hasExtractor: boolean;
+}): boolean {
+  if (opts.rcl < 6) return false;
+  if (opts.linkCount < opts.linkQuota) return true;
+  if (!opts.hasTerminal) return true;
+  if (!opts.hasExtractor) return true;
+  return false;
 }
 
 /**
