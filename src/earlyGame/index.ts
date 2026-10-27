@@ -140,6 +140,7 @@ export {
   remotePlanNeedsReserve,
   remoteQuotasForPlan,
   remoteSpawnGatesOk,
+  remoteSurvivalQuotas,
   type RemotePlan,
   type RemoteQuotas,
 } from "./remotePlan";

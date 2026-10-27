@@ -5,6 +5,7 @@ import {
   parseRemotePlan,
   remoteQuotasForPlan,
   remoteSpawnGatesOk,
+  remoteSurvivalQuotas,
   REMOTE_BAKEOFF_WINNER,
   REMOTE_HAULER_CAP,
   REMOTE_PATH_DEFAULT,
@@ -46,6 +47,51 @@ describe("remotePlan", () => {
         plan: "reserved_container",
       }),
     ).toBe(true);
+  });
+
+  test("restaff ignores storage floor; expansion still needs floor", () => {
+    expect(
+      remoteSpawnGatesOk({
+        rcl: 6,
+        storageEnergy: 0,
+        plan: "reserved_drop",
+        restaff: true,
+      }),
+    ).toBe(true);
+    expect(
+      remoteSpawnGatesOk({
+        rcl: 6,
+        storageEnergy: 0,
+        plan: "reserved_drop",
+        restaff: false,
+      }),
+    ).toBe(false);
+    expect(
+      remoteSpawnGatesOk({
+        rcl: 5,
+        storageEnergy: 0,
+        plan: "reserved_drop",
+        restaff: true,
+      }),
+    ).toBe(false);
+  });
+
+  test("survival quotas keep one hauler and source miners", () => {
+    expect(remoteSurvivalQuotas("off", 2)).toEqual({
+      remoteMiner: 0,
+      remoteHauler: 0,
+      reserver: 0,
+    });
+    expect(remoteSurvivalQuotas("reserved_drop", 2)).toEqual({
+      remoteMiner: 2,
+      remoteHauler: 1,
+      reserver: 1,
+    });
+    expect(remoteSurvivalQuotas("drop_unreserved", 1)).toEqual({
+      remoteMiner: 1,
+      remoteHauler: 1,
+      reserver: 0,
+    });
   });
 
   test("quotas: reserved needs reserver; off is zero", () => {
