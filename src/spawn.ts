@@ -4,10 +4,12 @@ import {
   desiredCreeps,
   effectiveMinerMinWork,
   hasNoEconomyCreeps,
+  linkQuota,
   minerBodyCost,
   minerMinWorkForSpawn,
   minerTargetWorkParts,
   needsInfrastructureBuilder,
+  rcl6CapexIncomplete,
   shouldBankForBetterMiners,
   shouldFallbackToMobileHarvest,
   spawnPriorityOrder,
@@ -45,7 +47,7 @@ import {
   sumSourceContainerEnergy,
 } from "./room/queries";
 import { storageBlackoutReserve } from "./roles/hauler";
-import { trySpawnRemote } from "./spawnRemote";
+import { recycleExcessRemoteHaulers, trySpawnRemote } from "./spawnRemote";
 
 export { desiredCreeps, type CreepQuotas };
 
@@ -753,6 +755,13 @@ export function runSpawn(spawn: StructureSpawn): void {
     wallsArmed: Memory.ags?.wallsArmed === true,
     rampartSitesOpen: hubRampartSitesOpen(room),
     hubRampartsReady: hubRampartsReady(room),
+    rcl6CapexOpen: rcl6CapexIncomplete({
+      rcl,
+      linkCount: countStructures(room, STRUCTURE_LINK),
+      linkQuota: linkQuota(rcl),
+      hasTerminal: countStructures(room, STRUCTURE_TERMINAL) > 0,
+      hasExtractor: countStructures(room, STRUCTURE_EXTRACTOR) > 0,
+    }),
   };
   const exp = resolveExperiment(Memory.ags);
   const infrastructureDedicated = useDedicatedMiners(
@@ -932,6 +941,8 @@ export function runSpawn(spawn: StructureSpawn): void {
   ) {
     return;
   }
+  // Overspawned remote haulers (stale pathLength=50 era) reclaim spawn for CAPEX.
+  if (recycleExcessRemoteHaulers(spawn)) return;
   const replacementSeatOpen =
     sourceIdForReplacementMiner(
       minerSnapshots,

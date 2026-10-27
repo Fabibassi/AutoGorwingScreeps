@@ -11,6 +11,7 @@ import {
   maybeDisarmRcl6SpendMode,
   parseRcl5Mode,
   rcl5ModePausesExtensionSpam,
+  rcl6CapexIncomplete,
   shouldPlaceRcl5Links,
 } from "../src/earlyGame/rcl5Mode";
 import { constructionPriority, desiredCreeps } from "../src/earlyGame";
@@ -139,6 +140,48 @@ describe("rcl5Mode", () => {
         hasConstructionSites: false,
       }),
     ).toEqual(base);
+  });
+
+  test("applyHubDefenseQuotas boosts builders while RCL6 CAPEX open", () => {
+    const mid = applyHubDefenseQuotas(base, {
+      wallsArmed: true,
+      rampartSitesOpen: 0,
+      hubRampartsReady: true,
+      hasConstructionSites: true,
+      rcl6CapexOpen: true,
+    });
+    expect(mid.upgrader).toBe(1);
+    expect(mid.builder).toBeGreaterThanOrEqual(3);
+  });
+
+  test("rcl6CapexIncomplete until link/terminal/extractor done", () => {
+    expect(
+      rcl6CapexIncomplete({
+        rcl: 6,
+        linkCount: 2,
+        linkQuota: 3,
+        hasTerminal: false,
+        hasExtractor: false,
+      }),
+    ).toBe(true);
+    expect(
+      rcl6CapexIncomplete({
+        rcl: 6,
+        linkCount: 3,
+        linkQuota: 3,
+        hasTerminal: true,
+        hasExtractor: true,
+      }),
+    ).toBe(false);
+    expect(
+      rcl6CapexIncomplete({
+        rcl: 5,
+        linkCount: 0,
+        linkQuota: 2,
+        hasTerminal: false,
+        hasExtractor: false,
+      }),
+    ).toBe(false);
   });
 
   test("maybeDisarmRcl6SpendMode drops upgrade_rush → fat_first under floor", () => {

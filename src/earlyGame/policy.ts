@@ -212,6 +212,8 @@ export interface EconomyContext {
   rampartSitesOpen?: number;
   /** Spawn (+ storage) already have finished ramparts. */
   hubRampartsReady?: boolean;
+  /** 3rd link / terminal / extractor still missing or under construction. */
+  rcl6CapexOpen?: boolean;
 }
 
 /**
@@ -860,6 +862,7 @@ export function desiredCreeps(
     rampartSitesOpen: economy?.rampartSitesOpen ?? 0,
     hubRampartsReady: economy?.hubRampartsReady === true,
     hasConstructionSites,
+    rcl6CapexOpen: economy?.rcl6CapexOpen === true,
   });
   const seats = economy?.upgraderSeats;
   if (seats != null && seats >= 1) {

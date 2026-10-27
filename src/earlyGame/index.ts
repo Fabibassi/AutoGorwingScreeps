@@ -98,6 +98,7 @@ export {
   parseRcl5Mode,
   parseRcl5Plan,
   rcl5ModePausesExtensionSpam,
+  rcl6CapexIncomplete,
   shouldPlaceRcl5Links,
   type Rcl5Mode,
   type Rcl5Plan,
