@@ -7,10 +7,12 @@ import {
   pickFirstExitRoom,
   remoteQuotasForPlan,
   remoteSpawnGatesOk,
+  remoteSurvivalQuotas,
   parseRemotePlan,
   REMOTE_PATH_DEFAULT,
   type RemoteQuotas,
 } from "./earlyGame/remotePlan";
+import { storageBelowFloor } from "./earlyGame/storageFloor";
 import {
   buildRemoteHaulerBody,
   buildRemoteMinerBody,
@@ -53,12 +55,37 @@ export function currentRemoteQuotas(home: Room): RemoteQuotas {
   });
 }
 
+function remoteUnderSurvival(
+  counts: Record<RemoteRole, number>,
+  survival: RemoteQuotas,
+): boolean {
+  return (
+    counts.remoteMiner < survival.remoteMiner ||
+    counts.remoteHauler < survival.remoteHauler ||
+    counts.reserver < survival.reserver
+  );
+}
+
 /**
  * Surplus remoteHaulers walk home and recycle so CAPEX builders get spawn.
  * Prefer empty + near spawn; carrying haulers still deliver via role until empty.
+ * Never recycle under the storage floor — remotes are income, not spend.
  */
 export function recycleExcessRemoteHaulers(spawn: StructureSpawn): boolean {
   if (spawn.spawning) return false;
+  const room = spawn.room;
+  const rcl = room.controller?.level ?? 0;
+  const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
+  if (
+    storageBelowFloor({
+      rcl,
+      hasStorage: room.storage !== undefined,
+      storageEnergy,
+    })
+  ) {
+    return false;
+  }
+
   const want = currentRemoteQuotas(spawn.room).remoteHauler;
   const counts = countRemoteRoles();
   if (counts.remoteHauler <= want) {
@@ -126,6 +153,7 @@ export function homeReadyForRemotes(opts: {
 
 /**
  * Attempt one remote spawn. Returns true if spawnCreep OK.
+ * Under storage floor: survival restaff only (miner → hauler → reserver).
  */
 export function trySpawnRemote(
   spawn: StructureSpawn,
@@ -140,12 +168,7 @@ export function trySpawnRemote(
   const rcl = room.controller?.level ?? 0;
   const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
   const plan = parseRemotePlan(Memory.ags?.remotePlan);
-  if (
-    !remoteSpawnGatesOk({ rcl, storageEnergy, plan }) ||
-    !homeReadyForRemotes(opts)
-  ) {
-    return false;
-  }
+  if (!homeReadyForRemotes(opts)) return false;
 
   let remoteRoom = Memory.ags?.remoteRoom;
   if (!remoteRoom) {
@@ -168,16 +191,31 @@ export function trySpawnRemote(
   const tuning = tuningForRemoteVariant(variant);
   const remoteSources =
     Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2;
-  const quotas = remoteQuotasForPlan(plan, {
-    sources: Math.max(1, remoteSources),
+  const sources = Math.max(1, remoteSources);
+  const fullQuotas = remoteQuotasForPlan(plan, {
+    sources,
     pathLength,
     haulerQuotaScale: tuning.haulerQuotaScale,
   });
+  const survival = remoteSurvivalQuotas(plan, sources);
   const counts = countRemoteRoles();
+  const belowFloor = storageBelowFloor({
+    rcl,
+    hasStorage: room.storage !== undefined,
+    storageEnergy,
+  });
+  const restaff = belowFloor && remoteUnderSurvival(counts, survival);
+  if (!remoteSpawnGatesOk({ rcl, storageEnergy, plan, restaff })) {
+    return false;
+  }
+
+  const quotas = belowFloor ? survival : fullQuotas;
+  const order: RemoteRole[] = belowFloor
+    ? ["remoteMiner", "remoteHauler", "reserver"]
+    : ["reserver", "remoteMiner", "remoteHauler"];
   const energyAvailable = room.energyAvailable;
   const home = room.name;
 
-  const order: RemoteRole[] = ["reserver", "remoteMiner", "remoteHauler"];
   for (const role of order) {
     const want =
       role === "reserver"

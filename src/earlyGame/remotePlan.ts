@@ -179,15 +179,40 @@ export function maybeArmRemotePlanPostRcl6(
   return winner;
 }
 
-/** Home gates for spawning remotes (sim + live). */
+/**
+ * Survival crew under storage floor: keep income alive without expanding haulers.
+ * Miner seats = sources; one hauler; reserver only for reserved plans.
+ */
+export function remoteSurvivalQuotas(
+  plan: RemotePlan | string | undefined,
+  sources: number,
+): RemoteQuotas {
+  const p = parseRemotePlan(typeof plan === "string" ? plan : undefined);
+  if (p === "off") {
+    return { remoteMiner: 0, remoteHauler: 0, reserver: 0 };
+  }
+  return {
+    remoteMiner: Math.max(1, sources),
+    remoteHauler: 1,
+    reserver: remotePlanNeedsReserve(p) ? 1 : 0,
+  };
+}
+
+/**
+ * Home gates for spawning remotes (sim + live).
+ * Expansion requires storage floor; restaff (survival refill) ignores floor.
+ */
 export function remoteSpawnGatesOk(opts: {
   rcl: number;
   storageEnergy: number;
   plan: RemotePlan | string | undefined;
   storageFloor?: number;
+  /** True: refill survival seats even under the storage floor. */
+  restaff?: boolean;
 }): boolean {
   if (!remotePlanIsActive(opts.plan)) return false;
   if (opts.rcl < 6) return false;
+  if (opts.restaff === true) return true;
   return opts.storageEnergy >= (opts.storageFloor ?? 20_000);
 }
 

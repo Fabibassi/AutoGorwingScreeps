@@ -15,7 +15,11 @@ import {
   rcl5ModePausesExtensionSpam,
   type Rcl5Mode,
 } from "./rcl5Mode";
-export { STORAGE_FLOOR_ENERGY, storageBelowFloor } from "./storageFloor";
+import {
+  STORAGE_FLOOR_ENERGY,
+  storageBelowFloor,
+} from "./storageFloor";
+export { STORAGE_FLOOR_ENERGY, storageBelowFloor };
 
 /**
  * Early-game policy derived from common Screeps guides:
@@ -863,6 +867,11 @@ export function desiredCreeps(
     hubRampartsReady: economy?.hubRampartsReady === true,
     hasConstructionSites,
     rcl6CapexOpen: economy?.rcl6CapexOpen === true,
+    storageBelowFloor: storageBelowFloor({
+      rcl,
+      hasStorage: economy?.hasStorage === true,
+      storageEnergy: economy?.storageEnergy ?? 0,
+    }),
   });
   const seats = economy?.upgraderSeats;
   if (seats != null && seats >= 1) {

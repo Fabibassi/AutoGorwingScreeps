@@ -154,6 +154,19 @@ describe("rcl5Mode", () => {
     expect(mid.builder).toBeGreaterThanOrEqual(3);
   });
 
+  test("applyHubDefenseQuotas caps CAPEX builders at 2 under storage floor", () => {
+    const mid = applyHubDefenseQuotas(base, {
+      wallsArmed: true,
+      rampartSitesOpen: 0,
+      hubRampartsReady: true,
+      hasConstructionSites: true,
+      rcl6CapexOpen: true,
+      storageBelowFloor: true,
+    });
+    expect(mid.upgrader).toBe(1);
+    expect(mid.builder).toBe(2);
+  });
+
   test("rcl6CapexIncomplete until link/terminal/extractor done", () => {
     expect(
       rcl6CapexIncomplete({

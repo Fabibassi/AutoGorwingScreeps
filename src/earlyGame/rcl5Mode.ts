@@ -198,6 +198,8 @@ export function applyHubDefenseQuotas(
     hasConstructionSites: boolean;
     /** True while RCL6 structures/sites (link/terminal/extractor) unfinished. */
     rcl6CapexOpen?: boolean;
+    /** Under storage floor: CAPEX builders max 2 so remotes can restaff. */
+    storageBelowFloor?: boolean;
   },
 ): CreepQuotas {
   const defenseBusy =
@@ -205,10 +207,14 @@ export function applyHubDefenseQuotas(
     (!opts.hubRampartsReady || opts.rampartSitesOpen > 0);
   const capexBusy = opts.rcl6CapexOpen === true;
   if (!defenseBusy && !capexBusy) return quotas;
+  const minBuilders = opts.storageBelowFloor === true ? 2 : 3;
   return {
     ...quotas,
     upgrader: Math.min(1, quotas.upgrader),
-    builder: Math.max(3, opts.hasConstructionSites ? 3 : 2),
+    builder: Math.max(
+      minBuilders,
+      opts.hasConstructionSites ? minBuilders : 2,
+    ),
   };
 }
 
