@@ -7,6 +7,7 @@ import {
   maybeDisarmRcl6SpendMode,
 } from "./earlyGame/rcl5Mode";
 import { maybeArmRemotePlanPostRcl6 } from "./earlyGame/remotePlan";
+import { hubRampartsReady } from "./earlyGame/wallArm";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { runTowers } from "./defense/towers";
@@ -182,17 +183,20 @@ export function loop(): void {
         { storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0 },
       );
       if (remoteArmed) Memory.ags.remotePlan = remoteArmed;
-      // rcl6-spend bench: fat_first → upgrade_rush once remotes are in play;
-      // disarm back to fat_first under storage floor (blackout / T1 spiral).
+      // rcl6-spend: upgrade_rush only after hub ramparts exist; disarm under
+      // floor or while defense CAPEX is unfinished.
       const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
+      const defenseReady = hubRampartsReady(room);
       const rcl6Spend = maybeArmRcl6SpendMode(rcl, Memory.ags?.rcl5Mode, {
         remotePlan: Memory.ags?.remotePlan,
         storageEnergy,
+        hubDefenseReady: defenseReady,
       });
       if (rcl6Spend) Memory.ags.rcl5Mode = rcl6Spend;
       const rcl6Disarm = maybeDisarmRcl6SpendMode(rcl, Memory.ags?.rcl5Mode, {
         remotePlan: Memory.ags?.remotePlan,
         storageEnergy,
+        hubDefenseReady: defenseReady,
       });
       if (rcl6Disarm) Memory.ags.rcl5Mode = rcl6Disarm;
       try {

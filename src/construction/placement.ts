@@ -763,6 +763,67 @@ export function tryPlaceLinkNear(
   return false;
 }
 
+/** Terminal near storage (RCL6). Keeps spawn exit / storage access free. */
+export function tryPlaceTerminalNearStorage(
+  room: Room,
+  storagePos: RoomPosition,
+  spawnPos?: RoomPosition,
+): boolean {
+  const spawn = spawnPos ?? room.find(FIND_MY_SPAWNS)[0]?.pos;
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of ADJACENT_DELTAS) {
+      const x = storagePos.x + dx;
+      const y = storagePos.y + dy;
+      if (!isFreeBuildTile(room, x, y, spawn, { walkwayBuffer: useBuffer })) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_TERMINAL) === OK) {
+        return true;
+      }
+    }
+  }
+  const spot = findBuildSpotNear(room, storagePos, 3, 1, true);
+  if (spot && room.createConstructionSite(spot, STRUCTURE_TERMINAL) === OK) {
+    return true;
+  }
+  return false;
+}
+
+/** Extractor on the mineral tile (RCL6). */
+export function tryPlaceExtractor(room: Room): boolean {
+  const mineral = room.find(FIND_MINERALS)[0];
+  if (!mineral) return false;
+  const has =
+    mineral.pos
+      .lookFor(LOOK_STRUCTURES)
+      .some((s) => s.structureType === STRUCTURE_EXTRACTOR) ||
+    mineral.pos
+      .lookFor(LOOK_CONSTRUCTION_SITES)
+      .some((s) => s.structureType === STRUCTURE_EXTRACTOR);
+  if (has) return false;
+  return room.createConstructionSite(mineral.pos, STRUCTURE_EXTRACTOR) === OK;
+}
+
+/**
+ * RCL6 3rd link: place beside a source that does not already have a nearby link.
+ */
+export function tryPlaceSourceLink(
+  room: Room,
+  spawnPos: RoomPosition,
+): boolean {
+  for (const source of room.find(FIND_SOURCES)) {
+    const nearLink = source.pos
+      .findInRange(FIND_MY_STRUCTURES, 2)
+      .some((s) => s.structureType === STRUCTURE_LINK);
+    const nearSite = source.pos
+      .findInRange(FIND_CONSTRUCTION_SITES, 2)
+      .some((s) => s.structureType === STRUCTURE_LINK);
+    if (nearLink || nearSite) continue;
+    if (tryPlaceLinkNear(room, source.pos, spawnPos)) return true;
+  }
+  return false;
+}
+
 export function tryPlaceRoadOnPath(
   room: Room,
   from: RoomPosition,

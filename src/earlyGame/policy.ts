@@ -8,6 +8,7 @@ import {
 } from "./experimentPolicy";
 import { fillerQuotaForPlan } from "./fillerPlan";
 import {
+  applyHubDefenseQuotas,
   applyRcl5ModeQuotas,
   applyRcl5PlanQuotas,
   parseRcl5Mode,
@@ -85,12 +86,36 @@ export const TOWERS_BY_RCL: Record<number, number> = {
   8: 6,
 };
 
+/** CONTROLLER_STRUCTURES.link mirror (Screeps World). */
+export const LINKS_BY_RCL: Record<number, number> = {
+  1: 0,
+  2: 0,
+  3: 0,
+  4: 0,
+  5: 2,
+  6: 3,
+  7: 4,
+  8: 6,
+};
+
 export function extensionQuota(rcl: number): number {
   return EXTENSIONS_BY_RCL[rcl] ?? 0;
 }
 
 export function towerQuota(rcl: number): number {
   return TOWERS_BY_RCL[rcl] ?? 0;
+}
+
+export function linkQuota(rcl: number): number {
+  return LINKS_BY_RCL[rcl] ?? 0;
+}
+
+export function shouldBuildTerminal(rcl: number): boolean {
+  return rcl >= 6;
+}
+
+export function shouldBuildExtractor(rcl: number): boolean {
+  return rcl >= 6;
 }
 
 export function shouldBuildTowers(rcl: number): boolean {
@@ -181,6 +206,12 @@ export interface EconomyContext {
   haulerCap?: number;
   /** Sim sweep: force upgrader seats (ignores floor throttle and mode default). */
   upgraderSeats?: number;
+  /** Hub ramparts armed (Memory.ags.wallsArmed). */
+  wallsArmed?: boolean;
+  /** Open rampart sites on spawn/storage. */
+  rampartSitesOpen?: number;
+  /** Spawn (+ storage) already have finished ramparts. */
+  hubRampartsReady?: boolean;
 }
 
 /**
@@ -824,11 +855,17 @@ export function desiredCreeps(
     linksBuilt: economy?.linkCount ?? 0,
     hasConstructionSites,
   });
+  const defended = applyHubDefenseQuotas(planned, {
+    wallsArmed: economy?.wallsArmed === true,
+    rampartSitesOpen: economy?.rampartSitesOpen ?? 0,
+    hubRampartsReady: economy?.hubRampartsReady === true,
+    hasConstructionSites,
+  });
   const seats = economy?.upgraderSeats;
   if (seats != null && seats >= 1) {
-    planned.upgrader = Math.floor(seats);
+    defended.upgrader = Math.floor(seats);
   }
-  return planned;
+  return defended;
 }
 
 /** Ordered build priorities for early rooms (extensions before containers/storage). */

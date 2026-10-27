@@ -1,9 +1,12 @@
 import {
   constructionPriority,
   extensionQuota,
+  linkQuota,
   shouldBankForBetterMiners,
+  shouldBuildExtractor,
   shouldBuildRoads,
   shouldBuildStorage,
+  shouldBuildTerminal,
   shouldBuildWalls,
   sourceContainerEnergySurplus,
   stagedExtensionBuildCap,
@@ -51,7 +54,10 @@ import {
   tryPlaceRoadOnPath,
   tryPlaceStorageLink,
   tryPlaceHubRamparts,
+  tryPlaceExtractor,
+  tryPlaceSourceLink,
   tryPlaceStorageNearSpawn,
+  tryPlaceTerminalNearStorage,
   tryPlaceTower,
 } from "./placement";
 
@@ -330,6 +336,32 @@ export function runConstruction(room: Room): void {
       slot === "controller" &&
       tryPlaceControllerLink(room, spawn.pos, room.controller.pos)
     ) {
+      return;
+    }
+  }
+
+  // RCL6: 3rd link (source), then terminal, then extractor. Labs later.
+  if (!skipNonRoadPlacement && hasStorage && room.storage) {
+    const linksNow = linkBuiltAndSites(room);
+    if (
+      linksNow >= 2 &&
+      linksNow < linkQuota(rcl) &&
+      tryPlaceSourceLink(room, spawn.pos)
+    ) {
+      return;
+    }
+    if (shouldBuildTerminal(rcl)) {
+      const hasTerminal =
+        countStructures(room, STRUCTURE_TERMINAL) > 0 ||
+        existingSites.some((s) => s.structureType === STRUCTURE_TERMINAL);
+      if (
+        !hasTerminal &&
+        tryPlaceTerminalNearStorage(room, room.storage.pos, spawn.pos)
+      ) {
+        return;
+      }
+    }
+    if (shouldBuildExtractor(rcl) && tryPlaceExtractor(room)) {
       return;
     }
   }

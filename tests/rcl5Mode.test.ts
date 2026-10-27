@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  applyHubDefenseQuotas,
   applyRcl5ModeQuotas,
   upgraderSeatsForStorage,
   applyRcl5PlanQuotas,
@@ -61,7 +62,7 @@ describe("rcl5Mode", () => {
   });
 
   test("maybeArmRcl6SpendMode switches fat_first → upgrade_rush at RCL6 with remotes", () => {
-    const fat = { storageEnergy: 50_000 };
+    const fat = { storageEnergy: 50_000, hubDefenseReady: true };
     expect(
       maybeArmRcl6SpendMode(5, "fat_first", {
         remotePlan: "reserved_drop",
@@ -99,8 +100,45 @@ describe("rcl5Mode", () => {
       maybeArmRcl6SpendMode(6, "fat_first", {
         remotePlan: "reserved_drop",
         storageEnergy: 20_000,
+        hubDefenseReady: true,
       }),
     ).toBeUndefined();
+    expect(
+      maybeArmRcl6SpendMode(6, "fat_first", {
+        remotePlan: "reserved_drop",
+        storageEnergy: 50_000,
+        hubDefenseReady: false,
+      }),
+    ).toBeUndefined();
+  });
+
+  test("maybeDisarmRcl6SpendMode drops upgrade_rush until hub ramparts exist", () => {
+    expect(
+      maybeDisarmRcl6SpendMode(6, "upgrade_rush", {
+        remotePlan: "reserved_drop",
+        storageEnergy: 50_000,
+        hubDefenseReady: false,
+      }),
+    ).toBe("fat_first");
+  });
+
+  test("applyHubDefenseQuotas boosts builders while ramparts unfinished", () => {
+    const mid = applyHubDefenseQuotas(base, {
+      wallsArmed: true,
+      rampartSitesOpen: 1,
+      hubRampartsReady: false,
+      hasConstructionSites: true,
+    });
+    expect(mid.upgrader).toBe(1);
+    expect(mid.builder).toBeGreaterThanOrEqual(3);
+    expect(
+      applyHubDefenseQuotas(base, {
+        wallsArmed: true,
+        rampartSitesOpen: 0,
+        hubRampartsReady: true,
+        hasConstructionSites: false,
+      }),
+    ).toEqual(base);
   });
 
   test("maybeDisarmRcl6SpendMode drops upgrade_rush → fat_first under floor", () => {

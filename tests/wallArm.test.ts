@@ -46,6 +46,10 @@ describe("decideWallArm", () => {
     expect(d.reason).toBe("sticky");
   });
 
+  test("economy arm uses the 20k storage floor (not 50k)", () => {
+    expect(WALL_ARM_MIN_STORAGE).toBe(20_000);
+  });
+
   test("auto: economy arm at RCL+storage floors", () => {
     const no = decideWallArm({
       rcl: WALL_ARM_MIN_RCL,

@@ -25,6 +25,10 @@ import {
 } from "./earlyGame/minerHandoff";
 import { resolveExperiment } from "./earlyGame/experimentPolicy";
 import {
+  hubRampartSitesOpen,
+  hubRampartsReady,
+} from "./earlyGame/wallArm";
+import {
   parseUpgradeStyle,
   upgradeStyleStatic,
 } from "./earlyGame/upgradeStyle";
@@ -746,6 +750,9 @@ export function runSpawn(spawn: StructureSpawn): void {
         .filter((s) => s.structureType === STRUCTURE_TOWER).length,
     // Finished links only — CAPEX quotas stay until both links are built.
     linkCount: countStructures(room, STRUCTURE_LINK),
+    wallsArmed: Memory.ags?.wallsArmed === true,
+    rampartSitesOpen: hubRampartSitesOpen(room),
+    hubRampartsReady: hubRampartsReady(room),
   };
   const exp = resolveExperiment(Memory.ags);
   const infrastructureDedicated = useDedicatedMiners(

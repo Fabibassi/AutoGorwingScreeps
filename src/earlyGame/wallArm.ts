@@ -1,12 +1,15 @@
 /**
  * When to arm hub ramparts/walls.
  *
- * Economy arm is late-game (RCL6+ + storage floor).
- * Raid arm is reactive (hostiles / spawn damage) — sims check if that is already too late.
+ * Economy arm is RCL6+ once storage clears the blackout floor (same 20k family
+ * as remotes / link feed). Raid arm is sticky for the next wave — too late for
+ * first build, so economy arm must fire before a raid.
  */
 
+import { STORAGE_FLOOR_ENERGY } from "./storageFloor";
+
 export const WALL_ARM_MIN_RCL = 6;
-export const WALL_ARM_MIN_STORAGE = 50_000;
+export const WALL_ARM_MIN_STORAGE = STORAGE_FLOOR_ENERGY;
 
 export type WallPolicy = "off" | "auto" | "force" | "raid_only";
 
@@ -69,6 +72,39 @@ export function shouldPlaceHubRamparts(opts: {
   wallsArmed: boolean;
 }): boolean {
   return opts.wallsArmed;
+}
+
+/** True when spawn (+ storage if present) already has a finished rampart. */
+export function hubRampartsReady(room: Room): boolean {
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
+  if (!spawn) return false;
+  const spawnOk = spawn.pos
+    .lookFor(LOOK_STRUCTURES)
+    .some((s) => s.structureType === STRUCTURE_RAMPART);
+  if (!spawnOk) return false;
+  if (!room.storage) return true;
+  return room.storage.pos
+    .lookFor(LOOK_STRUCTURES)
+    .some((s) => s.structureType === STRUCTURE_RAMPART);
+}
+
+/** Open rampart construction sites on spawn/storage tiles. */
+export function hubRampartSitesOpen(room: Room): number {
+  let n = 0;
+  const anchors: RoomPosition[] = [];
+  const spawn = room.find(FIND_MY_SPAWNS)[0];
+  if (spawn) anchors.push(spawn.pos);
+  if (room.storage) anchors.push(room.storage.pos);
+  for (const pos of anchors) {
+    if (
+      pos
+        .lookFor(LOOK_CONSTRUCTION_SITES)
+        .some((s) => s.structureType === STRUCTURE_RAMPART)
+    ) {
+      n++;
+    }
+  }
+  return n;
 }
 
 /**
