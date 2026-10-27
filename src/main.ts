@@ -6,7 +6,13 @@ import {
   maybeArmRcl6SpendMode,
   maybeDisarmRcl6SpendMode,
 } from "./earlyGame/rcl5Mode";
-import { maybeArmRemotePlanPostRcl6 } from "./earlyGame/remotePlan";
+import {
+  estimateRemotePathFromMap,
+  measureRemotePathLength,
+  maybeArmRemotePlanPostRcl6,
+  parseRemotePlan,
+  remotePlanIsActive,
+} from "./earlyGame/remotePlan";
 import { hubRampartsReady } from "./earlyGame/wallArm";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
@@ -139,9 +145,9 @@ export function loop(): void {
     if (remotePlanNow) Memory.ags.remotePlan = remotePlanNow;
     const remoteRoomNow = Memory.ags?.remoteRoom ?? remoteRoomSticky;
     if (remoteRoomNow) Memory.ags.remoteRoom = remoteRoomNow;
-    if (Memory.ags?.remotePathLength == null && remotePathLengthSticky != null) {
-      Memory.ags.remotePathLength = remotePathLengthSticky;
-    }
+    const remotePathNow =
+      Memory.ags?.remotePathLength ?? remotePathLengthSticky;
+    if (remotePathNow != null) Memory.ags.remotePathLength = remotePathNow;
     const remoteVariantNow = Memory.ags?.remoteVariant ?? remoteVariantSticky;
     if (remoteVariantNow) Memory.ags.remoteVariant = remoteVariantNow;
     // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
@@ -183,6 +189,20 @@ export function loop(): void {
         { storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0 },
       );
       if (remoteArmed) Memory.ags.remotePlan = remoteArmed;
+      // Keep remotePathLength sticky even when spawn is busy with home roles.
+      if (remotePlanIsActive(parseRemotePlan(Memory.ags?.remotePlan))) {
+        const remoteName =
+          Memory.ags.remoteRoom ??
+          (undefined as string | undefined);
+        if (remoteName) {
+          const measured = measureRemotePathLength(room, remoteName);
+          if (measured != null) Memory.ags.remotePathLength = measured;
+          else if (Memory.ags.remotePathLength == null) {
+            const estimate = estimateRemotePathFromMap(room.name, remoteName);
+            if (estimate != null) Memory.ags.remotePathLength = estimate;
+          }
+        }
+      }
       // rcl6-spend: upgrade_rush only after hub ramparts exist; disarm under
       // floor or while defense CAPEX is unfinished.
       const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
@@ -240,9 +260,9 @@ export function loop(): void {
     if (remotePlanKeep) Memory.ags.remotePlan = remotePlanKeep;
     const remoteRoomKeep = Memory.ags?.remoteRoom ?? remoteRoomSticky;
     if (remoteRoomKeep) Memory.ags.remoteRoom = remoteRoomKeep;
-    if (Memory.ags?.remotePathLength == null && remotePathLengthSticky != null) {
-      Memory.ags.remotePathLength = remotePathLengthSticky;
-    }
+    const remotePathKeep =
+      Memory.ags?.remotePathLength ?? remotePathLengthSticky;
+    if (remotePathKeep != null) Memory.ags.remotePathLength = remotePathKeep;
     const remoteVariantKeep = Memory.ags?.remoteVariant ?? remoteVariantSticky;
     if (remoteVariantKeep) Memory.ags.remoteVariant = remoteVariantKeep;
     const wallPolicyKeep = Memory.ags?.wallPolicy ?? wallPolicySticky;
