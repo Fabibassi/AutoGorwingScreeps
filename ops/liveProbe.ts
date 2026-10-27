@@ -8,6 +8,12 @@ import { gunzipSync } from "node:zlib";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { maybeArmRcl5AftercareMode } from "../src/earlyGame/rcl5Mode";
+import {
+  REMOTE_HAULER_CAP,
+  REMOTE_PATH_DEFAULT,
+  remoteQuotasForPlan,
+  parseRemotePlan,
+} from "../src/earlyGame/remotePlan";
 import { fetchMemoryPath, screepsHeaders } from "./screepsApi";
 import { resolveHostname, resolveShard, resolveToken } from "./screepsEnv";
 
@@ -423,6 +429,68 @@ export async function main(): Promise<void> {
   };
   console.log("## Memory.ags.rcl5Mode / aftercare arm");
   console.log(JSON.stringify(aftercareArm, null, 2));
+
+  const remotePlanRaw =
+    typeof agsRec?.remotePlan === "string" ? agsRec.remotePlan : undefined;
+  const remoteRoomRaw =
+    typeof agsRec?.remoteRoom === "string" ? agsRec.remoteRoom : undefined;
+  const remotePathRaw =
+    typeof agsRec?.remotePathLength === "number"
+      ? agsRec.remotePathLength
+      : undefined;
+  const remoteQuota =
+    remotePlanRaw && parseRemotePlan(remotePlanRaw) !== "off"
+      ? remoteQuotasForPlan(remotePlanRaw, {
+          sources: 2,
+          pathLength: remotePathRaw ?? REMOTE_PATH_DEFAULT,
+        })
+      : null;
+  const remoteSitRep = {
+    remotePlan: remotePlanRaw ?? null,
+    remoteRoom: remoteRoomRaw ?? null,
+    remotePathLength: remotePathRaw ?? null,
+    pathDefault: REMOTE_PATH_DEFAULT,
+    haulerCap: REMOTE_HAULER_CAP,
+    want: remoteQuota,
+    liveRoles: {
+      remoteMiner: memRoles.remoteMiner ?? 0,
+      remoteHauler: memRoles.remoteHauler ?? 0,
+      reserver: memRoles.reserver ?? 0,
+    },
+    wallsArmed: agsRec?.wallsArmed === true,
+    wallArmReason:
+      typeof agsRec?.wallArmReason === "string" ? agsRec.wallArmReason : null,
+  };
+  console.log("## Remote / walls sitrep");
+  console.log(JSON.stringify(remoteSitRep, null, 2));
+
+  if (remoteRoomRaw && remoteRoomRaw !== room) {
+    try {
+      const remoteObjects = await fetchRoomObjects({
+        token,
+        room: remoteRoomRaw,
+        shard,
+        hostname,
+      });
+      const remoteSummary = summarizeObjects(remoteObjects);
+      console.log(`## Remote room objects (${remoteRoomRaw})`);
+      console.log(
+        JSON.stringify(
+          {
+            sources: remoteSummary.sources,
+            myCreeps: remoteSummary.myCreeps,
+            creeps: remoteSummary.creeps,
+            constructionSites: remoteSummary.constructionSites,
+            controller: remoteSummary.controller,
+          },
+          null,
+          2,
+        ),
+      );
+    } catch (e) {
+      console.log(`## Remote room objects (${remoteRoomRaw}) unavailable`, e);
+    }
+  }
 
   const runUrl =
     process.env.GITHUB_SERVER_URL &&

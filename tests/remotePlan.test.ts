@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
+  clampRemoteHaulerQuota,
   maybeArmRemotePlanPostRcl6,
   parseRemotePlan,
   remoteQuotasForPlan,
   remoteSpawnGatesOk,
   REMOTE_BAKEOFF_WINNER,
+  REMOTE_HAULER_CAP,
+  REMOTE_PATH_DEFAULT,
 } from "../src/earlyGame/remotePlan";
 
 describe("remotePlan", () => {
@@ -58,6 +61,23 @@ describe("remotePlan", () => {
     expect(q.remoteMiner).toBe(2);
     expect(q.reserver).toBe(1);
     expect(q.remoteHauler).toBeGreaterThanOrEqual(1);
+    expect(q.remoteHauler).toBeLessThanOrEqual(REMOTE_HAULER_CAP);
+  });
+
+  test("hauler quota caps long paths so default 50 cannot flood spawn", () => {
+    expect(REMOTE_PATH_DEFAULT).toBe(30);
+    expect(clampRemoteHaulerQuota(14)).toBe(REMOTE_HAULER_CAP);
+    const long = remoteQuotasForPlan("reserved_drop", {
+      sources: 2,
+      pathLength: 50,
+    });
+    expect(long.remoteHauler).toBe(REMOTE_HAULER_CAP);
+    const mid = remoteQuotasForPlan("reserved_drop", {
+      sources: 2,
+      pathLength: REMOTE_PATH_DEFAULT,
+    });
+    expect(mid.remoteHauler).toBeLessThanOrEqual(REMOTE_HAULER_CAP);
+    expect(mid.remoteHauler).toBeGreaterThanOrEqual(1);
   });
 
   test("maybeArm sticky-arms bakeoff winner at RCL6 + floor", () => {

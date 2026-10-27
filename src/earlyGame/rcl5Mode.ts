@@ -123,11 +123,18 @@ export function maybeArmRcl5PostHubMode(
  * with remotes on, upgrade_rush beats fat_first on netStorage and progress
  * while floorOk. Never arm when remotePlan is explicitly off (home-only
  * upgrade_rush blackout risk from Wave-2). Never arm under storage floor.
+ * After the RCL6 hit, hold fat_first until hub ramparts are built so CAPEX
+ * and storage recover before the climb to RCL7.
  */
 export function maybeArmRcl6SpendMode(
   rcl: number,
   currentMode: string | undefined,
-  opts: { remotePlan?: string; storageEnergy?: number },
+  opts: {
+    remotePlan?: string;
+    storageEnergy?: number;
+    /** Spawn+storage ramparts finished (or walls sticky after that). */
+    hubDefenseReady?: boolean;
+  },
 ): Rcl5Mode | undefined {
   if (rcl < 6) return undefined;
   const remote = opts.remotePlan;
@@ -141,6 +148,7 @@ export function maybeArmRcl6SpendMode(
   ) {
     return undefined;
   }
+  if (opts.hubDefenseReady !== true) return undefined;
   if (currentMode === "upgrade_rush") return undefined;
   if (currentMode === "fat_first") return "upgrade_rush";
   return undefined;
@@ -153,12 +161,18 @@ export function maybeArmRcl6SpendMode(
 export function maybeDisarmRcl6SpendMode(
   rcl: number,
   currentMode: string | undefined,
-  opts: { remotePlan?: string; storageEnergy?: number },
+  opts: {
+    remotePlan?: string;
+    storageEnergy?: number;
+    /** Explicit false: drop rush until hub ramparts exist. */
+    hubDefenseReady?: boolean;
+  },
 ): Rcl5Mode | undefined {
   if (rcl < 6) return undefined;
   if (currentMode !== "upgrade_rush") return undefined;
   const remote = opts.remotePlan;
   if (remote === "off" || remote === "home_only") return undefined;
+  if (opts.hubDefenseReady === false) return "fat_first";
   if (
     !storageBelowFloor({
       rcl,
@@ -169,6 +183,28 @@ export function maybeDisarmRcl6SpendMode(
     return undefined;
   }
   return "fat_first";
+}
+
+/**
+ * During hub rampart CAPEX, keep builders and trim upgraders so spawn is not
+ * eaten by remote haulers / upgrade_rush.
+ */
+export function applyHubDefenseQuotas(
+  quotas: CreepQuotas,
+  opts: {
+    wallsArmed: boolean;
+    rampartSitesOpen: number;
+    hubRampartsReady: boolean;
+    hasConstructionSites: boolean;
+  },
+): CreepQuotas {
+  if (!opts.wallsArmed) return quotas;
+  if (opts.hubRampartsReady && opts.rampartSitesOpen <= 0) return quotas;
+  return {
+    ...quotas,
+    upgrader: Math.min(1, quotas.upgrader),
+    builder: Math.max(3, opts.hasConstructionSites ? 3 : 2),
+  };
 }
 
 /**

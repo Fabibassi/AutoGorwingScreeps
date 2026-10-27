@@ -2,10 +2,13 @@
  * Spawn remote miners / haulers / reserver after home economy is healthy.
  */
 import {
+  estimateRemotePathFromMap,
+  measureRemotePathLength,
   pickFirstExitRoom,
   remoteQuotasForPlan,
   remoteSpawnGatesOk,
   parseRemotePlan,
+  REMOTE_PATH_DEFAULT,
 } from "./earlyGame/remotePlan";
 import {
   buildRemoteHaulerBody,
@@ -72,11 +75,22 @@ export function trySpawnRemote(
     if (Memory.ags) Memory.ags.remoteRoom = remoteRoom;
   }
 
-  const pathLength = Memory.ags?.remotePathLength ?? 50;
+  if (Memory.ags) {
+    const measured = measureRemotePathLength(room, remoteRoom);
+    if (measured != null) {
+      Memory.ags.remotePathLength = measured;
+    } else if (Memory.ags.remotePathLength == null) {
+      const estimate = estimateRemotePathFromMap(room.name, remoteRoom);
+      if (estimate != null) Memory.ags.remotePathLength = estimate;
+    }
+  }
+  const pathLength = Memory.ags?.remotePathLength ?? REMOTE_PATH_DEFAULT;
   const variant = parseRemoteVariant(Memory.ags?.remoteVariant);
   const tuning = tuningForRemoteVariant(variant);
+  const remoteSources =
+    Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2;
   const quotas = remoteQuotasForPlan(plan, {
-    sources: 2,
+    sources: Math.max(1, remoteSources),
     pathLength,
     haulerQuotaScale: tuning.haulerQuotaScale,
   });

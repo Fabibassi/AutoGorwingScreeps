@@ -24,6 +24,67 @@ export type RemotePlan = (typeof REMOTE_PLANS)[number];
  */
 export const REMOTE_BAKEOFF_WINNER: RemotePlan = "reserved_drop";
 
+/**
+ * Fallback one-way haul tiles when Memory / vision has no measurement.
+ * Adjacent remote mid-haul ≈30; old default 50 over-requested ~14 haulers.
+ */
+export const REMOTE_PATH_DEFAULT = 30;
+
+/** Hard cap so a bad pathLength cannot flood spawn with remote haulers. */
+export const REMOTE_HAULER_CAP = 6;
+
+export function clampRemoteHaulerQuota(
+  count: number,
+  cap: number = REMOTE_HAULER_CAP,
+): number {
+  return Math.max(1, Math.min(Math.floor(cap), Math.floor(count)));
+}
+
+/**
+ * Average one-way path length home storage/spawn → remote sources.
+ * Needs vision of the remote room. Returns undefined when unmeasurable.
+ */
+export function measureRemotePathLength(
+  home: Room,
+  remoteName: string,
+): number | undefined {
+  const remote = Game.rooms[remoteName];
+  if (!remote || remoteName === home.name) return undefined;
+  const from = home.storage?.pos ?? home.find(FIND_MY_SPAWNS)[0]?.pos;
+  if (!from) return undefined;
+  const sources = remote.find(FIND_SOURCES);
+  if (sources.length === 0) return undefined;
+  let sum = 0;
+  let n = 0;
+  for (const source of sources) {
+    const path = from.findPathTo(source.pos, {
+      ignoreCreeps: true,
+      swampCost: 2,
+    });
+    if (path.length > 0) {
+      sum += path.length;
+      n++;
+    }
+  }
+  if (n === 0) return undefined;
+  return Math.max(1, Math.round(sum / n));
+}
+
+/** Soft estimate without vision: room hops × ~25 tiles. */
+export function estimateRemotePathFromMap(
+  homeName: string,
+  remoteName: string,
+): number | undefined {
+  if (homeName === remoteName) return undefined;
+  try {
+    const hops = Game.map.getRoomLinearDistance(homeName, remoteName, false);
+    if (!Number.isFinite(hops) || hops < 1) return undefined;
+    return Math.max(1, Math.round(hops * 25));
+  } catch {
+    return undefined;
+  }
+}
+
 export function isRemotePlan(raw: unknown): raw is RemotePlan {
   return (
     typeof raw === "string" &&
@@ -80,7 +141,9 @@ export function remoteQuotasForPlan(
     pathLength: Math.max(1, opts.pathLength),
   });
   const scale = opts.haulerQuotaScale ?? 1;
-  const haulers = Math.max(1, Math.ceil(econ.haulerCount * scale));
+  const haulers = clampRemoteHaulerQuota(
+    Math.max(1, Math.ceil(econ.haulerCount * scale)),
+  );
   return {
     remoteMiner: Math.max(1, opts.sources),
     remoteHauler: haulers,
