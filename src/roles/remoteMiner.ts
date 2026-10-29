@@ -1,5 +1,7 @@
 /** Static remote miner: harvest at target source; drop or transfer to container. */
 
+import { fleeRemoteToHome } from "../defense/remoteThreat";
+
 function findRemoteSource(creep: Creep): Source | null {
   const id = creep.memory.sourceId as Id<Source> | undefined;
   if (id) {
@@ -20,6 +22,7 @@ function adjacentContainer(source: Source): StructureContainer | null {
 }
 
 export function runRemoteMiner(creep: Creep): number {
+  if (fleeRemoteToHome(creep)) return 0;
   const targetRoom = creep.memory.targetRoom;
   if (targetRoom && creep.room.name !== targetRoom) {
     creep.moveTo(new RoomPosition(25, 25, targetRoom), {

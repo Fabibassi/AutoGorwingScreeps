@@ -1,5 +1,7 @@
 /** Haul remote energy (drop/container) to home storage. */
 
+import { fleeRemoteToHome } from "../defense/remoteThreat";
+
 function homeStorage(creep: Creep): StructureStorage | null {
   const home = creep.memory.homeRoom;
   if (!home) return null;
@@ -37,6 +39,8 @@ export function runRemoteHauler(creep: Creep): void {
   const targetRoom = creep.memory.targetRoom;
   const carrying = creep.store[RESOURCE_ENERGY] ?? 0;
   const cap = creep.store.getCapacity(RESOURCE_ENERGY) ?? 0;
+
+  if (fleeRemoteToHome(creep)) return;
 
   // Spawn marked us surplus — deliver cargo then walk home for recycle.
   if (creep.memory.recycling) {

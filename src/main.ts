@@ -16,6 +16,7 @@ import {
 import { hubRampartsReady } from "./earlyGame/wallArm";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
+import { tickRemoteThreat } from "./defense/remoteThreat";
 import { runTowers } from "./defense/towers";
 import { runLinks } from "./links";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
@@ -64,6 +65,17 @@ export function loop(): void {
     applyParsedMemoryReuse();
     clearDeadCreepMemory();
     healCreepRoles();
+
+    // Before spawn/creeps: arm remote threat sticky from vision.
+    if (Memory.ags?.remoteRoom) {
+      const remote = Game.rooms[Memory.ags.remoteRoom];
+      tickRemoteThreat(Memory.ags, {
+        tick: Game.time,
+        hostilesNow: remote
+          ? remote.find(FIND_HOSTILE_CREEPS).length
+          : null,
+      });
+    }
 
     for (const name in Game.rooms) {
       const room = Game.rooms[name];

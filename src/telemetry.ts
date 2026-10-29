@@ -119,5 +119,7 @@ export function tickTelemetry(opts: {
     zombieDebug: prev.zombieDebug,
     zombieSpawnSeen: prev.zombieSpawnSeen,
     haulOrders: prev.haulOrders,
+    remoteThreatUntil: prev.remoteThreatUntil,
+    remoteThreatCount: prev.remoteThreatCount,
   };
 }

@@ -133,6 +133,10 @@ export interface AgsMemory {
   wallsArmed?: boolean;
   /** Last arm reason from decideWallArm. */
   wallArmReason?: string;
+  /** Tick until which remote spawn stays paused after hostiles. */
+  remoteThreatUntil?: number;
+  /** Last seen hostile count in the remote room. */
+  remoteThreatCount?: number;
   /**
    * Active hauler pickup reservations (haulerName → order).
    * See src/logistics/haulOrders.ts.
