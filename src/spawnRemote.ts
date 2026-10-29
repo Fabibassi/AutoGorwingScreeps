@@ -22,6 +22,7 @@ import {
   parseRemoteVariant,
   tuningForRemoteVariant,
 } from "./earlyGame/remoteVariant";
+import { remoteThreatActive } from "./defense/remoteThreat";
 
 export type RemoteRole = "reserver" | "remoteMiner" | "remoteHauler";
 
@@ -168,6 +169,8 @@ export function trySpawnRemote(
   const rcl = room.controller?.level ?? 0;
   const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
   const plan = parseRemotePlan(Memory.ags?.remotePlan);
+  // Hostiles in remote → pause all remote spawns (no meat grinder).
+  if (remoteThreatActive(Memory.ags, Game.time)) return false;
   if (!homeReadyForRemotes(opts)) return false;
 
   let remoteRoom = Memory.ags?.remoteRoom;

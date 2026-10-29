@@ -457,6 +457,14 @@ export async function main(): Promise<void> {
       remoteHauler: memRoles.remoteHauler ?? 0,
       reserver: memRoles.reserver ?? 0,
     },
+    remoteThreatUntil:
+      typeof agsRec?.remoteThreatUntil === "number"
+        ? agsRec.remoteThreatUntil
+        : null,
+    remoteThreatCount:
+      typeof agsRec?.remoteThreatCount === "number"
+        ? agsRec.remoteThreatCount
+        : null,
     wallsArmed: agsRec?.wallsArmed === true,
     wallArmReason:
       typeof agsRec?.wallArmReason === "string" ? agsRec.wallArmReason : null,

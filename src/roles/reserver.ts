@@ -1,6 +1,9 @@
 /** Keep remote controller reserved (CLAIM parts). */
 
+import { fleeRemoteToHome } from "../defense/remoteThreat";
+
 export function runReserver(creep: Creep): void {
+  if (fleeRemoteToHome(creep)) return;
   const targetRoom = creep.memory.targetRoom;
   if (!targetRoom) return;
 
