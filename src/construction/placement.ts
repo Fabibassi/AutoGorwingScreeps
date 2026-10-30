@@ -817,30 +817,43 @@ export function isAllowedEdgeWallTile(
 }
 
 /**
- * Scrub wall sites that are not allowed edge walls (wrong tile / gate / no-exit side).
+ * Edge-wall blueprints are paused (Memory.ags.wallRingEnabled !== true):
+ * scrub every wall site so builders stop burning energy on dead pockets.
+ * When re-enabled, only keep path-useful mouth tiles.
+ */
+export function edgeWallPlacementEnabled(): boolean {
+  return Memory.ags?.wallRingEnabled === true;
+}
+
+/**
+ * Scrub disallowed (or all, while paused) wall construction sites.
  */
 export function clearWallSitesInHub(
   room: Room,
   spawnPos: RoomPosition,
 ): number {
+  const place = edgeWallPlacementEnabled();
   let removed = 0;
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
     const { x, y } = site.pos;
-    if (!isAllowedEdgeWallTile(room, spawnPos, x, y)) {
-      if (site.remove() === OK) removed += 1;
-    }
+    const drop =
+      !place || !isAllowedEdgeWallTile(room, spawnPos, x, y);
+    if (drop && site.remove() === OK) removed += 1;
   }
   return removed;
 }
 
 /**
- * Place one wall site on the fixed 2/47 frame (path-safe per side).
+ * Place one useful exit-mouth wall. Disabled until wallRingEnabled is set —
+ * auto-placement was sealing dead pockets and wasting builder energy.
  */
 export function tryPlaceWallRing(
   room: Room,
   spawnPos: RoomPosition,
 ): boolean {
+  if (!edgeWallPlacementEnabled()) return false;
+
   const edges: Array<[number, number]> = [];
   for (let i = WALL_EDGE_COORD; i <= WALL_EDGE_HI; i++) {
     edges.push([i, WALL_EDGE_COORD]);

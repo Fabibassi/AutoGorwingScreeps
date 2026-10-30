@@ -137,6 +137,11 @@ export interface AgsMemory {
   wallPolicy?: string;
   /** Sticky: hub ramparts armed (economy or raid at RCL≥6). */
   wallsArmed?: boolean;
+  /**
+   * Opt-in edge-wall blueprints (2/47 mouths). Default off — auto placement
+   * was sealing dead pockets and wasting builder energy.
+   */
+  wallRingEnabled?: boolean;
   /** Last arm reason from decideWallArm. */
   wallArmReason?: string;
   /** Last failed wall/rampart createConstructionSite (ops triage). */
