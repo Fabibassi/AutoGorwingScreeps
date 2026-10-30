@@ -1,24 +1,23 @@
 /**
- * Terminal market sells with hard energy floors (no CAPEX drain).
- * Only NPC / public buy orders for minerals we hold; never touch energy sales
- * that would breach storage/terminal floors.
+ * Sell minerals from the terminal into public buy orders.
+ *
+ * Storage floor does NOT gate mineral sales — when broke, selling minerals is
+ * exactly what we want (credits). Only terminal energy must cover deal costs.
+ * Never sells energy.
  */
-import { STORAGE_FLOOR_ENERGY } from "../earlyGame/storageFloor";
 
-/** Keep this much energy in terminal for sends / future deals. */
+/** Keep this much energy in terminal for deal fees / sends. */
 export const TERMINAL_ENERGY_FLOOR = 5_000;
 
+/** True when the terminal can pay market.deal energy costs. */
 export function marketEnergyFloorsOk(opts: {
   storageEnergy: number;
   terminalEnergy: number;
   storageFloor?: number;
   terminalFloor?: number;
 }): boolean {
-  const storageFloor = opts.storageFloor ?? STORAGE_FLOOR_ENERGY;
   const terminalFloor = opts.terminalFloor ?? TERMINAL_ENERGY_FLOOR;
-  return (
-    opts.storageEnergy > storageFloor && opts.terminalEnergy >= terminalFloor
-  );
+  return opts.terminalEnergy >= terminalFloor;
 }
 
 const ENERGY_RESOURCES = new Set<string>(["energy"]);

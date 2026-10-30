@@ -5,25 +5,18 @@ import {
   terminalMineralTypes,
   TERMINAL_ENERGY_FLOOR,
 } from "../src/market/run";
-import { STORAGE_FLOOR_ENERGY } from "../src/earlyGame/storageFloor";
 
 describe("marketEnergyFloorsOk", () => {
-  test("requires storage above floor and terminal energy floor", () => {
+  test("only requires terminal energy for deal costs (sell when broke)", () => {
     expect(
       marketEnergyFloorsOk({
-        storageEnergy: STORAGE_FLOOR_ENERGY + 1,
+        storageEnergy: 0,
         terminalEnergy: TERMINAL_ENERGY_FLOOR,
       }),
     ).toBe(true);
     expect(
       marketEnergyFloorsOk({
-        storageEnergy: STORAGE_FLOOR_ENERGY,
-        terminalEnergy: TERMINAL_ENERGY_FLOOR,
-      }),
-    ).toBe(false);
-    expect(
-      marketEnergyFloorsOk({
-        storageEnergy: STORAGE_FLOOR_ENERGY + 1,
+        storageEnergy: 100_000,
         terminalEnergy: TERMINAL_ENERGY_FLOOR - 1,
       }),
     ).toBe(false);
