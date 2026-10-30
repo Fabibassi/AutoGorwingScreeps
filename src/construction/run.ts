@@ -72,6 +72,7 @@ import {
   tryPlaceTerminalNearStorage,
   tryPlaceTower,
   tryPlaceWallRing,
+  clearWallSitesInHub,
   tryPlaceLab,
 } from "./placement";
 import { shouldPlaceLabs } from "../earlyGame/nextLeaps";
@@ -545,7 +546,10 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // Wall ring after hub shell is at ready hits (Wave C). Sites are free.
+  // Scrub wall sites that landed inside the extension stamp (ring was @4–5).
+  if (clearWallSitesInHub(room, spawn.pos) > 0) return;
+
+  // Wall ring outside stamp (r7–8) after hub shell is at ready hits.
   if (
     !skipNonRoadPlacement &&
     shouldBuildWalls(rcl) &&

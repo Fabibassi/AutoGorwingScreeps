@@ -626,15 +626,60 @@ export function tryPlaceHubRamparts(room: Room): boolean {
   return placed;
 }
 
+/** Extension stamp reaches Chebyshev 5 — wall ring must sit outside that. */
+export const WALL_RING_MIN_RANGE = 7;
+export const WALL_RING_MAX_RANGE = 8;
+
+const HUB_STAMP_SET = new Set(
+  HUB_EXTENSION_STAMP.map(([dx, dy]) => `${dx},${dy}`),
+);
+
+/** True on diamond extension pockets (walls must never seal these). */
+export function isHubStampTile(
+  spawnPos: RoomPosition,
+  x: number,
+  y: number,
+): boolean {
+  const dx = x - spawnPos.x;
+  const dy = y - spawnPos.y;
+  return HUB_STAMP_SET.has(`${dx},${dy}`);
+}
+
 /**
- * Outer wall ring (Chebyshev 4–5): skip spawn exit ring + hub corridors.
- * One site per tick — ramparts already cover the hub tiles.
+ * Remove misplaced wall sites inside the hub stamp / ≤r5 (bug from ring@4–5).
+ */
+export function clearWallSitesInHub(
+  room: Room,
+  spawnPos: RoomPosition,
+): number {
+  let removed = 0;
+  for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
+    if (site.structureType !== STRUCTURE_WALL) continue;
+    const r = Math.max(
+      Math.abs(site.pos.x - spawnPos.x),
+      Math.abs(site.pos.y - spawnPos.y),
+    );
+    if (
+      r < WALL_RING_MIN_RANGE ||
+      isHubStampTile(spawnPos, site.pos.x, site.pos.y) ||
+      isHubCorridor(spawnPos, site.pos.x, site.pos.y) ||
+      isSpawnExitTile(spawnPos, site.pos.x, site.pos.y)
+    ) {
+      if (site.remove() === OK) removed += 1;
+    }
+  }
+  return removed;
+}
+
+/**
+ * Outer wall ring outside the extension stamp (Chebyshev 7–8).
+ * Never on corridors, stamp pockets, or existing hub structures.
  */
 export function tryPlaceWallRing(
   room: Room,
   spawnPos: RoomPosition,
 ): boolean {
-  for (let r = 4; r <= 5; r++) {
+  for (let r = WALL_RING_MIN_RANGE; r <= WALL_RING_MAX_RANGE; r++) {
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
@@ -642,14 +687,20 @@ export function tryPlaceWallRing(
         const y = spawnPos.y + dy;
         if (x < 1 || x > 48 || y < 1 || y > 48) continue;
         if (isSpawnExitTile(spawnPos, x, y)) continue;
-        if (isHubCorridor(spawnPos, x, y)) continue;
+        if (isHubCorridor(spawnPos, x, y, WALL_RING_MAX_RANGE)) continue;
+        if (isHubStampTile(spawnPos, x, y)) continue;
         if (!isBuildableTerrain(room, x, y)) continue;
         const pos = new RoomPosition(x, y, room.name);
         if (tileHasBlockingStructure(pos)) continue;
         if (
           pos
             .lookFor(LOOK_CONSTRUCTION_SITES)
-            .some((s) => s.structureType === STRUCTURE_WALL)
+            .some(
+              (s) =>
+                s.structureType === STRUCTURE_WALL ||
+                s.structureType === STRUCTURE_EXTENSION ||
+                s.structureType === STRUCTURE_ROAD,
+            )
         ) {
           continue;
         }
