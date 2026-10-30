@@ -29,6 +29,8 @@ import { resolveExperiment } from "./earlyGame/experimentPolicy";
 import {
   hubRampartSitesOpen,
   hubRampartsReady,
+  wallSitesOpen,
+  wallsNeedFortify,
 } from "./earlyGame/wallArm";
 import {
   parseUpgradeStyle,
@@ -761,6 +763,8 @@ export function runSpawn(spawn: StructureSpawn): void {
     linkCount: countStructures(room, STRUCTURE_LINK),
     wallsArmed: Memory.ags?.wallsArmed === true,
     rampartSitesOpen: hubRampartSitesOpen(room),
+    wallSitesOpen: wallSitesOpen(room),
+    wallsNeedFortify: wallsNeedFortify(room),
     hubRampartsReady: hubRampartsReady(room),
     rcl6CapexOpen: rcl6CapexIncomplete({
       rcl,

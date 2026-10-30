@@ -284,11 +284,14 @@ function refillFromHarvest(creep: Creep): boolean {
 
 const HUB_RAMPART_BUILDER_HITS = 10_000;
 
-function findWeakHubRampart(creep: Creep): StructureRampart | null {
+function findWeakDefenseShell(
+  creep: Creep,
+): StructureRampart | StructureWall | null {
   if (!Memory.ags?.wallsArmed) return null;
-  const weak = creep.room.find(FIND_MY_STRUCTURES, {
-    filter: (s): s is StructureRampart =>
-      s.structureType === STRUCTURE_RAMPART &&
+  const weak = creep.room.find(FIND_STRUCTURES, {
+    filter: (s): s is StructureRampart | StructureWall =>
+      (s.structureType === STRUCTURE_RAMPART ||
+        s.structureType === STRUCTURE_WALL) &&
       s.hits < Math.min(s.hitsMax, HUB_RAMPART_BUILDER_HITS),
   });
   if (weak.length === 0) return null;
@@ -309,11 +312,11 @@ export function runBuilder(creep: Creep): number {
       }
       return 0;
     }
-    // Fortify 1-HP hub shell before upgrading (sites complete at 1 hit).
-    const rampart = findWeakHubRampart(creep);
-    if (rampart) {
-      if (creep.repair(rampart) === ERR_NOT_IN_RANGE) {
-        creep.moveTo(rampart, { range: 3, visualizePathStyle: { stroke: "#88ff88" } });
+    // Fortify 1-HP hub/wall shell before upgrading (sites complete at 1 hit).
+    const shell = findWeakDefenseShell(creep);
+    if (shell) {
+      if (creep.repair(shell) === ERR_NOT_IN_RANGE) {
+        creep.moveTo(shell, { range: 3, visualizePathStyle: { stroke: "#88ff88" } });
       }
       return 0;
     }

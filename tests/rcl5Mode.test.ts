@@ -142,6 +142,27 @@ describe("rcl5Mode", () => {
     ).toEqual(base);
   });
 
+  test("applyHubDefenseQuotas boosts builders for open wall sites / fortify", () => {
+    const walls = applyHubDefenseQuotas(base, {
+      wallsArmed: true,
+      rampartSitesOpen: 0,
+      hubRampartsReady: true,
+      hasConstructionSites: true,
+      wallSitesOpen: 4,
+      storageBelowFloor: true,
+    });
+    expect(walls).toMatchObject({ upgrader: 1, builder: 2 });
+    const fortify = applyHubDefenseQuotas(base, {
+      wallsArmed: true,
+      rampartSitesOpen: 0,
+      hubRampartsReady: true,
+      hasConstructionSites: false,
+      wallsNeedFortify: true,
+      storageBelowFloor: true,
+    });
+    expect(fortify).toMatchObject({ upgrader: 1, builder: 2 });
+  });
+
   test("applyHubDefenseQuotas boosts builders while RCL6 CAPEX open", () => {
     const mid = applyHubDefenseQuotas(base, {
       wallsArmed: true,
@@ -261,6 +282,20 @@ describe("rcl5Mode", () => {
       storageEnergy: 15_000,
     });
     expect(q).toMatchObject({ upgrader: 1, builder: 0, filler: 1 });
+  });
+
+  test("storage floor keeps builders when construction sites are open", () => {
+    const q = applyRcl5ModeQuotas(base, "fat_first", {
+      rcl: 6,
+      hasStorage: true,
+      hasConstructionSites: true,
+      minerWorkParts: 10,
+      sources: 2,
+      extensionCount: 30,
+      towerCount: 2,
+      storageEnergy: 19_979,
+    });
+    expect(q).toMatchObject({ upgrader: 1, builder: 2, filler: 1 });
   });
 
   test("shouldPlaceRcl5Links only for explicit link_boost after hub", () => {

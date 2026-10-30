@@ -186,8 +186,8 @@ export function maybeDisarmRcl6SpendMode(
 }
 
 /**
- * During hub rampart / RCL6 CAPEX (3rd link, terminal, extractor), keep
- * builders and trim upgraders so spawn is not eaten by remotes / upgrade_rush.
+ * During hub rampart / wall ring / RCL6 CAPEX, keep builders and trim
+ * upgraders so spawn is not eaten by remotes / upgrade_rush.
  */
 export function applyHubDefenseQuotas(
   quotas: CreepQuotas,
@@ -196,6 +196,10 @@ export function applyHubDefenseQuotas(
     rampartSitesOpen: number;
     hubRampartsReady: boolean;
     hasConstructionSites: boolean;
+    /** Open STRUCTURE_WALL construction sites (exit chokes). */
+    wallSitesOpen?: number;
+    /** Built walls/ramparts still under the fortify floor. */
+    wallsNeedFortify?: boolean;
     /** True while RCL6 structures/sites (link/terminal/extractor) unfinished. */
     rcl6CapexOpen?: boolean;
     /** Under storage floor: CAPEX builders max 2 so remotes can restaff. */
@@ -204,7 +208,10 @@ export function applyHubDefenseQuotas(
 ): CreepQuotas {
   const defenseBusy =
     opts.wallsArmed &&
-    (!opts.hubRampartsReady || opts.rampartSitesOpen > 0);
+    (!opts.hubRampartsReady ||
+      opts.rampartSitesOpen > 0 ||
+      (opts.wallSitesOpen ?? 0) > 0 ||
+      opts.wallsNeedFortify === true);
   const capexBusy = opts.rcl6CapexOpen === true;
   if (!defenseBusy && !capexBusy) return quotas;
   const minBuilders = opts.storageBelowFloor === true ? 2 : 3;
@@ -213,7 +220,7 @@ export function applyHubDefenseQuotas(
     upgrader: Math.min(1, quotas.upgrader),
     builder: Math.max(
       minBuilders,
-      opts.hasConstructionSites ? minBuilders : 2,
+      opts.hasConstructionSites || defenseBusy ? minBuilders : 2,
     ),
   };
 }
@@ -285,7 +292,8 @@ export function applyRcl5ModeQuotas(
     opts.rcl >= 5 &&
     ((opts.extensionCount ?? 0) < 30 || (opts.towerCount ?? 0) < 2);
 
-  // Blackout floor: keep one upgrader + at most one hub builder; never 4× upgrade.
+  // Blackout floor: keep one upgrader; never 4× upgrade. Open sites (walls /
+  // ramparts / CAPEX) still need builders — otherwise surplus flips to upgraders.
   // Only when storageEnergy is known (spawn always passes it).
   if (
     opts.storageEnergy !== undefined &&
@@ -296,7 +304,7 @@ export function applyRcl5ModeQuotas(
     })
   ) {
     q.upgrader = 1;
-    q.builder = hubIncomplete ? 1 : 0;
+    q.builder = hubIncomplete || opts.hasConstructionSites ? 2 : 0;
     return q;
   }
 

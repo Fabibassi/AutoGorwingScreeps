@@ -235,6 +235,10 @@ export interface EconomyContext {
   wallsArmed?: boolean;
   /** Open rampart sites on spawn/storage. */
   rampartSitesOpen?: number;
+  /** Open wall construction sites (exit chokes). */
+  wallSitesOpen?: number;
+  /** Built walls/ramparts still under fortify floor. */
+  wallsNeedFortify?: boolean;
   /** Spawn (+ storage) already have finished ramparts. */
   hubRampartsReady?: boolean;
   /** 3rd link / terminal / extractor still missing or under construction. */
@@ -882,20 +886,25 @@ export function desiredCreeps(
     linksBuilt: economy?.linkCount ?? 0,
     hasConstructionSites,
   });
+  const belowFloor = storageBelowFloor({
+    rcl,
+    hasStorage: economy?.hasStorage === true,
+    storageEnergy: economy?.storageEnergy ?? 0,
+  });
   const defended = applyHubDefenseQuotas(planned, {
     wallsArmed: economy?.wallsArmed === true,
     rampartSitesOpen: economy?.rampartSitesOpen ?? 0,
+    wallSitesOpen: economy?.wallSitesOpen ?? 0,
+    wallsNeedFortify: economy?.wallsNeedFortify === true,
     hubRampartsReady: economy?.hubRampartsReady === true,
     hasConstructionSites,
     rcl6CapexOpen: economy?.rcl6CapexOpen === true,
-    storageBelowFloor: storageBelowFloor({
-      rcl,
-      hasStorage: economy?.hasStorage === true,
-      storageEnergy: economy?.storageEnergy ?? 0,
-    }),
+    storageBelowFloor: belowFloor,
   });
+  // Sim override only — never let sticky seats undo the storage-floor throttle
+  // or defense builder wave (live had 5 upgraders at ~20k with open walls).
   const seats = economy?.upgraderSeats;
-  if (seats != null && seats >= 1) {
+  if (seats != null && seats >= 1 && !belowFloor) {
     defended.upgrader = Math.floor(seats);
   }
   return defended;

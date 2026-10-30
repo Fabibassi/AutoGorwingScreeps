@@ -176,7 +176,7 @@ describe("desiredCreeps", () => {
     ).toMatchObject({ miner: 2, hauler: 4 });
   });
 
-  test("upgraderSeats overrides fat_first and the storage floor", () => {
+  test("upgraderSeats overrides fat_first above floor, not under it", () => {
     const econ = {
       hasStorage: true,
       storageEnergy: 50_000,
@@ -191,13 +191,14 @@ describe("desiredCreeps", () => {
     expect(
       desiredCreeps(5, 2, 2, false, { ...econ, upgraderSeats: 2 }).upgrader,
     ).toBe(2);
+    // Under floor: sticky seats must not undo the 1-upgrader throttle.
     expect(
       desiredCreeps(5, 2, 2, false, {
         ...econ,
         storageEnergy: 1000,
         upgraderSeats: 4,
       }).upgrader,
-    ).toBe(4);
+    ).toBe(1);
   });
 
   test("haulerCap clamps the mining formula", () => {

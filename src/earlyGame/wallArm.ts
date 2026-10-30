@@ -148,6 +148,27 @@ export function hubRampartSitesOpen(room: Room): number {
   return n;
 }
 
+/** Open wall construction sites (exit-choke ring). */
+export function wallSitesOpen(room: Room): number {
+  return room
+    .find(FIND_MY_CONSTRUCTION_SITES)
+    .filter((s) => s.structureType === STRUCTURE_WALL).length;
+}
+
+/** True when any owned wall or hub rampart is under the ready-hits floor. */
+export function wallsNeedFortify(
+  room: Room,
+  minHits: number = HUB_RAMPART_READY_HITS,
+): boolean {
+  const weak = room.find(FIND_STRUCTURES, {
+    filter: (s) =>
+      (s.structureType === STRUCTURE_WALL ||
+        s.structureType === STRUCTURE_RAMPART) &&
+      s.hits < minHits,
+  });
+  return weak.length > 0;
+}
+
 /**
  * Sticky-arm Memory.ags.wallsArmed from room signals.
  * Returns whether walls are armed after this tick.

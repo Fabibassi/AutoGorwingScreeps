@@ -127,6 +127,8 @@ export {
   parseWallPolicy,
   shouldPlaceHubRamparts,
   shouldPlaceWallRing,
+  wallSitesOpen,
+  wallsNeedFortify,
   WALL_RING_STORAGE_BUFFER,
   type WallArmDecision,
   type WallArmInput,
