@@ -546,10 +546,10 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // Scrub wall sites that landed inside the extension stamp (ring was @4–5).
+  // Scrub wall sites not on the room-edge line (old hub rings).
   if (clearWallSitesInHub(room, spawn.pos) > 0) return;
 
-  // Wall ring outside stamp (r7–8) after hub shell is at ready hits.
+  // Room-edge walls (y=2 / x=2 / …) after hub ramparts are at ready hits.
   if (
     !skipNonRoadPlacement &&
     shouldBuildWalls(rcl) &&

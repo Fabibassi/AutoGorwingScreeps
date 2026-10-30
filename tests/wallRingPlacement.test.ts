@@ -1,25 +1,31 @@
 import { describe, expect, test } from "vitest";
 import {
-  HUB_EXTENSION_STAMP,
-  WALL_RING_MIN_RANGE,
-  WALL_RING_MAX_RANGE,
+  WALL_EDGE_COORD,
+  WALL_EDGE_HI,
+  isEdgeWallGate,
   isHubStampTile,
+  isRoomEdgeWallTile,
 } from "../src/construction/placement";
 
-describe("wall ring vs hub stamp", () => {
-  test("ring sits outside extension stamp radius", () => {
-    let maxStamp = 0;
-    for (const [dx, dy] of HUB_EXTENSION_STAMP) {
-      maxStamp = Math.max(maxStamp, Math.max(Math.abs(dx), Math.abs(dy)));
-    }
-    expect(WALL_RING_MIN_RANGE).toBeGreaterThan(maxStamp);
-    expect(WALL_RING_MAX_RANGE).toBeGreaterThanOrEqual(WALL_RING_MIN_RANGE);
+describe("room-edge wall line", () => {
+  test("uses border band at 2 / 47 (e.g. north y=2)", () => {
+    expect(WALL_EDGE_COORD).toBe(2);
+    expect(WALL_EDGE_HI).toBe(47);
+    expect(isRoomEdgeWallTile(15, 2)).toBe(true);
+    expect(isRoomEdgeWallTile(2, 20)).toBe(true);
+    expect(isRoomEdgeWallTile(25, 25)).toBe(false);
+    expect(isRoomEdgeWallTile(25, 7)).toBe(false);
   });
 
-  test("stamp helper recognizes extension pockets", () => {
+  test("leaves mid-edge gates open", () => {
+    expect(isEdgeWallGate(25, WALL_EDGE_COORD)).toBe(true);
+    expect(isEdgeWallGate(24, WALL_EDGE_COORD)).toBe(false);
+    expect(isEdgeWallGate(WALL_EDGE_COORD, 25)).toBe(true);
+  });
+
+  test("hub stamp helper still recognizes extension pockets", () => {
     const spawnPos = { x: 25, y: 25 } as RoomPosition;
-    expect(isHubStampTile(spawnPos, 27, 26)).toBe(true); // [2,1]
-    expect(isHubStampTile(spawnPos, 25, 25)).toBe(false);
-    expect(isHubStampTile(spawnPos, 25 + WALL_RING_MIN_RANGE, 25)).toBe(false);
+    expect(isHubStampTile(spawnPos, 27, 26)).toBe(true);
+    expect(isHubStampTile(spawnPos, 15, 2)).toBe(false);
   });
 });

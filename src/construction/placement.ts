@@ -626,9 +626,13 @@ export function tryPlaceHubRamparts(room: Room): boolean {
   return placed;
 }
 
-/** Extension stamp reaches Chebyshev 5 — wall ring must sit outside that. */
-export const WALL_RING_MIN_RANGE = 7;
-export const WALL_RING_MAX_RANGE = 8;
+/**
+ * Room-edge wall line (Screeps exits sit on 0/49).
+ * Walls on coord 2 / 47 — e.g. north strip y=2 — leave the border walkable
+ * and keep the spawn/extension bunker completely free.
+ */
+export const WALL_EDGE_COORD = 2;
+export const WALL_EDGE_HI = 49 - WALL_EDGE_COORD; // 47
 
 const HUB_STAMP_SET = new Set(
   HUB_EXTENSION_STAMP.map(([dx, dy]) => `${dx},${dy}`),
@@ -645,8 +649,30 @@ export function isHubStampTile(
   return HUB_STAMP_SET.has(`${dx},${dy}`);
 }
 
+/** Perimeter tiles for the edge wall (not corners-only; full 2/47 frame). */
+export function isRoomEdgeWallTile(x: number, y: number): boolean {
+  const onV = x === WALL_EDGE_COORD || x === WALL_EDGE_HI;
+  const onH = y === WALL_EDGE_COORD || y === WALL_EDGE_HI;
+  if (!onV && !onH) return false;
+  // Stay on the frame band (2..47), not outside the room.
+  if (x < WALL_EDGE_COORD || x > WALL_EDGE_HI) return false;
+  if (y < WALL_EDGE_COORD || y > WALL_EDGE_HI) return false;
+  return true;
+}
+
 /**
- * Remove misplaced wall sites inside the hub stamp / ≤r5 (bug from ring@4–5).
+ * Leave a 1-tile gate on each side so own creeps can exit (mid-edge).
+ * Invaders still face a mostly closed perimeter.
+ */
+export function isEdgeWallGate(x: number, y: number): boolean {
+  const mid = 25;
+  if (y === WALL_EDGE_COORD || y === WALL_EDGE_HI) return x === mid;
+  if (x === WALL_EDGE_COORD || x === WALL_EDGE_HI) return y === mid;
+  return false;
+}
+
+/**
+ * Scrub wall sites that are not on the room-edge line (old hub rings @4–8).
  */
 export function clearWallSitesInHub(
   room: Room,
@@ -655,66 +681,60 @@ export function clearWallSitesInHub(
   let removed = 0;
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
-    const r = Math.max(
-      Math.abs(site.pos.x - spawnPos.x),
-      Math.abs(site.pos.y - spawnPos.y),
-    );
-    if (
-      r < WALL_RING_MIN_RANGE ||
-      isHubStampTile(spawnPos, site.pos.x, site.pos.y) ||
-      isHubCorridor(spawnPos, site.pos.x, site.pos.y) ||
-      isSpawnExitTile(spawnPos, site.pos.x, site.pos.y)
-    ) {
-      if (site.remove() === OK) removed += 1;
-    }
+    const { x, y } = site.pos;
+    const misplaced =
+      !isRoomEdgeWallTile(x, y) ||
+      isEdgeWallGate(x, y) ||
+      isHubStampTile(spawnPos, x, y) ||
+      isHubCorridor(spawnPos, x, y) ||
+      isSpawnExitTile(spawnPos, x, y);
+    if (misplaced && site.remove() === OK) removed += 1;
   }
   return removed;
 }
 
 /**
- * Outer wall ring outside the extension stamp (Chebyshev 7–8).
- * Never on corridors, stamp pockets, or existing hub structures.
+ * Place one wall site on the room-edge frame (y=2 / x=2 / …).
+ * Hub bunker stays untouched — defense is the outer shell.
  */
 export function tryPlaceWallRing(
   room: Room,
   spawnPos: RoomPosition,
 ): boolean {
-  for (let r = WALL_RING_MIN_RANGE; r <= WALL_RING_MAX_RANGE; r++) {
-    for (let dx = -r; dx <= r; dx++) {
-      for (let dy = -r; dy <= r; dy++) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        const x = spawnPos.x + dx;
-        const y = spawnPos.y + dy;
-        if (x < 1 || x > 48 || y < 1 || y > 48) continue;
-        if (isSpawnExitTile(spawnPos, x, y)) continue;
-        if (isHubCorridor(spawnPos, x, y, WALL_RING_MAX_RANGE)) continue;
-        if (isHubStampTile(spawnPos, x, y)) continue;
-        if (!isBuildableTerrain(room, x, y)) continue;
-        const pos = new RoomPosition(x, y, room.name);
-        if (tileHasBlockingStructure(pos)) continue;
-        if (
-          pos
-            .lookFor(LOOK_CONSTRUCTION_SITES)
-            .some(
-              (s) =>
-                s.structureType === STRUCTURE_WALL ||
-                s.structureType === STRUCTURE_EXTENSION ||
-                s.structureType === STRUCTURE_ROAD,
-            )
-        ) {
-          continue;
-        }
-        if (
-          pos
-            .lookFor(LOOK_STRUCTURES)
-            .some((s) => s.structureType === STRUCTURE_WALL)
-        ) {
-          continue;
-        }
-        if (room.createConstructionSite(x, y, STRUCTURE_WALL) === OK) {
-          return true;
-        }
-      }
+  // Prefer the side facing exits first (scan edge band).
+  const edges: Array<[number, number]> = [];
+  for (let i = WALL_EDGE_COORD; i <= WALL_EDGE_HI; i++) {
+    edges.push([i, WALL_EDGE_COORD]); // north y=2
+    edges.push([i, WALL_EDGE_HI]); // south
+    edges.push([WALL_EDGE_COORD, i]); // west
+    edges.push([WALL_EDGE_HI, i]); // east
+  }
+
+  for (const [x, y] of edges) {
+    if (!isRoomEdgeWallTile(x, y)) continue;
+    if (isEdgeWallGate(x, y)) continue;
+    if (isHubStampTile(spawnPos, x, y)) continue;
+    if (isSpawnExitTile(spawnPos, x, y)) continue;
+    if (isHubCorridor(spawnPos, x, y)) continue;
+    if (!isBuildableTerrain(room, x, y)) continue;
+    const pos = new RoomPosition(x, y, room.name);
+    if (tileHasBlockingStructure(pos)) continue;
+    if (
+      pos
+        .lookFor(LOOK_CONSTRUCTION_SITES)
+        .some((s) => s.structureType === STRUCTURE_WALL)
+    ) {
+      continue;
+    }
+    if (
+      pos
+        .lookFor(LOOK_STRUCTURES)
+        .some((s) => s.structureType === STRUCTURE_WALL)
+    ) {
+      continue;
+    }
+    if (room.createConstructionSite(x, y, STRUCTURE_WALL) === OK) {
+      return true;
     }
   }
   return false;
