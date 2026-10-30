@@ -22,7 +22,7 @@ describe("exit-choke walls", () => {
   });
 
   test("prefers plains choke at depth 3 over swamp strip at depth 2", () => {
-    // User case: swamp on x=2, ~3-tile plains gap on x=3 around y=35.
+    // West case: swamp on x=2, ~3-tile plains gap on x=3 around y=35.
     const depth2: EdgeTileInfo[] = [
       { x: 2, y: 34, walkable: true, swamp: true },
       { x: 2, y: 35, walkable: true, swamp: true },
@@ -35,6 +35,24 @@ describe("exit-choke walls", () => {
     ];
     expect(scoreEdgeDepth(depth3)).toBeGreaterThan(scoreEdgeDepth(depth2));
     expect(pickBestEdgeDepth({ 2: depth2, 3: depth3, 4: [] })).toBe(3);
+  });
+
+  test("prefers shallow tight plains over a wider deeper plains line", () => {
+    // North case: no swamp — depth 2 is a 3-tile mouth; depth 4 opens wider.
+    const depth2: EdgeTileInfo[] = [
+      { x: 24, y: 2, walkable: true, swamp: false },
+      { x: 25, y: 2, walkable: true, swamp: false },
+      { x: 26, y: 2, walkable: true, swamp: false },
+    ];
+    const depth4: EdgeTileInfo[] = [
+      { x: 23, y: 4, walkable: true, swamp: false },
+      { x: 24, y: 4, walkable: true, swamp: false },
+      { x: 25, y: 4, walkable: true, swamp: false },
+      { x: 26, y: 4, walkable: true, swamp: false },
+      { x: 27, y: 4, walkable: true, swamp: false },
+    ];
+    expect(scoreEdgeDepth(depth2)).toBeGreaterThan(scoreEdgeDepth(depth4));
+    expect(pickBestEdgeDepth({ 2: depth2, 3: depth2, 4: depth4 })).toBe(2);
   });
 
   test("expands seeds only through contiguous walkable choke", () => {

@@ -43,16 +43,18 @@ export type EdgeTileInfo = {
 
 /**
  * Prefer a depth whose choke is mostly plains and reasonably narrow.
- * Swamp-only mouths (user's x=2 strip) lose to a plains gap one tile deeper.
+ * Swamp-only mouths (e.g. west x=2 strip) lose to a plains gap one tile deeper.
+ * Same-quality plains: tighter wins (do NOT reward a wider deeper line).
  */
 export function scoreEdgeDepth(tiles: EdgeTileInfo[]): number {
   const walk = tiles.filter((t) => t.walkable);
   if (walk.length === 0) return Number.NEGATIVE_INFINITY;
   const plains = walk.filter((t) => !t.swamp).length;
   const swampOnly = plains === 0;
-  // Plains choke: high score, tighter is better. Swamp-only: heavy penalty.
+  // Swamp-only: heavy penalty, still slightly prefer tighter.
   if (swampOnly) return 1 - walk.length * 0.1;
-  return 100 + plains * 10 - walk.length;
+  // Plains: base + plains bonus − width. Tighter plains beat wide plains.
+  return 100 + plains * 10 - walk.length * 20;
 }
 
 export function pickBestEdgeDepth(
