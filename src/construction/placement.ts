@@ -583,6 +583,7 @@ export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
 /**
  * Place rampart sites on hub tiles when walls are armed.
  * Covers all spawns, storage, terminal, towers (shared tile — early gate shell).
+ * Places every missing anchor this tick (not just one) so a wipe recovers fast.
  */
 export function tryPlaceHubRamparts(room: Room): boolean {
   const anchors: RoomPosition[] = [];
@@ -597,6 +598,8 @@ export function tryPlaceHubRamparts(room: Room): boolean {
     anchors.push(tower.pos);
   }
 
+  let placed = false;
+  let lastFail: number | undefined;
   for (const pos of anchors) {
     const hasRampart = pos
       .lookFor(LOOK_STRUCTURES)
@@ -606,11 +609,21 @@ export function tryPlaceHubRamparts(room: Room): boolean {
       .lookFor(LOOK_CONSTRUCTION_SITES)
       .some((s) => s.structureType === STRUCTURE_RAMPART);
     if (hasSite) continue;
-    if (room.createConstructionSite(pos, STRUCTURE_RAMPART) === OK) {
-      return true;
+    const code = room.createConstructionSite(pos, STRUCTURE_RAMPART);
+    if (code === OK) {
+      placed = true;
+    } else {
+      lastFail = code;
     }
   }
-  return false;
+  if (lastFail != null && Memory.ags) {
+    Memory.ags.lastWallPlaceFail = {
+      tick: Game.time,
+      code: lastFail,
+      kind: "hubRampart",
+    };
+  }
+  return placed;
 }
 
 /**

@@ -139,6 +139,8 @@ export interface AgsMemory {
   wallsArmed?: boolean;
   /** Last arm reason from decideWallArm. */
   wallArmReason?: string;
+  /** Last failed wall/rampart createConstructionSite (ops triage). */
+  lastWallPlaceFail?: { tick: number; code: number; kind: string };
   /** Tick until which remote spawn stays paused after hostiles. */
   remoteThreatUntil?: number;
   /** Last seen hostile count in the remote room. */

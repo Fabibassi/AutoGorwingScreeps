@@ -74,8 +74,15 @@ export function shouldPlaceHubRamparts(opts: {
   return opts.wallsArmed;
 }
 
-/** Wall ring only after hub shell + storage comfortably above floor. */
-export const WALL_RING_STORAGE_BUFFER = 10_000;
+/**
+ * Wall-ring *sites* once hub shell exists (sites cost nothing).
+ * Builders still starve while storage is empty; do not wait for +10k buffer
+ * or the outer wall never starts after a blackout.
+ */
+export const WALL_RING_STORAGE_BUFFER = 0;
+
+/** Hub rampart counts as "ready" only above this — 1-hit shells die to any swipe. */
+export const HUB_RAMPART_READY_HITS = 10_000;
 
 export function shouldPlaceWallRing(opts: {
   hubRampartsReady: boolean;
@@ -89,23 +96,37 @@ export function shouldPlaceWallRing(opts: {
   if (!opts.hubRampartsReady) return false;
   const minRcl = opts.minRcl ?? 6;
   if ((opts.rcl ?? 0) < minRcl) return false;
-  const floor = opts.floor ?? STORAGE_FLOOR_ENERGY;
+  // Sites are free; optional floor gate (default 0) only if caller sets buffer/floor.
+  const floor = opts.floor ?? 0;
   const buffer = opts.buffer ?? WALL_RING_STORAGE_BUFFER;
   return opts.storageEnergy >= floor + buffer;
 }
 
-/** True when spawn (+ storage if present) already has a finished rampart. */
-export function hubRampartsReady(room: Room): boolean {
+function rampartHitsAt(pos: RoomPosition): number {
+  const ramp = pos
+    .lookFor(LOOK_STRUCTURES)
+    .find((s) => s.structureType === STRUCTURE_RAMPART);
+  return ramp?.hits ?? 0;
+}
+
+/** True when spawn (+ storage) has any rampart structure (even 1 HP). */
+export function hubRampartsPresent(room: Room): boolean {
+  return hubRampartsReady(room, 1);
+}
+
+/**
+ * True when spawn (+ storage if present) has a rampart at ready hits.
+ * 1-HP leftover after site complete is "present" but not a real shell.
+ */
+export function hubRampartsReady(
+  room: Room,
+  minHits: number = HUB_RAMPART_READY_HITS,
+): boolean {
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   if (!spawn) return false;
-  const spawnOk = spawn.pos
-    .lookFor(LOOK_STRUCTURES)
-    .some((s) => s.structureType === STRUCTURE_RAMPART);
-  if (!spawnOk) return false;
+  if (rampartHitsAt(spawn.pos) < minHits) return false;
   if (!room.storage) return true;
-  return room.storage.pos
-    .lookFor(LOOK_STRUCTURES)
-    .some((s) => s.structureType === STRUCTURE_RAMPART);
+  return rampartHitsAt(room.storage.pos) >= minHits;
 }
 
 /** Open rampart construction sites on spawn/storage tiles. */

@@ -19,6 +19,8 @@ import {
   parseRcl7BuildOrder,
 } from "../earlyGame/rcl7Hit";
 import {
+  hubRampartSitesOpen,
+  hubRampartsPresent,
   hubRampartsReady,
   maybeArmWalls,
   shouldPlaceHubRamparts,
@@ -141,13 +143,14 @@ export function runConstruction(room: Room): void {
   const spawn = room.find(FIND_MY_SPAWNS)[0];
   if (!spawn || !room.controller?.my) return;
 
-  // Hub ramparts: arm (economy/raid) then place sites on spawn/storage tiles.
+  // Hub ramparts: arm, place missing sites, hold other CAPEX until structures exist.
+  // (1-HP is enough to unblock; towers push hits. Wall ring waits for ready hits.)
   maybeArmWalls(room);
-  if (
-    shouldPlaceHubRamparts({ wallsArmed: Boolean(Memory.ags?.wallsArmed) }) &&
-    tryPlaceHubRamparts(room)
-  ) {
-    return;
+  if (shouldPlaceHubRamparts({ wallsArmed: Boolean(Memory.ags?.wallsArmed) })) {
+    tryPlaceHubRamparts(room);
+    if (!hubRampartsPresent(room)) {
+      return;
+    }
   }
 
   // Before any early-return cleanup: drop ghost / orphan container sites
@@ -542,16 +545,26 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // Wall ring after hub ramparts + storage buffer (Wave C).
+  // Wall ring after hub shell is at ready hits (Wave C). Sites are free.
   if (
     !skipNonRoadPlacement &&
     shouldBuildWalls(rcl) &&
+    Boolean(Memory.ags?.wallsArmed) &&
     shouldPlaceWallRing({
       hubRampartsReady: hubRampartsReady(room),
       storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
       rcl,
     }) &&
     tryPlaceWallRing(room, spawn.pos)
+  ) {
+    return;
+  }
+
+  // Still placing hub rampart sites? Prefer those over roads spam.
+  if (
+    Boolean(Memory.ags?.wallsArmed) &&
+    hubRampartSitesOpen(room) > 0 &&
+    !hubRampartsPresent(room)
   ) {
     return;
   }

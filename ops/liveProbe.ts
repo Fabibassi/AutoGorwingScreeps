@@ -104,6 +104,9 @@ function summarizeObjects(objects: unknown[]): {
   };
   constructionSites: number;
   sites: Array<{ structureType: string; progress: number; progressTotal: number; x: number; y: number }>;
+  rampartCount: number;
+  rampartHitsMin: number | null;
+  wallCount: number;
   extensionCount: number;
   extensionEnergy: number;
   storageEnergy: number;
@@ -145,6 +148,9 @@ function summarizeObjects(objects: unknown[]): {
   let sources = 0;
   let constructionSites = 0;
   const sites: Array<{ structureType: string; progress: number; progressTotal: number; x: number; y: number }> = [];
+  let rampartCount = 0;
+  let rampartHitsMin: number | null = null;
+  let wallCount = 0;
   let extensionCount = 0;
   let extensionEnergy = 0;
   let storageEnergy = 0;
@@ -208,6 +214,13 @@ function summarizeObjects(objects: unknown[]): {
     } else if (type === "extension") {
       extensionCount++;
       extensionEnergy += energyFrom(o);
+    } else if (type === "rampart") {
+      rampartCount++;
+      const hits = typeof o.hits === "number" ? o.hits : 0;
+      rampartHitsMin =
+        rampartHitsMin == null ? hits : Math.min(rampartHitsMin, hits);
+    } else if (type === "constructedWall" || type === "wall") {
+      wallCount++;
     } else if (type === "storage") {
       storageEnergy += energyFrom(o);
     } else if (type === "container") {
@@ -355,6 +368,9 @@ function summarizeObjects(objects: unknown[]): {
     controller,
     constructionSites,
     sites,
+    rampartCount,
+    rampartHitsMin,
+    wallCount,
     extensionCount,
     extensionEnergy,
     storageEnergy,
@@ -468,6 +484,16 @@ export async function main(): Promise<void> {
     wallsArmed: agsRec?.wallsArmed === true,
     wallArmReason:
       typeof agsRec?.wallArmReason === "string" ? agsRec.wallArmReason : null,
+    lastWallPlaceFail: agsRec?.lastWallPlaceFail ?? null,
+    homeRamparts: summary.rampartCount,
+    homeRampartHitsMin: summary.rampartHitsMin,
+    homeWalls: summary.wallCount,
+    homeSites: summary.sites.filter(
+      (s) =>
+        s.structureType === "rampart" ||
+        s.structureType === "wall" ||
+        s.structureType === "constructedWall",
+    ),
   };
   console.log("## Remote / walls sitrep");
   console.log(JSON.stringify(remoteSitRep, null, 2));
@@ -519,6 +545,9 @@ export async function main(): Promise<void> {
     storageEnergy: summary.storageEnergy,
     extensionCount: summary.extensionCount,
     constructionSites: summary.constructionSites,
+    rampartCount: summary.rampartCount,
+    rampartHitsMin: summary.rampartHitsMin,
+    wallCount: summary.wallCount,
     runUrl,
   };
   writeFileSync(PROBE_SUMMARY_PATH, `${JSON.stringify(probeSummary, null, 2)}\n`, "utf8");
