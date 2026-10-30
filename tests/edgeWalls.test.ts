@@ -54,4 +54,15 @@ describe("edgeTilesOnPathsToExits", () => {
   test("path still reaches exits", () => {
     expect(canReachAnyExit(walk, new Set(), spawn, exits)).toBe(true);
   });
+
+  test("walling every mouth tile without a gate seals the exit", () => {
+    const sealed = new Set(["12,2", "13,2"]);
+    expect(canReachAnyExit(walk, sealed, spawn, exits)).toBe(false);
+  });
+
+  test("leaving one mouth tile open keeps the exit reachable", () => {
+    const withGate = new Set(["13,2"]);
+    expect(canReachAnyExit(walk, withGate, spawn, exits)).toBe(true);
+  });
 });
+

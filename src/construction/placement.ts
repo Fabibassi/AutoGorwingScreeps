@@ -1,5 +1,6 @@
 import {
   EDGE_MOUTH_FULL_OPEN_MAX,
+  canReachAnyExit,
   edgeTilesOnPathsToExits,
   pickChokeGate,
   type ExitSide,
@@ -823,14 +824,69 @@ export function edgeWallPlacementEnabled(): boolean {
   return Memory.ags?.wallRingEnabled !== false;
 }
 
+function wallBlockSetExcludingOpen(
+  room: Room,
+  open: ReadonlySet<string>,
+): Set<string> {
+  const blocked = existingWallBlockSet(room);
+  for (const k of open) blocked.delete(k);
+  return blocked;
+}
+
+/** True if spawn can still reach this side's exits (gates forced open). */
+export function sideExitReachable(
+  room: Room,
+  spawnPos: RoomPosition,
+  side: ExitSide,
+  extraBlock?: { x: number; y: number },
+): boolean {
+  const exits = exitsForSide(room, side);
+  if (exits.length === 0) return true;
+  const open = openEdgeTilesForSide(room, spawnPos, side);
+  // Must keep at least one physical opening — if open set empty, treat mouth as all open.
+  const mouth = exitMouthTilesForSide(room, spawnPos, side);
+  const forcedOpen = open.size > 0 ? open : mouth;
+  const blocked = wallBlockSetExcludingOpen(room, forcedOpen);
+  if (extraBlock) {
+    const ek = `${extraBlock.x},${extraBlock.y}`;
+    if (!forcedOpen.has(ek)) blocked.add(ek);
+  }
+  const walk = (x: number, y: number) => terrainWalkable(room, x, y);
+  return canReachAnyExit(walk, blocked, spawnPos, exits);
+}
+
 /**
- * Scrub wall sites that are not useful exit-mouth tiles (dead pockets, gates).
+ * Hard rule: never leave spawn sealed. Clear gate tiles (sites + walls),
+ * drop useless sites, then peel mouth walls until every exit side is reachable.
  */
 export function clearWallSitesInHub(
   room: Room,
   spawnPos: RoomPosition,
 ): number {
   let removed = 0;
+
+  // 1) Gate / open mouth tiles must never hold a wall or site.
+  for (const { side } of exitSides()) {
+    const open = openEdgeTilesForSide(room, spawnPos, side);
+    for (const key of open) {
+      const [xs, ys] = key.split(",");
+      const x = Number(xs);
+      const y = Number(ys);
+      const pos = new RoomPosition(x, y, room.name);
+      for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES)) {
+        if (site.structureType === STRUCTURE_WALL && site.remove() === OK) {
+          removed += 1;
+        }
+      }
+      for (const s of pos.lookFor(LOOK_STRUCTURES)) {
+        if (s.structureType === STRUCTURE_WALL) {
+          if ((s as StructureWall).destroy() === OK) removed += 1;
+        }
+      }
+    }
+  }
+
+  // 2) Scrub non-useful wall sites (dead pockets, narrow mouths, etc.).
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
     const { x, y } = site.pos;
@@ -838,12 +894,50 @@ export function clearWallSitesInHub(
       if (site.remove() === OK) removed += 1;
     }
   }
+
+  // 3) If still sealed, strip wall sites then mouth structures until open.
+  for (const { side } of exitSides()) {
+    if (exitsForSide(room, side).length === 0) continue;
+    let guard = 0;
+    while (!sideExitReachable(room, spawnPos, side) && guard++ < 40) {
+      const mouth = exitMouthTilesForSide(room, spawnPos, side);
+      const open = openEdgeTilesForSide(room, spawnPos, side);
+      let peeled = false;
+      for (const key of mouth) {
+        if (open.has(key)) continue;
+        const [xs, ys] = key.split(",");
+        const x = Number(xs);
+        const y = Number(ys);
+        const pos = new RoomPosition(x, y, room.name);
+        for (const site of pos.lookFor(LOOK_CONSTRUCTION_SITES)) {
+          if (site.structureType === STRUCTURE_WALL && site.remove() === OK) {
+            removed += 1;
+            peeled = true;
+            break;
+          }
+        }
+        if (peeled) break;
+        for (const s of pos.lookFor(LOOK_STRUCTURES)) {
+          if (
+            s.structureType === STRUCTURE_WALL &&
+            (s as StructureWall).destroy() === OK
+          ) {
+            removed += 1;
+            peeled = true;
+            break;
+          }
+        }
+        if (peeled) break;
+      }
+      if (!peeled) break;
+    }
+  }
+
   return removed;
 }
 
 /**
- * Place one wall only on a useful exit mouth (wide funnel → one gate).
- * Narrow mouths (≤3) and dead edge pockets are never walled.
+ * Place one wall on a wide exit mouth only if a gate stays and path stays open.
  */
 export function tryPlaceWallRing(
   room: Room,
@@ -861,6 +955,10 @@ export function tryPlaceWallRing(
 
   for (const [x, y] of edges) {
     if (!isAllowedEdgeWallTile(room, spawnPos, x, y)) continue;
+    const side = edgeSideAt(x, y);
+    if (!side) continue;
+    // Hard gate: placing this tile must not seal spawn→side exits.
+    if (!sideExitReachable(room, spawnPos, side, { x, y })) continue;
     const pos = new RoomPosition(x, y, room.name);
     if (tileHasBlockingStructure(pos)) continue;
     if (
