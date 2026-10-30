@@ -136,3 +136,69 @@ export function planChokeWallTiles(
   const walls = choke.filter((t) => t.x !== gate.x || t.y !== gate.y);
   return { walls, gate };
 }
+
+const ORTH: Array<[number, number]> = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+];
+
+/**
+ * BFS: can we walk from `from` to any exit without stepping on `blocked`?
+ * `isWalkable` is terrain (and optional structure) walkability — blocked wins.
+ */
+export function canReachAnyExit(
+  isWalkable: (x: number, y: number) => boolean,
+  blocked: ReadonlySet<string>,
+  from: { x: number; y: number },
+  exits: Array<{ x: number; y: number }>,
+): boolean {
+  if (exits.length === 0) return true;
+  const goals = new Set(exits.map((e) => `${e.x},${e.y}`));
+  const start = `${from.x},${from.y}`;
+  if (blocked.has(start)) return false;
+  const seen = new Set<string>([start]);
+  const queue: Array<{ x: number; y: number }> = [{ x: from.x, y: from.y }];
+  while (queue.length > 0) {
+    const cur = queue.pop()!;
+    const ck = `${cur.x},${cur.y}`;
+    if (goals.has(ck)) return true;
+    for (const [dx, dy] of ORTH) {
+      const nx = cur.x + dx;
+      const ny = cur.y + dy;
+      if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
+      const nk = `${nx},${ny}`;
+      if (seen.has(nk) || blocked.has(nk)) continue;
+      if (!isWalkable(nx, ny) && !goals.has(nk)) continue;
+      // Exits on the border may be terrain-wall-adjacent; allow stepping onto goal.
+      if (!isWalkable(nx, ny) && goals.has(nk)) {
+        return true;
+      }
+      if (!isWalkable(nx, ny)) continue;
+      seen.add(nk);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+  return false;
+}
+
+/**
+ * True if adding `candidate` to the blocked set would seal spawn off every exit.
+ */
+export function wallWouldSealExitPath(
+  isWalkable: (x: number, y: number) => boolean,
+  alreadyBlocked: ReadonlySet<string>,
+  candidate: { x: number; y: number },
+  spawn: { x: number; y: number },
+  exits: Array<{ x: number; y: number }>,
+): boolean {
+  if (exits.length === 0) return false;
+  const blocked = new Set(alreadyBlocked);
+  blocked.add(`${candidate.x},${candidate.y}`);
+  return !canReachAnyExit(isWalkable, blocked, spawn, exits);
+}

@@ -1,6 +1,7 @@
 import {
   pickChokeGate,
   projectInward,
+  wallWouldSealExitPath,
   type ExitSide,
 } from "./edgeWalls";
 
@@ -673,9 +674,39 @@ function exitSides(): Array<{ side: ExitSide; find: ExitConstant }> {
   ];
 }
 
+function terrainWalkable(room: Room, x: number, y: number): boolean {
+  if (x < 0 || x > 49 || y < 0 || y > 49) return false;
+  return isBuildableTerrain(room, x, y);
+}
+
+/** Existing walls + wall sites that already block pathing. */
+export function existingWallBlockSet(room: Room): Set<string> {
+  const blocked = new Set<string>();
+  for (const s of room.find(FIND_STRUCTURES)) {
+    if (s.structureType === STRUCTURE_WALL) {
+      blocked.add(`${s.pos.x},${s.pos.y}`);
+    }
+  }
+  for (const s of room.find(FIND_CONSTRUCTION_SITES)) {
+    if (s.structureType === STRUCTURE_WALL) {
+      blocked.add(`${s.pos.x},${s.pos.y}`);
+    }
+  }
+  return blocked;
+}
+
+function allRoomExits(room: Room): RoomPosition[] {
+  const out: RoomPosition[] = [];
+  for (const { find } of exitSides()) {
+    const exits = room.find(find) as RoomPosition[];
+    for (const e of exits) out.push(e);
+  }
+  return out;
+}
+
 /**
- * One gate per side that has exits: exit projection onto the 2/47 line,
- * closest to spawn. Not mid-edge y=25, not swamp/depth scoring.
+ * One gate per side: exit projection closest to spawn among walkable edge
+ * tiles — fallback when path-seal check is not used.
  */
 export function plannedEdgeGates(
   room: Room,
@@ -685,10 +716,15 @@ export function plannedEdgeGates(
   for (const { side, find } of exitSides()) {
     const exits = room.find(find) as RoomPosition[];
     if (exits.length === 0) continue;
-    const projections = exits.map((ex) =>
-      projectInward(ex, side, WALL_EDGE_COORD),
+    const projections = exits
+      .map((ex) => projectInward(ex, side, WALL_EDGE_COORD))
+      .filter((p) => terrainWalkable(room, p.x, p.y));
+    const gate = pickChokeGate(
+      projections.length > 0
+        ? projections
+        : exits.map((ex) => projectInward(ex, side, WALL_EDGE_COORD)),
+      spawnPos,
     );
-    const gate = pickChokeGate(projections, spawnPos);
     if (gate) gates.push(gate);
   }
   return gates;
@@ -704,30 +740,62 @@ export function isEdgeWallGate(
 }
 
 /**
- * Scrub wall sites off the 2/47 frame (old choke depths / hub rings / gates).
+ * True if walling (x,y) would seal spawn off every room exit.
+ */
+export function wallSealsExitPath(
+  room: Room,
+  spawnPos: RoomPosition,
+  x: number,
+  y: number,
+  alreadyBlocked?: ReadonlySet<string>,
+): boolean {
+  const exits = allRoomExits(room);
+  if (exits.length === 0) return false;
+  const blocked = new Set(alreadyBlocked ?? existingWallBlockSet(room));
+  // Ignore the candidate itself if it was already counted as a site.
+  blocked.delete(`${x},${y}`);
+  return wallWouldSealExitPath(
+    (wx, wy) => terrainWalkable(room, wx, wy),
+    blocked,
+    { x, y },
+    spawnPos,
+    exits,
+  );
+}
+
+/**
+ * Scrub wall sites off the 2/47 frame, or sites that would seal spawn→exit.
  */
 export function clearWallSitesInHub(
   room: Room,
   spawnPos: RoomPosition,
 ): number {
+  const blocked = existingWallBlockSet(room);
   let removed = 0;
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
     const { x, y } = site.pos;
+    blocked.delete(`${x},${y}`);
+    const seals = wallSealsExitPath(room, spawnPos, x, y, blocked);
     const misplaced =
       !isRoomEdgeWallTile(x, y) ||
       isEdgeWallGate(room, spawnPos, x, y) ||
+      seals ||
       isHubStampTile(spawnPos, x, y) ||
       isHubCorridor(spawnPos, x, y) ||
       isSpawnExitTile(spawnPos, x, y);
-    if (misplaced && site.remove() === OK) removed += 1;
+    if (misplaced && site.remove() === OK) {
+      removed += 1;
+    } else {
+      blocked.add(`${x},${y}`);
+    }
   }
   return removed;
 }
 
 /**
- * Place one wall site on the fixed room-edge frame (y=2 / x=2 / …).
- * Swamp ignored — build wherever terrain allows.
+ * Place one wall site on the fixed 2/47 frame.
+ * Skip any tile that would seal the only spawn→exit path.
  */
 export function tryPlaceWallRing(
   room: Room,
@@ -741,6 +809,8 @@ export function tryPlaceWallRing(
     edges.push([WALL_EDGE_HI, i]);
   }
 
+  const blocked = existingWallBlockSet(room);
+
   for (const [x, y] of edges) {
     if (!isRoomEdgeWallTile(x, y)) continue;
     if (isEdgeWallGate(room, spawnPos, x, y)) continue;
@@ -748,6 +818,7 @@ export function tryPlaceWallRing(
     if (isSpawnExitTile(spawnPos, x, y)) continue;
     if (isHubCorridor(spawnPos, x, y)) continue;
     if (!isBuildableTerrain(room, x, y)) continue;
+    if (wallSealsExitPath(room, spawnPos, x, y, blocked)) continue;
     const pos = new RoomPosition(x, y, room.name);
     if (tileHasBlockingStructure(pos)) continue;
     if (
