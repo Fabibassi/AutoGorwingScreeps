@@ -18,14 +18,17 @@ describe("shouldSpawnInvaderClearer", () => {
   const base = {
     defenseMode: "clear" as const,
     rcl: 6,
-    storageEnergy: STORAGE_FLOOR_ENERGY + 2_000,
+    storageEnergy: STORAGE_FLOOR_ENERGY,
     threatActive: true,
     livingClearers: 0,
     energyAvailable: 260,
   };
 
-  test("allows clear above floor+buffer", () => {
+  test("allows clear near storage floor (camping hauler case)", () => {
     expect(shouldSpawnInvaderClearer(base)).toBe(true);
+    expect(
+      shouldSpawnInvaderClearer({ ...base, storageEnergy: 19_979 }),
+    ).toBe(true);
   });
 
   test("blocks flee / refill / safemode arms", () => {
@@ -37,13 +40,19 @@ describe("shouldSpawnInvaderClearer", () => {
     );
   });
 
-  test("blocks under storage buffer", () => {
+  test("blocks only in deep blackout", () => {
     expect(
       shouldSpawnInvaderClearer({
         ...base,
-        storageEnergy: STORAGE_FLOOR_ENERGY + 1_999,
+        storageEnergy: 4_999,
       }),
     ).toBe(false);
+    expect(
+      shouldSpawnInvaderClearer({
+        ...base,
+        storageEnergy: 5_000,
+      }),
+    ).toBe(true);
   });
 
   test("blocks without threat or when squad full", () => {
@@ -77,7 +86,22 @@ describe("buildInvaderClearerBody", () => {
 });
 
 describe("invaderClearStorageMin", () => {
-  test("is floor + 2k", () => {
-    expect(invaderClearStorageMin()).toBe(STORAGE_FLOOR_ENERGY + 2_000);
+  test("is deep-blackout floor (5k), not economy floor+buffer", () => {
+    expect(invaderClearStorageMin()).toBe(5_000);
+  });
+});
+
+describe("pickInvaderTarget", () => {
+  test("prefers soft hostiles over combat creeps", async () => {
+    const { pickInvaderTarget } = await import("../src/defense/invaderClear");
+    const soft = {
+      owner: { username: "Scout" },
+      getActiveBodyparts: (p: string) => (p === "attack" ? 0 : 0),
+    } as unknown as Creep;
+    const combat = {
+      owner: { username: "Scout" },
+      getActiveBodyparts: (p: string) => (p === "attack" ? 2 : 0),
+    } as unknown as Creep;
+    expect(pickInvaderTarget([combat, soft])).toBe(soft);
   });
 });

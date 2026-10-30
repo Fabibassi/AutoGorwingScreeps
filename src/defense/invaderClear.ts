@@ -1,10 +1,16 @@
 /**
- * Cheap NPC Invader clear for remotes — spawn only above storage floor+buffer.
- * Player PvP / strongholds stay out of scope.
+ * Cheap remote clearer for NPC Invaders and soft player hostiles (e.g. camping
+ * hauler). Strongholds / boosted PvP stay out of scope.
+ *
+ * Storage gate is intentionally soft: a parked enemy hauler costs more remote
+ * income than a 130–520 energy clearer. Only deep blackout blocks spawn.
  */
 import { STORAGE_FLOOR_ENERGY } from "../earlyGame/storageFloor";
 
-export const INVADER_CLEAR_STORAGE_BUFFER = 2_000;
+/** Deep blackout only — do not require floor+buffer (that blocked clears at ~20k). */
+export const INVADER_CLEAR_STORAGE_MIN = 5_000;
+/** @deprecated alias — tests / call sites may still import the old name. */
+export const INVADER_CLEAR_STORAGE_BUFFER = 0;
 export const INVADER_CLEAR_MAX_SQUAD = 1;
 /** Username used by Screeps World NPC Invaders. */
 export const INVADER_USERNAME = "Invader";
@@ -19,8 +25,8 @@ export function parseDefenseMode(raw: string | undefined): DefenseMode {
   return "clear";
 }
 
-export function invaderClearStorageMin(floor = STORAGE_FLOOR_ENERGY): number {
-  return floor + INVADER_CLEAR_STORAGE_BUFFER;
+export function invaderClearStorageMin(_floor = STORAGE_FLOOR_ENERGY): number {
+  return INVADER_CLEAR_STORAGE_MIN;
 }
 
 /**
@@ -60,12 +66,23 @@ export function buildInvaderClearerBody(
   return body;
 }
 
-/** Prefer NPC Invaders; if username unknown, any hostile. */
+function combatParts(creep: Creep): number {
+  return (
+    creep.getActiveBodyparts("attack") +
+    creep.getActiveBodyparts("ranged_attack") +
+    creep.getActiveBodyparts("heal")
+  );
+}
+
+/**
+ * Prefer NPC Invaders, then soft player hostiles (hauler/scout), then any.
+ */
 export function pickInvaderTarget(hostiles: Creep[]): Creep | null {
   if (hostiles.length === 0) return null;
   const npcs = hostiles.filter((h) => h.owner?.username === INVADER_USERNAME);
   const pool = npcs.length > 0 ? npcs : hostiles;
-  return pool[0] ?? null;
+  const soft = pool.filter((h) => combatParts(h) === 0);
+  return (soft[0] ?? pool[0]) ?? null;
 }
 
 export function countAttackers(homeRoom?: string): number {

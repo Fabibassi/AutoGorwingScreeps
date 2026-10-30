@@ -1035,6 +1035,26 @@ export function runSpawn(spawn: StructureSpawn): void {
     override: Memory.ags?.haulerBudget,
   });
 
+  // Remote threat: clearer before home CAPEX / remotes so a camping hauler
+  // does not stall income for the whole sticky window.
+  if (remoteThreatActive(Memory.ags, Game.time)) {
+    const threatened =
+      [Memory.ags?.remoteRoom, Memory.ags?.remoteRoom2].find((rn) => {
+        if (!rn) return false;
+        const r = Game.rooms[rn];
+        return r != null && r.find(FIND_HOSTILE_CREEPS).length > 0;
+      }) ?? Memory.ags?.remoteRoom;
+    if (
+      trySpawnInvaderClearer(spawn, {
+        threatActive: true,
+        remoteRoom: threatened,
+        defenseMode: parseDefenseMode(Memory.ags?.defenseMode),
+      })
+    ) {
+      return;
+    }
+  }
+
   for (const role of spawnOrder) {
     const roleWant = role === "miner" ? minerSeatWant : want[role];
     const filled =
@@ -1148,25 +1168,6 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
     if (result === OK) {
       noteSpawnSpend(role, body);
-      return;
-    }
-  }
-
-  // Threat window: cheap Invader clearer before remotes (remotes stay paused).
-  {
-    const threatened =
-      [Memory.ags?.remoteRoom, Memory.ags?.remoteRoom2].find((rn) => {
-        if (!rn) return false;
-        const r = Game.rooms[rn];
-        return r != null && r.find(FIND_HOSTILE_CREEPS).length > 0;
-      }) ?? Memory.ags?.remoteRoom;
-    if (
-      trySpawnInvaderClearer(spawn, {
-        threatActive: remoteThreatActive(Memory.ags, Game.time),
-        remoteRoom: threatened,
-        defenseMode: parseDefenseMode(Memory.ags?.defenseMode),
-      })
-    ) {
       return;
     }
   }
