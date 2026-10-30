@@ -26,7 +26,10 @@ import {
   parseRemoteVariant,
   tuningForRemoteVariant,
 } from "./earlyGame/remoteVariant";
-import { remoteThreatActive } from "./defense/remoteThreat";
+import {
+  allowRemoteSalvageSpawn,
+  remoteThreatActive,
+} from "./defense/remoteThreat";
 import { extensionQuota } from "./earlyGame/policy";
 
 export type RemoteRole = "reserver" | "remoteMiner" | "remoteHauler";
@@ -250,7 +253,7 @@ function trySpawnRemoteForRoom(
   spawn: StructureSpawn,
   remoteRoom: string,
   slot: 1 | 2,
-  opts: { belowFloor: boolean },
+  opts: { belowFloor: boolean; salvageHaulerOnly?: boolean },
 ): boolean {
   const room = spawn.room;
   const plan = parseRemotePlan(Memory.ags?.remotePlan);
@@ -261,6 +264,23 @@ function trySpawnRemoteForRoom(
     Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2;
   const survival = remoteSurvivalQuotas(plan, Math.max(1, remoteSources));
   const counts = countRemoteRoles(remoteRoom);
+  // Blackout salvage under sticky threat: only top up remoteHaulers.
+  if (opts.salvageHaulerOnly) {
+    const want = Math.max(survival.remoteHauler, 2);
+    if (counts.remoteHauler >= want) return false;
+    const body = buildRemoteHaulerBody(room.energyAvailable, tuning);
+    if (body.length === 0) return false;
+    const name = `remoteHauler-${Game.time}-${Math.floor(Math.random() * 1_000_000)}`;
+    return (
+      spawn.spawnCreep(body, name, {
+        memory: {
+          role: "remoteHauler",
+          targetRoom: remoteRoom,
+          homeRoom: room.name,
+        },
+      }) === OK
+    );
+  }
   const quotas = opts.belowFloor ? survival : fullQuotas;
   const order: RemoteRole[] = opts.belowFloor
     ? ["remoteMiner", "remoteHauler", "reserver"]
@@ -312,7 +332,20 @@ export function trySpawnRemote(
   const rcl = room.controller?.level ?? 0;
   const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
   const plan = parseRemotePlan(Memory.ags?.remotePlan);
-  if (remoteThreatActive(Memory.ags, Game.time)) return false;
+  const threat = remoteThreatActive(Memory.ags, Game.time);
+  const belowFloor = storageBelowFloor({
+    rcl,
+    hasStorage: room.storage !== undefined,
+    storageEnergy,
+  });
+  const salvage =
+    threat &&
+    allowRemoteSalvageSpawn({
+      threatActive: threat,
+      storageEnergy,
+    });
+  // Sticky threat normally pauses remotes; blackout salvage still spawns haulers.
+  if (threat && !salvage) return false;
   if (!homeReadyForRemotes(opts)) return false;
 
   const remotes = activeRemoteRooms(room);
@@ -328,14 +361,9 @@ export function trySpawnRemote(
     }
   }
 
-  const belowFloor = storageBelowFloor({
-    rcl,
-    hasStorage: room.storage !== undefined,
-    storageEnergy,
-  });
   // Survival restaff: any understaffed remote room.
   let restaff = false;
-  if (belowFloor) {
+  if (belowFloor || salvage) {
     for (let i = 0; i < remotes.length; i++) {
       const remoteRoom = remotes[i];
       const survival = remoteSurvivalQuotas(
@@ -346,15 +374,25 @@ export function trySpawnRemote(
         restaff = true;
         break;
       }
+      if (
+        salvage &&
+        countRemoteRoles(remoteRoom).remoteHauler < Math.max(survival.remoteHauler, 2)
+      ) {
+        restaff = true;
+        break;
+      }
     }
   }
-  if (!remoteSpawnGatesOk({ rcl, storageEnergy, plan, restaff })) {
+  if (!remoteSpawnGatesOk({ rcl, storageEnergy, plan, restaff: restaff || salvage })) {
     return false;
   }
 
   for (let i = 0; i < remotes.length; i++) {
     if (
-      trySpawnRemoteForRoom(spawn, remotes[i], i === 0 ? 1 : 2, { belowFloor })
+      trySpawnRemoteForRoom(spawn, remotes[i], i === 0 ? 1 : 2, {
+        belowFloor,
+        salvageHaulerOnly: salvage,
+      })
     ) {
       return true;
     }

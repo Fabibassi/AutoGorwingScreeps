@@ -1,7 +1,10 @@
 /**
  * Remote income pause + evacuate when hostiles are seen in the remote room.
- * No combat at RCL6 — stop the meat grinder, flee home, resume after cooldown.
+ * Blackout exception: remoteHaulers may salvage drops while the sticky window
+ * holds IF the room is clear of hostiles this tick (no meat grinder).
  */
+
+import { STORAGE_FLOOR_ENERGY } from "../earlyGame/storageFloor";
 
 /** Keep spawn paused / flee sticky after last hostile sighting. */
 export const REMOTE_THREAT_HOLD_TICKS = 300;
@@ -53,14 +56,56 @@ export function remoteThreatActive(
   return tick < until;
 }
 
+/**
+ * Pure evacuate gate (testable).
+ * Live hostiles → always flee. Sticky threat → flee, except blackout salvage
+ * for remoteHaulers while their current room is clear (incl. travel from home).
+ */
+export function shouldEvacuateRemoteOpts(opts: {
+  threatSticky: boolean;
+  hostilesInCreepRoom: number;
+  role?: string;
+  storageEnergy: number;
+  floor?: number;
+}): boolean {
+  if (opts.hostilesInCreepRoom > 0) return true;
+  if (!opts.threatSticky) return false;
+  const floor = opts.floor ?? STORAGE_FLOOR_ENERGY;
+  // Salvage: haul the remote pile home even while sticky hold is active.
+  if (opts.role === "remoteHauler" && opts.storageEnergy <= floor) {
+    return false;
+  }
+  return true;
+}
+
 /** True when creep should abort remote work and go/stay home. */
 export function shouldEvacuateRemote(
   creep: Creep,
   mem: RemoteThreatMemory | undefined = Memory.ags,
 ): boolean {
-  if (remoteThreatActive(mem, Game.time)) return true;
-  if (creep.room.find(FIND_HOSTILE_CREEPS).length > 0) return true;
-  return false;
+  const home = creep.memory.homeRoom;
+  const storageEnergy = home
+    ? (Game.rooms[home]?.storage?.store[RESOURCE_ENERGY] ?? 0)
+    : 0;
+  return shouldEvacuateRemoteOpts({
+    threatSticky: remoteThreatActive(mem, Game.time),
+    hostilesInCreepRoom: creep.room.find(FIND_HOSTILE_CREEPS).length,
+    role: creep.memory.role,
+    storageEnergy,
+  });
+}
+
+/**
+ * During sticky threat + blackout, still allow spawning salvage haulers
+ * (not miners/reservers — those stay paused).
+ */
+export function allowRemoteSalvageSpawn(opts: {
+  threatActive: boolean;
+  storageEnergy: number;
+  floor?: number;
+}): boolean {
+  if (!opts.threatActive) return false;
+  return opts.storageEnergy <= (opts.floor ?? STORAGE_FLOOR_ENERGY);
 }
 
 /**
