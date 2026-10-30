@@ -817,36 +817,33 @@ export function isAllowedEdgeWallTile(
 }
 
 /**
- * Edge-wall blueprints are paused (Memory.ags.wallRingEnabled !== true):
- * scrub every wall site so builders stop burning energy on dead pockets.
- * When re-enabled, only keep path-useful mouth tiles.
+ * Edge walls on unless explicitly disabled (Memory.ags.wallRingEnabled === false).
  */
 export function edgeWallPlacementEnabled(): boolean {
-  return Memory.ags?.wallRingEnabled === true;
+  return Memory.ags?.wallRingEnabled !== false;
 }
 
 /**
- * Scrub disallowed (or all, while paused) wall construction sites.
+ * Scrub wall sites that are not useful exit-mouth tiles (dead pockets, gates).
  */
 export function clearWallSitesInHub(
   room: Room,
   spawnPos: RoomPosition,
 ): number {
-  const place = edgeWallPlacementEnabled();
   let removed = 0;
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
     const { x, y } = site.pos;
-    const drop =
-      !place || !isAllowedEdgeWallTile(room, spawnPos, x, y);
-    if (drop && site.remove() === OK) removed += 1;
+    if (!isAllowedEdgeWallTile(room, spawnPos, x, y)) {
+      if (site.remove() === OK) removed += 1;
+    }
   }
   return removed;
 }
 
 /**
- * Place one useful exit-mouth wall. Disabled until wallRingEnabled is set —
- * auto-placement was sealing dead pockets and wasting builder energy.
+ * Place one wall only on a useful exit mouth (wide funnel → one gate).
+ * Narrow mouths (≤3) and dead edge pockets are never walled.
  */
 export function tryPlaceWallRing(
   room: Room,

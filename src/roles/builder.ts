@@ -157,12 +157,11 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
     }
   }
   let sites = creep.room.find(FIND_CONSTRUCTION_SITES);
-  // Wall blueprints: skip while edge walls paused, else only useful mouth tiles.
+  // Only build useful exit-mouth walls (never dead pockets / gates).
   const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
   sites = sites.filter((s) => {
     if (s.structureType !== STRUCTURE_WALL) return true;
-    if (!edgeWallPlacementEnabled()) return false;
-    if (!spawn) return false;
+    if (!edgeWallPlacementEnabled() || !spawn) return false;
     return isAllowedEdgeWallTile(creep.room, spawn.pos, s.pos.x, s.pos.y);
   });
   // Roads finish faster (300 vs 3000) and steal WORK under remaining-progress pick.
