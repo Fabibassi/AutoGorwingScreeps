@@ -1,18 +1,22 @@
 /**
  * Spawn remote miners / haulers / reserver after home economy is healthy.
+ * Supports a second remote room once Wave-E gates arm.
  */
 import {
   estimateRemotePathFromMap,
   measureRemotePathLength,
   pickFirstExitRoom,
+  pickSecondExitRoom,
   remoteQuotasForPlan,
   remoteSpawnGatesOk,
   remoteSurvivalQuotas,
   parseRemotePlan,
+  remotePlanIsActive,
   REMOTE_PATH_DEFAULT,
   type RemoteQuotas,
 } from "./earlyGame/remotePlan";
-import { storageBelowFloor } from "./earlyGame/storageFloor";
+import { shouldArmSecondRemote } from "./earlyGame/nextLeaps";
+import { STORAGE_FLOOR_ENERGY, storageBelowFloor } from "./earlyGame/storageFloor";
 import {
   buildRemoteHaulerBody,
   buildRemoteMinerBody,
@@ -23,37 +27,130 @@ import {
   tuningForRemoteVariant,
 } from "./earlyGame/remoteVariant";
 import { remoteThreatActive } from "./defense/remoteThreat";
+import { extensionQuota } from "./earlyGame/policy";
 
 export type RemoteRole = "reserver" | "remoteMiner" | "remoteHauler";
 
-export function countRemoteRoles(): Record<RemoteRole, number> {
+export function countRemoteRoles(
+  targetRoom?: string,
+): Record<RemoteRole, number> {
   const counts: Record<RemoteRole, number> = {
     reserver: 0,
     remoteMiner: 0,
     remoteHauler: 0,
   };
+  const primary = Memory.ags?.remoteRoom;
   for (const name in Game.creeps) {
-    const role = Game.creeps[name].memory.role as RemoteRole | undefined;
-    if (role && role in counts) counts[role]++;
+    const creep = Game.creeps[name];
+    const role = creep.memory.role as RemoteRole | undefined;
+    if (!role || !(role in counts)) continue;
+    if (targetRoom) {
+      const assigned = creep.memory.targetRoom;
+      // Legacy creeps without targetRoom count toward the primary remote.
+      if (assigned) {
+        if (assigned !== targetRoom) continue;
+      } else if (targetRoom !== primary) {
+        continue;
+      }
+    }
+    counts[role]++;
   }
   return counts;
 }
 
-/** Live remote quota for the armed plan (path + sources). */
-export function currentRemoteQuotas(home: Room): RemoteQuotas {
+/** Active remote room names (1 and optionally 2). Does not mutate Memory. */
+export function activeRemoteRooms(home: Room): string[] {
+  const rooms: string[] = [];
+  const first = Memory.ags?.remoteRoom ?? pickFirstExitRoom(home.name);
+  if (first) rooms.push(first);
+
+  const rcl = home.controller?.level ?? 0;
+  const storageEnergy = home.storage?.store[RESOURCE_ENERGY] ?? 0;
+  let extensions = 0;
+  if (typeof FIND_MY_STRUCTURES !== "undefined") {
+    extensions = home
+      .find(FIND_MY_STRUCTURES)
+      .filter((s) => s.structureType === STRUCTURE_EXTENSION).length;
+  }
+  const armSecond = shouldArmSecondRemote({
+    rcl,
+    firstRemoteActive: remotePlanIsActive(Memory.ags?.remotePlan),
+    storageEnergy,
+    floor: STORAGE_FLOOR_ENERGY,
+    extensions,
+    extensionQuota: extensionQuota(rcl),
+    secondRemoteArmed: Boolean(Memory.ags?.remoteRoom2),
+  });
+  if (!armSecond) return rooms;
+
+  const second =
+    Memory.ags?.remoteRoom2 ?? pickSecondExitRoom(home.name, first);
+  if (second && second !== first) rooms.push(second);
+  return rooms;
+}
+
+function pathLengthForRemote(
+  home: Room,
+  remoteRoom: string,
+  slot: 1 | 2,
+): number {
+  const measured = measureRemotePathLength(home, remoteRoom);
+  if (Memory.ags) {
+    if (slot === 1) {
+      if (measured != null) Memory.ags.remotePathLength = measured;
+      else if (Memory.ags.remotePathLength == null) {
+        const estimate = estimateRemotePathFromMap(home.name, remoteRoom);
+        if (estimate != null) Memory.ags.remotePathLength = estimate;
+      }
+      return Memory.ags.remotePathLength ?? REMOTE_PATH_DEFAULT;
+    }
+    if (measured != null) Memory.ags.remotePathLength2 = measured;
+    else if (Memory.ags.remotePathLength2 == null) {
+      const estimate = estimateRemotePathFromMap(home.name, remoteRoom);
+      if (estimate != null) Memory.ags.remotePathLength2 = estimate;
+    }
+    return Memory.ags.remotePathLength2 ?? REMOTE_PATH_DEFAULT;
+  }
+  return measured ?? REMOTE_PATH_DEFAULT;
+}
+
+function quotasForRemoteRoom(
+  home: Room,
+  remoteRoom: string,
+  slot: 1 | 2,
+): RemoteQuotas {
   const plan = parseRemotePlan(Memory.ags?.remotePlan);
-  const remoteRoom = Memory.ags?.remoteRoom ?? pickFirstExitRoom(home.name);
-  const pathLength = Memory.ags?.remotePathLength ?? REMOTE_PATH_DEFAULT;
+  const pathLength = pathLengthForRemote(home, remoteRoom, slot);
   const variant = parseRemoteVariant(Memory.ags?.remoteVariant);
   const tuning = tuningForRemoteVariant(variant);
-  const remoteSources = remoteRoom
-    ? (Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2)
-    : 2;
+  const remoteSources =
+    Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2;
   return remoteQuotasForPlan(plan, {
     sources: Math.max(1, remoteSources),
     pathLength,
     haulerQuotaScale: tuning.haulerQuotaScale,
   });
+}
+
+/** Live remote quota for the first armed plan (path + sources). */
+export function currentRemoteQuotas(home: Room): RemoteQuotas {
+  const rooms = activeRemoteRooms(home);
+  if (rooms.length === 0) {
+    return remoteQuotasForPlan(parseRemotePlan(Memory.ags?.remotePlan), {
+      sources: 2,
+      pathLength: REMOTE_PATH_DEFAULT,
+    });
+  }
+  let total: RemoteQuotas = { remoteMiner: 0, remoteHauler: 0, reserver: 0 };
+  rooms.forEach((remoteRoom, i) => {
+    const q = quotasForRemoteRoom(home, remoteRoom, i === 0 ? 1 : 2);
+    total = {
+      remoteMiner: total.remoteMiner + q.remoteMiner,
+      remoteHauler: total.remoteHauler + q.remoteHauler,
+      reserver: total.reserver + q.reserver,
+    };
+  });
+  return total;
 }
 
 function remoteUnderSurvival(
@@ -69,8 +166,6 @@ function remoteUnderSurvival(
 
 /**
  * Surplus remoteHaulers walk home and recycle so CAPEX builders get spawn.
- * Prefer empty + near spawn; carrying haulers still deliver via role until empty.
- * Never recycle under the storage floor — remotes are income, not spend.
  */
 export function recycleExcessRemoteHaulers(spawn: StructureSpawn): boolean {
   if (spawn.spawning) return false;
@@ -142,7 +237,6 @@ export function recycleExcessRemoteHaulers(spawn: StructureSpawn): boolean {
   return true;
 }
 
-/** True when home mining seats look staffed enough to spare spawn for remotes. */
 export function homeReadyForRemotes(opts: {
   homeMiners: number;
   homeMinerWant: number;
@@ -152,68 +246,23 @@ export function homeReadyForRemotes(opts: {
   return opts.homeMiners >= Math.min(opts.homeMinerWant, 2) && opts.homeFillers >= 1;
 }
 
-/**
- * Attempt one remote spawn. Returns true if spawnCreep OK.
- * Under storage floor: survival restaff only (miner → hauler → reserver).
- */
-export function trySpawnRemote(
+function trySpawnRemoteForRoom(
   spawn: StructureSpawn,
-  opts: {
-    homeMiners: number;
-    homeMinerWant: number;
-    homeFillers: number;
-  },
+  remoteRoom: string,
+  slot: 1 | 2,
+  opts: { belowFloor: boolean },
 ): boolean {
-  if (spawn.spawning) return false;
   const room = spawn.room;
-  const rcl = room.controller?.level ?? 0;
-  const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
   const plan = parseRemotePlan(Memory.ags?.remotePlan);
-  // Hostiles in remote → pause all remote spawns (no meat grinder).
-  if (remoteThreatActive(Memory.ags, Game.time)) return false;
-  if (!homeReadyForRemotes(opts)) return false;
-
-  let remoteRoom = Memory.ags?.remoteRoom;
-  if (!remoteRoom) {
-    remoteRoom = pickFirstExitRoom(room.name);
-    if (!remoteRoom) return false;
-    if (Memory.ags) Memory.ags.remoteRoom = remoteRoom;
-  }
-
-  if (Memory.ags) {
-    const measured = measureRemotePathLength(room, remoteRoom);
-    if (measured != null) {
-      Memory.ags.remotePathLength = measured;
-    } else if (Memory.ags.remotePathLength == null) {
-      const estimate = estimateRemotePathFromMap(room.name, remoteRoom);
-      if (estimate != null) Memory.ags.remotePathLength = estimate;
-    }
-  }
-  const pathLength = Memory.ags?.remotePathLength ?? REMOTE_PATH_DEFAULT;
   const variant = parseRemoteVariant(Memory.ags?.remoteVariant);
   const tuning = tuningForRemoteVariant(variant);
+  const fullQuotas = quotasForRemoteRoom(room, remoteRoom, slot);
   const remoteSources =
     Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2;
-  const sources = Math.max(1, remoteSources);
-  const fullQuotas = remoteQuotasForPlan(plan, {
-    sources,
-    pathLength,
-    haulerQuotaScale: tuning.haulerQuotaScale,
-  });
-  const survival = remoteSurvivalQuotas(plan, sources);
-  const counts = countRemoteRoles();
-  const belowFloor = storageBelowFloor({
-    rcl,
-    hasStorage: room.storage !== undefined,
-    storageEnergy,
-  });
-  const restaff = belowFloor && remoteUnderSurvival(counts, survival);
-  if (!remoteSpawnGatesOk({ rcl, storageEnergy, plan, restaff })) {
-    return false;
-  }
-
-  const quotas = belowFloor ? survival : fullQuotas;
-  const order: RemoteRole[] = belowFloor
+  const survival = remoteSurvivalQuotas(plan, Math.max(1, remoteSources));
+  const counts = countRemoteRoles(remoteRoom);
+  const quotas = opts.belowFloor ? survival : fullQuotas;
+  const order: RemoteRole[] = opts.belowFloor
     ? ["remoteMiner", "remoteHauler", "reserver"]
     : ["reserver", "remoteMiner", "remoteHauler"];
   const energyAvailable = room.energyAvailable;
@@ -243,6 +292,72 @@ export function trySpawnRemote(
     };
     const result = spawn.spawnCreep(body, name, { memory });
     if (result === OK) return true;
+  }
+  return false;
+}
+
+/**
+ * Attempt one remote spawn (room1 then room2). Returns true if spawnCreep OK.
+ */
+export function trySpawnRemote(
+  spawn: StructureSpawn,
+  opts: {
+    homeMiners: number;
+    homeMinerWant: number;
+    homeFillers: number;
+  },
+): boolean {
+  if (spawn.spawning) return false;
+  const room = spawn.room;
+  const rcl = room.controller?.level ?? 0;
+  const storageEnergy = room.storage?.store[RESOURCE_ENERGY] ?? 0;
+  const plan = parseRemotePlan(Memory.ags?.remotePlan);
+  if (remoteThreatActive(Memory.ags, Game.time)) return false;
+  if (!homeReadyForRemotes(opts)) return false;
+
+  const remotes = activeRemoteRooms(room);
+  if (remotes.length === 0) return false;
+
+  // Sticky-arm room names once we are actually spawning for them.
+  if (Memory.ags) {
+    if (!Memory.ags.remoteRoom && remotes[0]) {
+      Memory.ags.remoteRoom = remotes[0];
+    }
+    if (remotes[1] && !Memory.ags.remoteRoom2) {
+      Memory.ags.remoteRoom2 = remotes[1];
+    }
+  }
+
+  const belowFloor = storageBelowFloor({
+    rcl,
+    hasStorage: room.storage !== undefined,
+    storageEnergy,
+  });
+  // Survival restaff: any understaffed remote room.
+  let restaff = false;
+  if (belowFloor) {
+    for (let i = 0; i < remotes.length; i++) {
+      const remoteRoom = remotes[i];
+      const survival = remoteSurvivalQuotas(
+        plan,
+        Math.max(1, Game.rooms[remoteRoom]?.find(FIND_SOURCES).length ?? 2),
+      );
+      if (remoteUnderSurvival(countRemoteRoles(remoteRoom), survival)) {
+        restaff = true;
+        break;
+      }
+    }
+  }
+  if (!remoteSpawnGatesOk({ rcl, storageEnergy, plan, restaff })) {
+    return false;
+  }
+
+  for (let i = 0; i < remotes.length; i++) {
+    if (
+      trySpawnRemoteForRoom(spawn, remotes[i], i === 0 ? 1 : 2, { belowFloor })
+    ) {
+      return true;
+    }
   }
   return false;
 }

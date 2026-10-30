@@ -6,14 +6,23 @@ import {
   shouldBuildExtractor,
   shouldBuildRoads,
   shouldBuildStorage,
+  shouldBuildSecondSpawn,
   shouldBuildTerminal,
   shouldBuildWalls,
+  spawnQuota,
   sourceContainerEnergySurplus,
   stagedExtensionBuildCap,
+  towerQuota,
 } from "../earlyGame";
 import {
+  nextRcl7HitStructure,
+  parseRcl7BuildOrder,
+} from "../earlyGame/rcl7Hit";
+import {
+  hubRampartsReady,
   maybeArmWalls,
   shouldPlaceHubRamparts,
+  shouldPlaceWallRing,
 } from "../earlyGame/wallArm";
 import {
   parseRcl5Mode,
@@ -55,11 +64,16 @@ import {
   tryPlaceStorageLink,
   tryPlaceHubRamparts,
   tryPlaceExtractor,
+  tryPlaceSecondSpawn,
   tryPlaceSourceLink,
   tryPlaceStorageNearSpawn,
   tryPlaceTerminalNearStorage,
   tryPlaceTower,
+  tryPlaceWallRing,
+  tryPlaceLab,
 } from "./placement";
+import { shouldPlaceLabs } from "../earlyGame/nextLeaps";
+import { terminalMineralTypes } from "../market/run";
 
 function linkBuiltAndSites(room: Room): number {
   return (
@@ -366,6 +380,45 @@ export function runConstruction(room: Room): void {
     }
   }
 
+  // RCL7 hit order (ext_first default; sim: tower_first | spawn_first).
+  if (!skipNonRoadPlacement && rcl >= 7) {
+    const spawnBuilt = countStructures(room, STRUCTURE_SPAWN);
+    const spawnSites = existingSites.filter(
+      (s) => s.structureType === STRUCTURE_SPAWN,
+    ).length;
+    const next = nextRcl7HitStructure({
+      order: parseRcl7BuildOrder(Memory.ags?.rcl7BuildOrder),
+      extensions: extensionCount,
+      extensionQuota: extensionQuota(rcl),
+      towers: towerCount,
+      towerQuota: towerQuota(rcl),
+      spawns: spawnBuilt + spawnSites,
+      spawnQuota: spawnQuota(rcl),
+      links: linkBuiltAndSites(room),
+      linkQuota: linkQuota(rcl),
+    });
+    if (next === STRUCTURE_EXTENSION && tryPlaceExtension(room, spawn.pos)) {
+      return;
+    }
+    if (next === STRUCTURE_TOWER && tryPlaceTower(room, spawn.pos)) {
+      return;
+    }
+    if (
+      next === STRUCTURE_SPAWN &&
+      shouldBuildSecondSpawn(rcl) &&
+      tryPlaceSecondSpawn(room, spawn.pos)
+    ) {
+      return;
+    }
+    if (
+      next === STRUCTURE_LINK &&
+      room.storage &&
+      tryPlaceSourceLink(room, spawn.pos)
+    ) {
+      return;
+    }
+  }
+
   const placeRoads = (): boolean => {
     if (!roadSitesAllowed) return false;
     // Diamond hub first: exit ring + N/S/E/W corridors, then source/controller paths.
@@ -461,8 +514,45 @@ export function runConstruction(room: Room): void {
     }
   }
 
-  // Explicitly skip walls/ramparts in early game even if damaged.
-  if (shouldBuildWalls(rcl)) {
+  // Labs after RCL7 hit + mineral in terminal (Wave E — no factory-first).
+  if (!skipNonRoadPlacement && room.terminal) {
+    const labBuilt = countStructures(room, STRUCTURE_LAB);
+    const labSites = existingSites.filter(
+      (s) => s.structureType === STRUCTURE_LAB,
+    ).length;
+    const mineralAmt = terminalMineralTypes(room.terminal.store).reduce(
+      (sum, r) => sum + (room.terminal!.store[r] ?? 0),
+      0,
+    );
+    if (
+      shouldPlaceLabs({
+        rcl,
+        extensions: extensionBuilt,
+        extensionQuota: extensionQuota(rcl),
+        towers: towerBuilt,
+        towerQuota: towerQuota(rcl),
+        spawns: countStructures(room, STRUCTURE_SPAWN),
+        spawnQuota: spawnQuota(rcl),
+        terminalMineral: mineralAmt,
+        labs: labBuilt + labSites,
+      }) &&
+      tryPlaceLab(room, spawn.pos)
+    ) {
+      return;
+    }
+  }
+
+  // Wall ring after hub ramparts + storage buffer (Wave C).
+  if (
+    !skipNonRoadPlacement &&
+    shouldBuildWalls(rcl) &&
+    shouldPlaceWallRing({
+      hubRampartsReady: hubRampartsReady(room),
+      storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
+      rcl,
+    }) &&
+    tryPlaceWallRing(room, spawn.pos)
+  ) {
     return;
   }
 }

@@ -60,8 +60,10 @@ export {
   STORAGE_FLOOR_ENERGY,
   storageBelowFloor,
   towerQuota,
+  spawnQuota,
   shouldBankForBetterMiners,
   shouldBuildExtractor,
+  shouldBuildSecondSpawn,
   shouldBuildTerminal,
   shouldBuildTowers,
   hasNoEconomyCreeps,
@@ -122,10 +124,24 @@ export {
   maybeArmWalls,
   parseWallPolicy,
   shouldPlaceHubRamparts,
+  shouldPlaceWallRing,
+  WALL_RING_STORAGE_BUFFER,
   type WallArmDecision,
   type WallArmInput,
   type WallPolicy,
 } from "./wallArm";
+export {
+  nextRcl7HitStructure,
+  parseRcl7BuildOrder,
+  type Rcl7BuildOrder,
+} from "./rcl7Hit";
+export {
+  LABS_BY_RCL,
+  labQuota,
+  shouldArmSecondRemote,
+  shouldPlaceLabs,
+  shouldPrepGclExpand,
+} from "./nextLeaps";
 export {
   REMOTE_BAKEOFF_WINNER,
   REMOTE_HAULER_CAP,
@@ -134,7 +150,9 @@ export {
   clampRemoteHaulerQuota,
   maybeArmRemotePlanPostRcl6,
   parseRemotePlan,
+  listExitRooms,
   pickFirstExitRoom,
+  pickSecondExitRoom,
   remotePlanIsActive,
   remotePlanNeedsContainer,
   remotePlanNeedsReserve,

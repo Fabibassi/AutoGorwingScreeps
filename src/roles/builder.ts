@@ -66,12 +66,24 @@ export function preferLogisticsRefill(
 
 export type LogisticsKind = "spawn" | "storage" | "container";
 
-/** Hub sites that must not lose WORK to the extension-only filter. */
-const HUB_BUILD_TYPES = new Set(["storage", "tower"]);
+/**
+ * Hub / RCL6–7 CAPEX sites that must not lose WORK to the extension-only filter.
+ * Ramparts were starved live while wallsArmed sticky + extension sites competed.
+ */
+const HUB_BUILD_TYPES = new Set([
+  "storage",
+  "tower",
+  "rampart",
+  "terminal",
+  "link",
+  "extractor",
+  "spawn",
+  "lab",
+]);
 
 /**
- * Once source containers exist, prefer finishing hub sites (storage/tower)
- * over the extension-only filter that otherwise starves the 5k storage site.
+ * Once source containers exist, prefer finishing hub CAPEX (incl. ramparts)
+ * over the extension-only filter that otherwise starves defense/unlocks.
  */
 export function filterBuildSitesForWork<
   T extends { structureType: StructureConstant | string },

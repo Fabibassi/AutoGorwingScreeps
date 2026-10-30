@@ -3,14 +3,7 @@
  */
 import { remotePlanNeedsContainer, parseRemotePlan } from "../earlyGame/remotePlan";
 
-export function runRemoteConstruction(homeRoom: Room): void {
-  const plan = parseRemotePlan(Memory.ags?.remotePlan);
-  if (!remotePlanNeedsContainer(plan)) return;
-  const remoteName = Memory.ags?.remoteRoom;
-  if (!remoteName || remoteName === homeRoom.name) return;
-  const remote = Game.rooms[remoteName];
-  if (!remote) return;
-
+function placeRemoteContainers(remote: Room): boolean {
   for (const source of remote.find(FIND_SOURCES)) {
     const hasContainer = source.pos
       .findInRange(FIND_STRUCTURES, 1)
@@ -29,8 +22,22 @@ export function runRemoteConstruction(homeRoom: Room): void {
         if (x < 1 || x > 48 || y < 1 || y > 48) continue;
         if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
         remote.createConstructionSite(x, y, STRUCTURE_CONTAINER);
-        return;
+        return true;
       }
     }
+  }
+  return false;
+}
+
+export function runRemoteConstruction(homeRoom: Room): void {
+  const plan = parseRemotePlan(Memory.ags?.remotePlan);
+  if (!remotePlanNeedsContainer(plan)) return;
+  const remotes = [Memory.ags?.remoteRoom, Memory.ags?.remoteRoom2].filter(
+    (n): n is string => Boolean(n) && n !== homeRoom.name,
+  );
+  for (const remoteName of remotes) {
+    const remote = Game.rooms[remoteName];
+    if (!remote) continue;
+    if (placeRemoteContainers(remote)) return;
   }
 }

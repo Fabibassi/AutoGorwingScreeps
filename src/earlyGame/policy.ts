@@ -102,6 +102,18 @@ export const LINKS_BY_RCL: Record<number, number> = {
   8: 6,
 };
 
+/** CONTROLLER_STRUCTURES.spawn mirror (Screeps World). */
+export const SPAWNS_BY_RCL: Record<number, number> = {
+  1: 1,
+  2: 1,
+  3: 1,
+  4: 1,
+  5: 1,
+  6: 1,
+  7: 2,
+  8: 3,
+};
+
 export function extensionQuota(rcl: number): number {
   return EXTENSIONS_BY_RCL[rcl] ?? 0;
 }
@@ -114,12 +126,21 @@ export function linkQuota(rcl: number): number {
   return LINKS_BY_RCL[rcl] ?? 0;
 }
 
+export function spawnQuota(rcl: number): number {
+  return SPAWNS_BY_RCL[rcl] ?? 1;
+}
+
 export function shouldBuildTerminal(rcl: number): boolean {
   return rcl >= 6;
 }
 
 export function shouldBuildExtractor(rcl: number): boolean {
   return rcl >= 6;
+}
+
+/** Second spawn from RCL7 (after extensions/tower wave prefers hub fill). */
+export function shouldBuildSecondSpawn(rcl: number): boolean {
+  return rcl >= 7;
 }
 
 export function shouldBuildTowers(rcl: number): boolean {

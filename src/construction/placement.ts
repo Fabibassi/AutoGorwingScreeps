@@ -581,14 +581,21 @@ export function tryPlaceExtension(room: Room, spawnPos: RoomPosition): boolean {
 
 /** Tower in a stamp pocket near spawn (same diamond gaps as extensions). */
 /**
- * Place rampart sites on spawn (+ storage) tiles when walls are armed.
- * Ramparts share the structure tile and are the only early "gate" that matters.
+ * Place rampart sites on hub tiles when walls are armed.
+ * Covers all spawns, storage, terminal, towers (shared tile — early gate shell).
  */
 export function tryPlaceHubRamparts(room: Room): boolean {
   const anchors: RoomPosition[] = [];
-  const spawn = room.find(FIND_MY_SPAWNS)[0];
-  if (spawn) anchors.push(spawn.pos);
+  for (const spawn of room.find(FIND_MY_SPAWNS)) {
+    anchors.push(spawn.pos);
+  }
   if (room.storage) anchors.push(room.storage.pos);
+  if (room.terminal) anchors.push(room.terminal.pos);
+  for (const tower of room.find(FIND_MY_STRUCTURES, {
+    filter: (s): s is StructureTower => s.structureType === STRUCTURE_TOWER,
+  })) {
+    anchors.push(tower.pos);
+  }
 
   for (const pos of anchors) {
     const hasRampart = pos
@@ -602,6 +609,79 @@ export function tryPlaceHubRamparts(room: Room): boolean {
     if (room.createConstructionSite(pos, STRUCTURE_RAMPART) === OK) {
       return true;
     }
+  }
+  return false;
+}
+
+/**
+ * Outer wall ring (Chebyshev 4–5): skip spawn exit ring + hub corridors.
+ * One site per tick — ramparts already cover the hub tiles.
+ */
+export function tryPlaceWallRing(
+  room: Room,
+  spawnPos: RoomPosition,
+): boolean {
+  for (let r = 4; r <= 5; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = spawnPos.x + dx;
+        const y = spawnPos.y + dy;
+        if (x < 1 || x > 48 || y < 1 || y > 48) continue;
+        if (isSpawnExitTile(spawnPos, x, y)) continue;
+        if (isHubCorridor(spawnPos, x, y)) continue;
+        if (!isBuildableTerrain(room, x, y)) continue;
+        const pos = new RoomPosition(x, y, room.name);
+        if (tileHasBlockingStructure(pos)) continue;
+        if (
+          pos
+            .lookFor(LOOK_CONSTRUCTION_SITES)
+            .some((s) => s.structureType === STRUCTURE_WALL)
+        ) {
+          continue;
+        }
+        if (
+          pos
+            .lookFor(LOOK_STRUCTURES)
+            .some((s) => s.structureType === STRUCTURE_WALL)
+        ) {
+          continue;
+        }
+        if (room.createConstructionSite(x, y, STRUCTURE_WALL) === OK) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Second spawn (RCL7+): stamp pocket near first spawn, never on exit ring.
+ */
+export function tryPlaceSecondSpawn(
+  room: Room,
+  spawnPos: RoomPosition,
+): boolean {
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+      const r = Math.max(Math.abs(dx), Math.abs(dy));
+      if (r < 2 || r > 5) continue;
+      const x = spawnPos.x + dx;
+      const y = spawnPos.y + dy;
+      if (
+        !isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: useBuffer })
+      ) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_SPAWN) === OK) {
+        return true;
+      }
+    }
+  }
+  const spot = findBuildSpotNear(room, spawnPos, 6, SPAWN_EXIT_MIN_RANGE, true);
+  if (spot && room.createConstructionSite(spot, STRUCTURE_SPAWN) === OK) {
+    return true;
   }
   return false;
 }
@@ -802,6 +882,31 @@ export function tryPlaceExtractor(room: Room): boolean {
       .some((s) => s.structureType === STRUCTURE_EXTRACTOR);
   if (has) return false;
   return room.createConstructionSite(mineral.pos, STRUCTURE_EXTRACTOR) === OK;
+}
+
+/** Lab cluster near terminal (fallback: storage / spawn stamp). */
+export function tryPlaceLab(room: Room, spawnPos: RoomPosition): boolean {
+  const anchor =
+    room.terminal?.pos ?? room.storage?.pos ?? spawnPos;
+  for (const useBuffer of [true, false]) {
+    for (const [dx, dy] of HUB_EXTENSION_STAMP) {
+      const r = Math.max(Math.abs(dx), Math.abs(dy));
+      if (r > 4) continue;
+      const x = anchor.x + dx;
+      const y = anchor.y + dy;
+      if (
+        !isFreeBuildTile(room, x, y, spawnPos, { walkwayBuffer: useBuffer })
+      ) {
+        continue;
+      }
+      if (room.createConstructionSite(x, y, STRUCTURE_LAB) === OK) return true;
+    }
+  }
+  const spot = findBuildSpotNear(room, anchor, 5, 1, true);
+  if (spot && room.createConstructionSite(spot, STRUCTURE_LAB) === OK) {
+    return true;
+  }
+  return false;
 }
 
 /**

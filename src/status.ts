@@ -71,11 +71,34 @@ export function buildPlanSnapshot(
   const spawnCapacity = spawn?.store.getCapacity(RESOURCE_ENERGY) ?? 1;
   const spawnFillPct =
     (spawn?.store.getUsedCapacity(RESOURCE_ENERGY) ?? 0) / spawnCapacity;
+  let minerWorkParts = 0;
+  for (const name in Game.creeps) {
+    const creep = Game.creeps[name];
+    if (creep.room.name !== room.name || creep.memory.role !== "miner") continue;
+    minerWorkParts += creep.getActiveBodyparts(WORK);
+  }
+  let haulRangeSum = 0;
+  const sourceList = room.find(FIND_SOURCES);
+  if (spawn) {
+    for (const source of sourceList) {
+      haulRangeSum += Math.ceil(spawn.pos.getRangeTo(source) * 1.5);
+    }
+  }
   const economy = {
     energyIncomePerTick: ags?.metrics.energyIncomePerTick ?? 0,
     spawnFillPct,
     energyAvailable: room.energyAvailable,
     hasStorage: room.storage !== undefined,
+    storageEnergy: room.storage?.store[RESOURCE_ENERGY] ?? 0,
+    minerWorkParts,
+    haulRange:
+      sourceList.length > 0 && spawn
+        ? Math.max(8, Math.round(haulRangeSum / sourceList.length))
+        : 20,
+    haulerCap: ags?.haulerCap,
+    upgraderSeats: ags?.upgraderSeats,
+    rcl5Mode: ags?.rcl5Mode,
+    rcl5Plan: ags?.rcl5Plan,
   };
   const exp = resolveExperiment(ags);
   const infrastructureDedicated = useDedicatedMiners(

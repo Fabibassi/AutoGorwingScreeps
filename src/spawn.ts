@@ -47,6 +47,13 @@ import {
   sumSourceContainerEnergy,
 } from "./room/queries";
 import { storageBlackoutReserve } from "./roles/hauler";
+import {
+  parseDefenseMode,
+  trySpawnInvaderClearer,
+} from "./defense/invaderClear";
+import { remoteThreatActive } from "./defense/remoteThreat";
+import { trySpawnClaimer } from "./spawnExpand";
+import { trySpawnMineralMiner } from "./spawnMineral";
 import { recycleExcessRemoteHaulers, trySpawnRemote } from "./spawnRemote";
 
 export { desiredCreeps, type CreepQuotas };
@@ -1145,10 +1152,39 @@ export function runSpawn(spawn: StructureSpawn): void {
     }
   }
 
+  // Threat window: cheap Invader clearer before remotes (remotes stay paused).
+  {
+    const threatened =
+      [Memory.ags?.remoteRoom, Memory.ags?.remoteRoom2].find((rn) => {
+        if (!rn) return false;
+        const r = Game.rooms[rn];
+        return r != null && r.find(FIND_HOSTILE_CREEPS).length > 0;
+      }) ?? Memory.ags?.remoteRoom;
+    if (
+      trySpawnInvaderClearer(spawn, {
+        threatActive: remoteThreatActive(Memory.ags, Game.time),
+        remoteRoom: threatened,
+        defenseMode: parseDefenseMode(Memory.ags?.defenseMode),
+      })
+    ) {
+      return;
+    }
+  }
+
   // Home queue empty / unaffordable this tick — try post-RCL6 remotes.
-  trySpawnRemote(spawn, {
-    homeMiners: liveCounts.miner,
-    homeMinerWant: minerSeatWant,
-    homeFillers: liveCounts.filler,
-  });
+  if (
+    trySpawnRemote(spawn, {
+      homeMiners: liveCounts.miner,
+      homeMinerWant: minerSeatWant,
+      homeFillers: liveCounts.filler,
+    })
+  ) {
+    return;
+  }
+
+  // After economy/remotes: one mineralMiner when extractor+terminal ready.
+  if (trySpawnMineralMiner(spawn)) return;
+
+  // Wave E: GCL claimer after labs + fat storage.
+  trySpawnClaimer(spawn);
 }

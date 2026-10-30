@@ -216,9 +216,27 @@ export function remoteSpawnGatesOk(opts: {
   return opts.storageEnergy >= (opts.storageFloor ?? 20_000);
 }
 
+/** Cardinal exit room names (N/E/S/W), stable order. */
+export function listExitRooms(homeName: string): string[] {
+  const exits = Game.map.describeExits(homeName);
+  if (!exits) return [];
+  const out: string[] = [];
+  for (const dir of ["1", "3", "5", "7"] as const) {
+    const name = exits[dir];
+    if (name) out.push(name);
+  }
+  return out;
+}
+
 /** First cardinal exit room name (N/E/S/W), if any. */
 export function pickFirstExitRoom(homeName: string): string | undefined {
-  const exits = Game.map.describeExits(homeName);
-  if (!exits) return undefined;
-  return exits["1"] ?? exits["3"] ?? exits["5"] ?? exits["7"];
+  return listExitRooms(homeName)[0];
+}
+
+/** Second exit room, skipping the first remote. */
+export function pickSecondExitRoom(
+  homeName: string,
+  firstRemote?: string,
+): string | undefined {
+  return listExitRooms(homeName).find((name) => name !== firstRemote);
 }

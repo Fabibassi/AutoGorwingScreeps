@@ -341,6 +341,20 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
     return spawn;
   }
 
+  // Combat: keep towers topped before extensions/storage dump.
+  const hostilesHome = creep.room.find(FIND_HOSTILE_CREEPS).length;
+  const hungryTowers = creep.room.find(FIND_MY_STRUCTURES, {
+    filter: (s): s is StructureTower =>
+      s.structureType === STRUCTURE_TOWER &&
+      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+  });
+  if (hostilesHome > 0 && hungryTowers.length > 0) {
+    const closest =
+      creep.pos.findClosestByPath(hungryTowers) ??
+      creep.pos.findClosestByRange(hungryTowers);
+    if (closest) return closest;
+  }
+
   const fillerExists = Object.keys(Game.creeps).some(
     (n) => Game.creeps[n].memory.role === "filler",
   );
@@ -361,15 +375,10 @@ function findEnergyTarget(creep: Creep): HaulTarget | null {
     if (closest) return closest;
   }
 
-  const towers = creep.room.find(FIND_MY_STRUCTURES, {
-    filter: (s): s is StructureTower =>
-      s.structureType === STRUCTURE_TOWER &&
-      s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
-  });
-  if (towers.length > 0) {
+  if (hungryTowers.length > 0) {
     const closest =
-      creep.pos.findClosestByPath(towers) ??
-      creep.pos.findClosestByRange(towers);
+      creep.pos.findClosestByPath(hungryTowers) ??
+      creep.pos.findClosestByRange(hungryTowers);
     if (closest) return closest;
   }
 

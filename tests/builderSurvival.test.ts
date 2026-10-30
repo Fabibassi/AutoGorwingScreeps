@@ -59,6 +59,16 @@ describe("filterBuildSitesForWork", () => {
     expect(filtered.map((s) => s.structureType)).toEqual(["storage"]);
   });
 
+  test("keeps rampart CAPEX ahead of extensions", () => {
+    const sites = [
+      { structureType: "extension" },
+      { structureType: "rampart" },
+      { structureType: "road" },
+    ];
+    const filtered = filterBuildSitesForWork(sites, true);
+    expect(filtered.map((s) => s.structureType)).toEqual(["rampart"]);
+  });
+
   test("falls back to extensions when no hub sites exist", () => {
     const sites = [
       { structureType: "extension" },

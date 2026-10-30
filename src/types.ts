@@ -95,8 +95,14 @@ export interface AgsMemory {
   remotePlan?: string;
   /** Adjacent room name for remote mining (sim / sticky). */
   remoteRoom?: string;
+  /** Second remote room (Wave E) once RCL7 hub + first remote stable. */
+  remoteRoom2?: string;
   /** Approximate one-way haul tiles for remote hauler quota (sim). */
   remotePathLength?: number;
+  /** Path length for second remote. */
+  remotePathLength2?: number;
+  /** Target room for GCL claim expand. */
+  expandRoom?: string;
   /**
    * reserved_drop tuning: baseline | fat_hauler | thin_hauler | lean_haul |
    * fat_haul | fat_miner | dual_claim
@@ -137,6 +143,19 @@ export interface AgsMemory {
   remoteThreatUntil?: number;
   /** Last seen hostile count in the remote room. */
   remoteThreatCount?: number;
+  /**
+   * Defense reaction arm: clear (default) | flee | refill | safemode.
+   * Sim bakeoff for remote threat response.
+   */
+  defenseMode?: string;
+  /**
+   * RCL7 hit order arm: ext_first (default) | tower_first | spawn_first.
+   */
+  rcl7BuildOrder?: string;
+  /** Sticky: player probe / scout in home until this tick. */
+  homeProbeUntil?: number;
+  homeProbeCount?: number;
+  homeProbePlayer?: boolean;
   /**
    * Active hauler pickup reservations (haulerName → order).
    * See src/logistics/haulOrders.ts.

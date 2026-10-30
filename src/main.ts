@@ -17,8 +17,12 @@ import { hubRampartsReady } from "./earlyGame/wallArm";
 import { applyParsedMemoryReuse } from "./loop/memHack";
 import { runConstruction } from "./construction";
 import { tickRemoteThreat } from "./defense/remoteThreat";
+import { maybeActivateSafeMode } from "./defense/safeMode";
+import { tickHomeProbe } from "./defense/scoutProbe";
 import { runTowers } from "./defense/towers";
 import { runLinks } from "./links";
+import { runLabs } from "./labs/run";
+import { runMarket } from "./market/run";
 import { recoverTelemetryOnLoopError } from "./loop/recoverTelemetry";
 import { runRemoteConstruction } from "./remote/run";
 import { healCreepRoles, pickHomeRoom } from "./room/queries";
@@ -49,7 +53,10 @@ export function loop(): void {
   const fillerPlanSticky = Memory.ags?.fillerPlan;
   const remotePlanSticky = Memory.ags?.remotePlan;
   const remoteRoomSticky = Memory.ags?.remoteRoom;
+  const remoteRoom2Sticky = Memory.ags?.remoteRoom2;
   const remotePathLengthSticky = Memory.ags?.remotePathLength;
+  const remotePathLength2Sticky = Memory.ags?.remotePathLength2;
+  const expandRoomSticky = Memory.ags?.expandRoom;
   const remoteVariantSticky = Memory.ags?.remoteVariant;
   const idleBuilderUpgradeSticky = Memory.ags?.idleBuilderUpgrade;
   const storageBlackoutReserveSticky = Memory.ags?.storageBlackoutReserve;
@@ -66,15 +73,25 @@ export function loop(): void {
     clearDeadCreepMemory();
     healCreepRoles();
 
-    // Before spawn/creeps: arm remote threat sticky from vision.
-    if (Memory.ags?.remoteRoom) {
-      const remote = Game.rooms[Memory.ags.remoteRoom];
-      tickRemoteThreat(Memory.ags, {
-        tick: Game.time,
-        hostilesNow: remote
-          ? remote.find(FIND_HOSTILE_CREEPS).length
-          : null,
-      });
+    // Before spawn/creeps: arm remote threat sticky from vision (any remote).
+    {
+      const remotes = [Memory.ags?.remoteRoom, Memory.ags?.remoteRoom2].filter(
+        Boolean,
+      ) as string[];
+      let hostilesNow: number | null = null;
+      let sawVision = false;
+      for (const rn of remotes) {
+        const remote = Game.rooms[rn];
+        if (!remote) continue;
+        sawVision = true;
+        hostilesNow = (hostilesNow ?? 0) + remote.find(FIND_HOSTILE_CREEPS).length;
+      }
+      if (remotes.length > 0 && Memory.ags) {
+        tickRemoteThreat(Memory.ags, {
+          tick: Game.time,
+          hostilesNow: sawVision ? hostilesNow ?? 0 : null,
+        });
+      }
     }
 
     for (const name in Game.rooms) {
@@ -102,6 +119,23 @@ export function loop(): void {
       const room = Game.rooms[name];
       if (!room.controller?.my) continue;
       try {
+        if (Memory.ags) {
+          tickHomeProbe(Memory.ags, {
+            tick: Game.time,
+            hostiles: room.find(FIND_HOSTILE_CREEPS),
+          });
+        }
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`scoutProbe ${name} error`, e);
+      }
+      try {
+        maybeActivateSafeMode(room);
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`safeMode ${name} error`, e);
+      }
+      try {
         runTowers(room);
       } catch (e) {
         errorsThisTick++;
@@ -112,6 +146,18 @@ export function loop(): void {
       } catch (e) {
         errorsThisTick++;
         console.log(`links ${name} error`, e);
+      }
+      try {
+        runMarket(room);
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`market ${name} error`, e);
+      }
+      try {
+        runLabs(room);
+      } catch (e) {
+        errorsThisTick++;
+        console.log(`labs ${name} error`, e);
       }
     }
 
@@ -157,9 +203,16 @@ export function loop(): void {
     if (remotePlanNow) Memory.ags.remotePlan = remotePlanNow;
     const remoteRoomNow = Memory.ags?.remoteRoom ?? remoteRoomSticky;
     if (remoteRoomNow) Memory.ags.remoteRoom = remoteRoomNow;
+    const remoteRoom2Now = Memory.ags?.remoteRoom2 ?? remoteRoom2Sticky;
+    if (remoteRoom2Now) Memory.ags.remoteRoom2 = remoteRoom2Now;
     const remotePathNow =
       Memory.ags?.remotePathLength ?? remotePathLengthSticky;
     if (remotePathNow != null) Memory.ags.remotePathLength = remotePathNow;
+    const remotePath2Now =
+      Memory.ags?.remotePathLength2 ?? remotePathLength2Sticky;
+    if (remotePath2Now != null) Memory.ags.remotePathLength2 = remotePath2Now;
+    const expandRoomNow = Memory.ags?.expandRoom ?? expandRoomSticky;
+    if (expandRoomNow) Memory.ags.expandRoom = expandRoomNow;
     const remoteVariantNow = Memory.ags?.remoteVariant ?? remoteVariantSticky;
     if (remoteVariantNow) Memory.ags.remoteVariant = remoteVariantNow;
     // Auto-arm aftercare winner once at RCL≥5 (sticky; skip explicit non-default modes).
@@ -272,9 +325,16 @@ export function loop(): void {
     if (remotePlanKeep) Memory.ags.remotePlan = remotePlanKeep;
     const remoteRoomKeep = Memory.ags?.remoteRoom ?? remoteRoomSticky;
     if (remoteRoomKeep) Memory.ags.remoteRoom = remoteRoomKeep;
+    const remoteRoom2Keep = Memory.ags?.remoteRoom2 ?? remoteRoom2Sticky;
+    if (remoteRoom2Keep) Memory.ags.remoteRoom2 = remoteRoom2Keep;
     const remotePathKeep =
       Memory.ags?.remotePathLength ?? remotePathLengthSticky;
     if (remotePathKeep != null) Memory.ags.remotePathLength = remotePathKeep;
+    const remotePath2Keep =
+      Memory.ags?.remotePathLength2 ?? remotePathLength2Sticky;
+    if (remotePath2Keep != null) Memory.ags.remotePathLength2 = remotePath2Keep;
+    const expandRoomKeep = Memory.ags?.expandRoom ?? expandRoomSticky;
+    if (expandRoomKeep) Memory.ags.expandRoom = expandRoomKeep;
     const remoteVariantKeep = Memory.ags?.remoteVariant ?? remoteVariantSticky;
     if (remoteVariantKeep) Memory.ags.remoteVariant = remoteVariantKeep;
     const wallPolicyKeep = Memory.ags?.wallPolicy ?? wallPolicySticky;

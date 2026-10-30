@@ -10,6 +10,7 @@ const KNOWN_ROLES: Array<keyof CreepQuotas> = [
 ];
 
 const REMOTE_ROLES = ["remoteMiner", "remoteHauler", "reserver"] as const;
+const EXTRA_ROLES = ["attacker", "mineralMiner", "claimer"] as const;
 
 /** Spawn names are `{role}-{tick}-…`; restore role when Memory.creeps lost it. */
 export function healCreepRoleFromName(creep: Creep): boolean {
@@ -18,8 +19,15 @@ export function healCreepRoleFromName(creep: Creep): boolean {
   if (current && (REMOTE_ROLES as readonly string[]).includes(current)) {
     return false;
   }
+  if (current && (EXTRA_ROLES as readonly string[]).includes(current)) {
+    return false;
+  }
   const prefix = creep.name.split("-")[0];
   if ((REMOTE_ROLES as readonly string[]).includes(prefix)) {
+    creep.memory.role = prefix;
+    return true;
+  }
+  if ((EXTRA_ROLES as readonly string[]).includes(prefix)) {
     creep.memory.role = prefix;
     return true;
   }

@@ -36,6 +36,22 @@ function findFillTarget(creep: Creep): FillTarget | null {
     if (spawnEnergy < HAUL_THRESHOLDS.spawnComfortable) return spawn;
   }
 
+  // Combat: towers before extensions while hostiles are in home.
+  const hostilesHome = creep.room.find(FIND_HOSTILE_CREEPS).length;
+  if (hostilesHome > 0) {
+    const hungryTowers = creep.room.find(FIND_MY_STRUCTURES, {
+      filter: (s): s is StructureTower =>
+        s.structureType === STRUCTURE_TOWER &&
+        s.store.getFreeCapacity(RESOURCE_ENERGY) > 0,
+    });
+    if (hungryTowers.length > 0) {
+      return (
+        creep.pos.findClosestByRange(hungryTowers) ??
+        creep.pos.findClosestByPath(hungryTowers)
+      );
+    }
+  }
+
   const hungry = creep.room.find(FIND_MY_STRUCTURES, {
     filter: (s): s is StructureExtension | StructureTower =>
       (s.structureType === STRUCTURE_EXTENSION ||

@@ -1,8 +1,11 @@
+import { runAttacker } from "./attacker";
 import { runBuilder } from "./builder";
+import { runClaimer } from "./claimer";
 import { runFiller } from "./filler";
 import { runHarvester } from "./harvester";
 import { runHauler } from "./hauler";
 import { evictIdleFromSpawnRing } from "./idlePark";
+import { runMineralMiner } from "./mineralMiner";
 import { runMiner } from "./miner";
 import { moveOffSpawn } from "./moveOffSpawn";
 import { runRemoteHauler } from "./remoteHauler";
@@ -39,6 +42,15 @@ const roleRunners: Record<string, RoleRunner> = {
   },
   reserver: (creep) => {
     runReserver(creep);
+    return 0;
+  },
+  attacker: (creep) => {
+    runAttacker(creep);
+    return 0;
+  },
+  mineralMiner: runMineralMiner,
+  claimer: (creep) => {
+    runClaimer(creep);
     return 0;
   },
 };

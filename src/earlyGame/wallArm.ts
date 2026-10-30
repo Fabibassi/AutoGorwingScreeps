@@ -74,6 +74,26 @@ export function shouldPlaceHubRamparts(opts: {
   return opts.wallsArmed;
 }
 
+/** Wall ring only after hub shell + storage comfortably above floor. */
+export const WALL_RING_STORAGE_BUFFER = 10_000;
+
+export function shouldPlaceWallRing(opts: {
+  hubRampartsReady: boolean;
+  storageEnergy: number;
+  floor?: number;
+  buffer?: number;
+  /** Wall ring is a late RCL6/7 spend — default require RCL≥6. */
+  rcl?: number;
+  minRcl?: number;
+}): boolean {
+  if (!opts.hubRampartsReady) return false;
+  const minRcl = opts.minRcl ?? 6;
+  if ((opts.rcl ?? 0) < minRcl) return false;
+  const floor = opts.floor ?? STORAGE_FLOOR_ENERGY;
+  const buffer = opts.buffer ?? WALL_RING_STORAGE_BUFFER;
+  return opts.storageEnergy >= floor + buffer;
+}
+
 /** True when spawn (+ storage if present) already has a finished rampart. */
 export function hubRampartsReady(room: Room): boolean {
   const spawn = room.find(FIND_MY_SPAWNS)[0];
