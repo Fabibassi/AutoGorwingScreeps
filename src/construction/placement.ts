@@ -1,6 +1,7 @@
 import {
-  canReachAnyExit,
-  projectInward,
+  EDGE_MOUTH_FULL_OPEN_MAX,
+  edgeTilesOnPathsToExits,
+  pickChokeGate,
   type ExitSide,
 } from "./edgeWalls";
 
@@ -724,69 +725,55 @@ export function walkableEdgeTilesForSide(
   return out;
 }
 
+function isEdgeTileOnSide(side: ExitSide, x: number, y: number): boolean {
+  switch (side) {
+    case "top":
+      return y === WALL_EDGE_COORD;
+    case "bottom":
+      return y === WALL_EDGE_HI;
+    case "left":
+      return x === WALL_EDGE_COORD;
+    case "right":
+      return x === WALL_EDGE_HI;
+  }
+}
+
 /**
- * Gate for a side = a walkable edge tile that keeps spawn→that side's exits
- * open even if every other edge tile on the side is walled.
- * No exits on the side → no gate (and no walls — would only waste energy).
+ * Exit-approach mouth = edge tiles on spawn↔exit paths.
+ * Only these can ever get walls (dead edge pockets have no defensive value).
  */
-export function plannedGateForSide(
+export function exitMouthTilesForSide(
   room: Room,
   spawnPos: RoomPosition,
   side: ExitSide,
-): { x: number; y: number } | null {
+): Set<string> {
   const exits = exitsForSide(room, side);
-  if (exits.length === 0) return null;
-  const edge = walkableEdgeTilesForSide(room, side);
-  if (edge.length === 0) return null;
-
+  if (exits.length === 0) return new Set();
   const walk = (x: number, y: number) => terrainWalkable(room, x, y);
-  // Prefer exit projections closest to spawn, then remaining edge tiles.
-  const projections = exits
-    .map((ex) => projectInward(ex, side, WALL_EDGE_COORD))
-    .filter((p) => edge.some((e) => e.x === p.x && e.y === p.y));
-  const ordered = [
-    ...projections,
-    ...edge.filter(
-      (e) => !projections.some((p) => p.x === e.x && p.y === e.y),
-    ),
-  ];
-  // Stable unique + spawn-distance sort for non-projection tail.
-  const seen = new Set<string>();
-  const candidates: Array<{ x: number; y: number }> = [];
-  for (const p of ordered) {
-    const k = `${p.x},${p.y}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    candidates.push(p);
-  }
-  candidates.sort((a, b) => {
-    const da = Math.max(Math.abs(a.x - spawnPos.x), Math.abs(a.y - spawnPos.y));
-    const db = Math.max(Math.abs(b.x - spawnPos.x), Math.abs(b.y - spawnPos.y));
-    return da - db;
-  });
-
-  for (const gate of candidates) {
-    const blocked = new Set<string>();
-    for (const e of edge) {
-      if (e.x === gate.x && e.y === gate.y) continue;
-      blocked.add(`${e.x},${e.y}`);
-    }
-    if (canReachAnyExit(walk, blocked, spawnPos, exits)) return gate;
-  }
-  // No safe single gate — leave the whole side open (place nothing).
-  return null;
+  return edgeTilesOnPathsToExits(walk, spawnPos, exits, (x, y) =>
+    isEdgeTileOnSide(side, x, y),
+  );
 }
 
-export function plannedEdgeGates(
+/**
+ * Tiles that must stay open: whole narrow mouth, or one gate on a wide mouth.
+ */
+export function openEdgeTilesForSide(
   room: Room,
   spawnPos: RoomPosition,
-): Array<{ x: number; y: number }> {
-  const gates: Array<{ x: number; y: number }> = [];
-  for (const { side } of exitSides()) {
-    const gate = plannedGateForSide(room, spawnPos, side);
-    if (gate) gates.push(gate);
-  }
-  return gates;
+  side: ExitSide,
+): Set<string> {
+  const mouth = exitMouthTilesForSide(room, spawnPos, side);
+  if (mouth.size === 0) return mouth;
+  if (mouth.size <= EDGE_MOUTH_FULL_OPEN_MAX) return mouth;
+  const tiles = [...mouth].map((k) => {
+    const [xs, ys] = k.split(",");
+    return { x: Number(xs), y: Number(ys) };
+  });
+  const gate = pickChokeGate(tiles, spawnPos);
+  const open = new Set<string>();
+  if (gate) open.add(`${gate.x},${gate.y}`);
+  return open;
 }
 
 export function isEdgeWallGate(
@@ -795,12 +782,17 @@ export function isEdgeWallGate(
   x: number,
   y: number,
 ): boolean {
-  return plannedEdgeGates(room, spawnPos).some((g) => g.x === x && g.y === y);
+  const side = edgeSideAt(x, y);
+  if (!side) return false;
+  return openEdgeTilesForSide(room, spawnPos, side).has(`${x},${y}`);
 }
 
 /**
- * Allowed wall tile on the 2/47 frame: side has exits, tile is not the gate,
- * and walling the rest of the side still leaves the gate path open.
+ * Wall only where it controls an exit approach:
+ * - tile must lie on a spawn↔exit mouth
+ * - narrow mouths (≤3) stay fully open (no walls)
+ * - wide mouths: wall mouth tiles except one gate
+ * Dead edge holes that lead nowhere are never walled.
  */
 export function isAllowedEdgeWallTile(
   room: Room,
@@ -815,9 +807,12 @@ export function isAllowedEdgeWallTile(
   if (!terrainWalkable(room, x, y)) return false;
   const side = edgeSideAt(x, y);
   if (!side) return false;
-  const gate = plannedGateForSide(room, spawnPos, side);
-  if (!gate) return false; // no safe gate → place nothing on this side
-  if (gate.x === x && gate.y === y) return false;
+  const mouth = exitMouthTilesForSide(room, spawnPos, side);
+  if (mouth.size === 0) return false;
+  if (!mouth.has(`${x},${y}`)) return false; // dead pocket → no benefit
+  if (mouth.size <= EDGE_MOUTH_FULL_OPEN_MAX) return false; // narrow: leave open
+  const open = openEdgeTilesForSide(room, spawnPos, side);
+  if (open.has(`${x},${y}`)) return false; // gate
   return true;
 }
 

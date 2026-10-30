@@ -202,3 +202,58 @@ export function wallWouldSealExitPath(
   blocked.add(`${candidate.x},${candidate.y}`);
   return !canReachAnyExit(isWalkable, blocked, spawn, exits);
 }
+
+/**
+ * Edge-band tiles (e.g. y=2) that lie on at least one walk from spawn to a
+ * side exit. Those form the real "mouth" — never seal all of them.
+ */
+export function edgeTilesOnPathsToExits(
+  isWalkable: (x: number, y: number) => boolean,
+  spawn: { x: number; y: number },
+  exits: Array<{ x: number; y: number }>,
+  isEdgeTile: (x: number, y: number) => boolean,
+): Set<string> {
+  const mouth = new Set<string>();
+  if (exits.length === 0) return mouth;
+  const goals = new Set(exits.map((e) => `${e.x},${e.y}`));
+  const parent = new Map<string, string | null>();
+  const start = `${spawn.x},${spawn.y}`;
+  parent.set(start, null);
+  const queue: Array<{ x: number; y: number }> = [{ x: spawn.x, y: spawn.y }];
+  const reachedGoals: string[] = [];
+
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    const ck = `${cur.x},${cur.y}`;
+    if (goals.has(ck)) {
+      reachedGoals.push(ck);
+      continue; // still explore other routes
+    }
+    for (const [dx, dy] of ORTH) {
+      const nx = cur.x + dx;
+      const ny = cur.y + dy;
+      if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
+      const nk = `${nx},${ny}`;
+      if (parent.has(nk)) continue;
+      const goal = goals.has(nk);
+      if (!goal && !isWalkable(nx, ny)) continue;
+      parent.set(nk, ck);
+      queue.push({ x: nx, y: ny });
+    }
+  }
+
+  for (const goal of reachedGoals) {
+    let cur: string | null = goal;
+    while (cur) {
+      const [xs, ys] = cur.split(",");
+      const x = Number(xs);
+      const y = Number(ys);
+      if (isEdgeTile(x, y)) mouth.add(cur);
+      cur = parent.get(cur) ?? null;
+    }
+  }
+  return mouth;
+}
+
+/** Narrow mouths stay fully open; wide mouths keep a single gate. */
+export const EDGE_MOUTH_FULL_OPEN_MAX = 3;
