@@ -2,6 +2,7 @@ import {
   countSourceContainers,
   findSourceContainerSites,
 } from "../room/queries";
+import { isAllowedEdgeWallTile } from "../construction/placement";
 import { HAUL_THRESHOLDS } from "./hauler";
 import { INFRA_BUILDER_SPAWN_ENERGY } from "./harvester";
 
@@ -153,6 +154,16 @@ function findBuildSite(creep: Creep): ConstructionSite | null {
     }
   }
   let sites = creep.room.find(FIND_CONSTRUCTION_SITES);
+  // Never spend energy on wall sites that seal the exit path / sit off-frame.
+  const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+  if (spawn) {
+    sites = sites.filter((s) => {
+      if (s.structureType !== STRUCTURE_WALL) return true;
+      return isAllowedEdgeWallTile(creep.room, spawn.pos, s.pos.x, s.pos.y);
+    });
+  } else {
+    sites = sites.filter((s) => s.structureType !== STRUCTURE_WALL);
+  }
   // Roads finish faster (300 vs 3000) and steal WORK under remaining-progress pick.
   // Hub sites (storage/tower) win over extension-only filtering.
   sites = filterBuildSitesForWork(

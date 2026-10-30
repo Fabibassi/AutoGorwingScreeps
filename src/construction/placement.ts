@@ -1,7 +1,6 @@
 import {
-  pickChokeGate,
+  canReachAnyExit,
   projectInward,
-  wallWouldSealExitPath,
   type ExitSide,
 } from "./edgeWalls";
 
@@ -695,36 +694,96 @@ export function existingWallBlockSet(room: Room): Set<string> {
   return blocked;
 }
 
-function allRoomExits(room: Room): RoomPosition[] {
-  const out: RoomPosition[] = [];
-  for (const { find } of exitSides()) {
-    const exits = room.find(find) as RoomPosition[];
-    for (const e of exits) out.push(e);
+export function edgeSideAt(x: number, y: number): ExitSide | null {
+  if (y === WALL_EDGE_COORD) return "top";
+  if (y === WALL_EDGE_HI) return "bottom";
+  if (x === WALL_EDGE_COORD) return "left";
+  if (x === WALL_EDGE_HI) return "right";
+  return null;
+}
+
+function exitsForSide(room: Room, side: ExitSide): RoomPosition[] {
+  const row = exitSides().find((s) => s.side === side);
+  if (!row) return [];
+  return room.find(row.find) as RoomPosition[];
+}
+
+/** Walkable tiles on the 2/47 line for one side. */
+export function walkableEdgeTilesForSide(
+  room: Room,
+  side: ExitSide,
+): Array<{ x: number; y: number }> {
+  const out: Array<{ x: number; y: number }> = [];
+  for (let a = WALL_EDGE_COORD; a <= WALL_EDGE_HI; a++) {
+    const p =
+      side === "top" || side === "bottom"
+        ? { x: a, y: side === "top" ? WALL_EDGE_COORD : WALL_EDGE_HI }
+        : { x: side === "left" ? WALL_EDGE_COORD : WALL_EDGE_HI, y: a };
+    if (terrainWalkable(room, p.x, p.y)) out.push(p);
   }
   return out;
 }
 
 /**
- * One gate per side: exit projection closest to spawn among walkable edge
- * tiles — fallback when path-seal check is not used.
+ * Gate for a side = a walkable edge tile that keeps spawn→that side's exits
+ * open even if every other edge tile on the side is walled.
+ * No exits on the side → no gate (and no walls — would only waste energy).
  */
+export function plannedGateForSide(
+  room: Room,
+  spawnPos: RoomPosition,
+  side: ExitSide,
+): { x: number; y: number } | null {
+  const exits = exitsForSide(room, side);
+  if (exits.length === 0) return null;
+  const edge = walkableEdgeTilesForSide(room, side);
+  if (edge.length === 0) return null;
+
+  const walk = (x: number, y: number) => terrainWalkable(room, x, y);
+  // Prefer exit projections closest to spawn, then remaining edge tiles.
+  const projections = exits
+    .map((ex) => projectInward(ex, side, WALL_EDGE_COORD))
+    .filter((p) => edge.some((e) => e.x === p.x && e.y === p.y));
+  const ordered = [
+    ...projections,
+    ...edge.filter(
+      (e) => !projections.some((p) => p.x === e.x && p.y === e.y),
+    ),
+  ];
+  // Stable unique + spawn-distance sort for non-projection tail.
+  const seen = new Set<string>();
+  const candidates: Array<{ x: number; y: number }> = [];
+  for (const p of ordered) {
+    const k = `${p.x},${p.y}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    candidates.push(p);
+  }
+  candidates.sort((a, b) => {
+    const da = Math.max(Math.abs(a.x - spawnPos.x), Math.abs(a.y - spawnPos.y));
+    const db = Math.max(Math.abs(b.x - spawnPos.x), Math.abs(b.y - spawnPos.y));
+    return da - db;
+  });
+
+  for (const gate of candidates) {
+    const blocked = new Set<string>();
+    for (const e of edge) {
+      if (e.x === gate.x && e.y === gate.y) continue;
+      blocked.add(`${e.x},${e.y}`);
+    }
+    if (canReachAnyExit(walk, blocked, spawnPos, exits)) return gate;
+  }
+  // No safe single gate — leave the whole side open (place nothing).
+  return null;
+}
+
 export function plannedEdgeGates(
   room: Room,
   spawnPos: RoomPosition,
 ): Array<{ x: number; y: number }> {
   const gates: Array<{ x: number; y: number }> = [];
-  for (const { side, find } of exitSides()) {
-    const exits = room.find(find) as RoomPosition[];
-    if (exits.length === 0) continue;
-    const projections = exits
-      .map((ex) => projectInward(ex, side, WALL_EDGE_COORD))
-      .filter((p) => terrainWalkable(room, p.x, p.y));
-    const gate = pickChokeGate(
-      projections.length > 0
-        ? projections
-        : exits.map((ex) => projectInward(ex, side, WALL_EDGE_COORD)),
-      spawnPos,
-    );
+  for (const { side } of exitSides()) {
+    const gate = plannedGateForSide(room, spawnPos, side);
     if (gate) gates.push(gate);
   }
   return gates;
@@ -740,62 +799,48 @@ export function isEdgeWallGate(
 }
 
 /**
- * True if walling (x,y) would seal spawn off every room exit.
+ * Allowed wall tile on the 2/47 frame: side has exits, tile is not the gate,
+ * and walling the rest of the side still leaves the gate path open.
  */
-export function wallSealsExitPath(
+export function isAllowedEdgeWallTile(
   room: Room,
   spawnPos: RoomPosition,
   x: number,
   y: number,
-  alreadyBlocked?: ReadonlySet<string>,
 ): boolean {
-  const exits = allRoomExits(room);
-  if (exits.length === 0) return false;
-  const blocked = new Set(alreadyBlocked ?? existingWallBlockSet(room));
-  // Ignore the candidate itself if it was already counted as a site.
-  blocked.delete(`${x},${y}`);
-  return wallWouldSealExitPath(
-    (wx, wy) => terrainWalkable(room, wx, wy),
-    blocked,
-    { x, y },
-    spawnPos,
-    exits,
-  );
+  if (!isRoomEdgeWallTile(x, y)) return false;
+  if (isHubStampTile(spawnPos, x, y)) return false;
+  if (isSpawnExitTile(spawnPos, x, y)) return false;
+  if (isHubCorridor(spawnPos, x, y)) return false;
+  if (!terrainWalkable(room, x, y)) return false;
+  const side = edgeSideAt(x, y);
+  if (!side) return false;
+  const gate = plannedGateForSide(room, spawnPos, side);
+  if (!gate) return false; // no safe gate → place nothing on this side
+  if (gate.x === x && gate.y === y) return false;
+  return true;
 }
 
 /**
- * Scrub wall sites off the 2/47 frame, or sites that would seal spawn→exit.
+ * Scrub wall sites that are not allowed edge walls (wrong tile / gate / no-exit side).
  */
 export function clearWallSitesInHub(
   room: Room,
   spawnPos: RoomPosition,
 ): number {
-  const blocked = existingWallBlockSet(room);
   let removed = 0;
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
     const { x, y } = site.pos;
-    blocked.delete(`${x},${y}`);
-    const seals = wallSealsExitPath(room, spawnPos, x, y, blocked);
-    const misplaced =
-      !isRoomEdgeWallTile(x, y) ||
-      isEdgeWallGate(room, spawnPos, x, y) ||
-      seals ||
-      isHubStampTile(spawnPos, x, y) ||
-      isHubCorridor(spawnPos, x, y) ||
-      isSpawnExitTile(spawnPos, x, y);
-    if (misplaced && site.remove() === OK) {
-      removed += 1;
-    } else {
-      blocked.add(`${x},${y}`);
+    if (!isAllowedEdgeWallTile(room, spawnPos, x, y)) {
+      if (site.remove() === OK) removed += 1;
     }
   }
   return removed;
 }
 
 /**
- * Place one wall site on the fixed 2/47 frame.
- * Skip any tile that would seal the only spawn→exit path.
+ * Place one wall site on the fixed 2/47 frame (path-safe per side).
  */
 export function tryPlaceWallRing(
   room: Room,
@@ -809,16 +854,8 @@ export function tryPlaceWallRing(
     edges.push([WALL_EDGE_HI, i]);
   }
 
-  const blocked = existingWallBlockSet(room);
-
   for (const [x, y] of edges) {
-    if (!isRoomEdgeWallTile(x, y)) continue;
-    if (isEdgeWallGate(room, spawnPos, x, y)) continue;
-    if (isHubStampTile(spawnPos, x, y)) continue;
-    if (isSpawnExitTile(spawnPos, x, y)) continue;
-    if (isHubCorridor(spawnPos, x, y)) continue;
-    if (!isBuildableTerrain(room, x, y)) continue;
-    if (wallSealsExitPath(room, spawnPos, x, y, blocked)) continue;
+    if (!isAllowedEdgeWallTile(room, spawnPos, x, y)) continue;
     const pos = new RoomPosition(x, y, room.name);
     if (tileHasBlockingStructure(pos)) continue;
     if (
