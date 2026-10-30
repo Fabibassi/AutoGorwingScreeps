@@ -1,8 +1,6 @@
 /**
- * Exit-choke perimeter walls — not a naive mid-edge frame.
- *
- * Example: west exit with swamp on x=2 and a 3-tile plains gap at x=3 around
- * y≈35 → wall that gap (depth 3), gate on the tile closest to spawn.
+ * Edge helpers for the fixed 2/47 wall frame.
+ * Depth scoring / swamp preference retired — walls always sit on coord 2/47.
  */
 
 export type ExitSide = "top" | "right" | "bottom" | "left";

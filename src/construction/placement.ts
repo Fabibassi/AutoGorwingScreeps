@@ -1,12 +1,15 @@
 import {
-  EDGE_DEPTHS,
-  expandChokeAlongEdge,
-  pickBestEdgeDepth,
-  planChokeWallTiles,
+  pickChokeGate,
   projectInward,
-  type EdgeTileInfo,
   type ExitSide,
 } from "./edgeWalls";
+
+/**
+ * Room-edge wall line (Screeps exits sit on 0/49).
+ * Fixed band at 2 / 47 — ignore swamp / deeper chokes.
+ */
+export const WALL_EDGE_COORD = 2;
+export const WALL_EDGE_HI = 49 - WALL_EDGE_COORD; // 47
 
 function isBuildableTerrain(room: Room, x: number, y: number): boolean {
   const terrain = Game.map.getRoomTerrain(room.name);
@@ -651,23 +654,14 @@ export function isHubStampTile(
   return HUB_STAMP_SET.has(`${dx},${dy}`);
 }
 
-function terrainTileInfo(
-  room: Room,
-  x: number,
-  y: number,
-): EdgeTileInfo | null {
-  if (x < 1 || x > 48 || y < 1 || y > 48) return null;
-  const terrain = Game.map.getRoomTerrain(room.name);
-  const t = terrain.get(x, y);
-  const wall =
-    typeof TERRAIN_MASK_WALL !== "undefined"
-      ? t === TERRAIN_MASK_WALL
-      : false;
-  const swamp =
-    typeof TERRAIN_MASK_SWAMP !== "undefined"
-      ? (t & TERRAIN_MASK_SWAMP) !== 0
-      : false;
-  return { x, y, walkable: !wall, swamp: !wall && swamp };
+/** Perimeter tiles for the fixed edge wall (full 2/47 frame). */
+export function isRoomEdgeWallTile(x: number, y: number): boolean {
+  const onV = x === WALL_EDGE_COORD || x === WALL_EDGE_HI;
+  const onH = y === WALL_EDGE_COORD || y === WALL_EDGE_HI;
+  if (!onV && !onH) return false;
+  if (x < WALL_EDGE_COORD || x > WALL_EDGE_HI) return false;
+  if (y < WALL_EDGE_COORD || y > WALL_EDGE_HI) return false;
+  return true;
 }
 
 function exitSides(): Array<{ side: ExitSide; find: ExitConstant }> {
@@ -679,108 +673,80 @@ function exitSides(): Array<{ side: ExitSide; find: ExitConstant }> {
   ];
 }
 
-/** All planned choke wall tiles + gates for the room (for scrub + place). */
-export function plannedExitChokeWalls(
+/**
+ * One gate per side that has exits: exit projection onto the 2/47 line,
+ * closest to spawn. Not mid-edge y=25, not swamp/depth scoring.
+ */
+export function plannedEdgeGates(
   room: Room,
   spawnPos: RoomPosition,
-): {
-  walls: Array<{ x: number; y: number }>;
-  gates: Array<{ x: number; y: number }>;
-} {
-  const walls: Array<{ x: number; y: number }> = [];
+): Array<{ x: number; y: number }> {
   const gates: Array<{ x: number; y: number }> = [];
-  const seen = new Set<string>();
-
   for (const { side, find } of exitSides()) {
     const exits = room.find(find) as RoomPosition[];
     if (exits.length === 0) continue;
-
-    const byDepth: Record<number, EdgeTileInfo[]> = {};
-    for (const depth of EDGE_DEPTHS) {
-      const seeds: Array<{ x: number; y: number }> = [];
-      const walkable = new Set<string>();
-      for (let a = 1; a <= 48; a++) {
-        // Full depth line for expansion along the mouth.
-        const p =
-          side === "top" || side === "bottom"
-            ? { x: a, y: side === "top" ? depth : 49 - depth }
-            : { x: side === "left" ? depth : 49 - depth, y: a };
-        const info = terrainTileInfo(room, p.x, p.y);
-        if (info?.walkable) walkable.add(`${p.x},${p.y}`);
-      }
-      for (const ex of exits) {
-        const p = projectInward(ex, side, depth);
-        const info = terrainTileInfo(room, p.x, p.y);
-        if (info?.walkable) seeds.push(p);
-      }
-      const expanded = expandChokeAlongEdge(seeds, side, walkable);
-      byDepth[depth] = expanded
-        .map((p) => terrainTileInfo(room, p.x, p.y))
-        .filter((t): t is EdgeTileInfo => t != null && t.walkable);
-    }
-
-    const depth = pickBestEdgeDepth(byDepth);
-    if (depth == null) continue;
-    const choke = byDepth[depth] ?? [];
-    // Wide open plains: only seal tiles near an exit projection (not the whole side).
-    const nearExit = choke.filter((t) =>
-      exits.some((ex) => {
-        const p = projectInward(ex, side, depth);
-        return Math.max(Math.abs(t.x - p.x), Math.abs(t.y - p.y)) <= 2;
-      }),
+    const projections = exits.map((ex) =>
+      projectInward(ex, side, WALL_EDGE_COORD),
     );
-    const use = nearExit.length > 0 && nearExit.length <= 10 ? nearExit : choke.slice(0, 8);
-    const plan = planChokeWallTiles(use, spawnPos);
-    if (plan.gate) gates.push(plan.gate);
-    for (const w of plan.walls) {
-      const k = `${w.x},${w.y}`;
-      if (seen.has(k)) continue;
-      if (isHubStampTile(spawnPos, w.x, w.y)) continue;
-      if (isSpawnExitTile(spawnPos, w.x, w.y)) continue;
-      seen.add(k);
-      walls.push(w);
-    }
+    const gate = pickChokeGate(projections, spawnPos);
+    if (gate) gates.push(gate);
   }
-  return { walls, gates };
+  return gates;
+}
+
+export function isEdgeWallGate(
+  room: Room,
+  spawnPos: RoomPosition,
+  x: number,
+  y: number,
+): boolean {
+  return plannedEdgeGates(room, spawnPos).some((g) => g.x === x && g.y === y);
 }
 
 /**
- * Scrub wall sites that are not part of the exit-choke plan (old hub rings /
- * full y=2 frames / mid-edge gates).
+ * Scrub wall sites off the 2/47 frame (old choke depths / hub rings / gates).
  */
 export function clearWallSitesInHub(
   room: Room,
   spawnPos: RoomPosition,
 ): number {
-  const plan = plannedExitChokeWalls(room, spawnPos);
-  const keep = new Set(plan.walls.map((w) => `${w.x},${w.y}`));
-  for (const g of plan.gates) keep.delete(`${g.x},${g.y}`);
-
   let removed = 0;
   for (const site of room.find(FIND_CONSTRUCTION_SITES)) {
     if (site.structureType !== STRUCTURE_WALL) continue;
-    const k = `${site.pos.x},${site.pos.y}`;
-    if (
-      !keep.has(k) ||
-      isHubStampTile(spawnPos, site.pos.x, site.pos.y) ||
-      isHubCorridor(spawnPos, site.pos.x, site.pos.y) ||
-      isSpawnExitTile(spawnPos, site.pos.x, site.pos.y)
-    ) {
-      if (site.remove() === OK) removed += 1;
-    }
+    const { x, y } = site.pos;
+    const misplaced =
+      !isRoomEdgeWallTile(x, y) ||
+      isEdgeWallGate(room, spawnPos, x, y) ||
+      isHubStampTile(spawnPos, x, y) ||
+      isHubCorridor(spawnPos, x, y) ||
+      isSpawnExitTile(spawnPos, x, y);
+    if (misplaced && site.remove() === OK) removed += 1;
   }
   return removed;
 }
 
 /**
- * Place one wall site sealing an exit choke (depth 2–4, plains preferred).
+ * Place one wall site on the fixed room-edge frame (y=2 / x=2 / …).
+ * Swamp ignored — build wherever terrain allows.
  */
 export function tryPlaceWallRing(
   room: Room,
   spawnPos: RoomPosition,
 ): boolean {
-  const { walls } = plannedExitChokeWalls(room, spawnPos);
-  for (const { x, y } of walls) {
+  const edges: Array<[number, number]> = [];
+  for (let i = WALL_EDGE_COORD; i <= WALL_EDGE_HI; i++) {
+    edges.push([i, WALL_EDGE_COORD]);
+    edges.push([i, WALL_EDGE_HI]);
+    edges.push([WALL_EDGE_COORD, i]);
+    edges.push([WALL_EDGE_HI, i]);
+  }
+
+  for (const [x, y] of edges) {
+    if (!isRoomEdgeWallTile(x, y)) continue;
+    if (isEdgeWallGate(room, spawnPos, x, y)) continue;
+    if (isHubStampTile(spawnPos, x, y)) continue;
+    if (isSpawnExitTile(spawnPos, x, y)) continue;
+    if (isHubCorridor(spawnPos, x, y)) continue;
     if (!isBuildableTerrain(room, x, y)) continue;
     const pos = new RoomPosition(x, y, room.name);
     if (tileHasBlockingStructure(pos)) continue;
