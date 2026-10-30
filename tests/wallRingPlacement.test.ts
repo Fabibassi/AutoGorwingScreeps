@@ -1,26 +1,37 @@
 import { describe, expect, test } from "vitest";
+import { isHubStampTile } from "../src/construction/placement";
 import {
-  WALL_EDGE_COORD,
-  WALL_EDGE_HI,
-  isEdgeWallGate,
-  isHubStampTile,
-  isRoomEdgeWallTile,
-} from "../src/construction/placement";
+  EDGE_DEPTHS,
+  pickBestEdgeDepth,
+  planChokeWallTiles,
+  type EdgeTileInfo,
+} from "../src/construction/edgeWalls";
 
-describe("room-edge wall line", () => {
-  test("uses border band at 2 / 47 (e.g. north y=2)", () => {
-    expect(WALL_EDGE_COORD).toBe(2);
-    expect(WALL_EDGE_HI).toBe(47);
-    expect(isRoomEdgeWallTile(15, 2)).toBe(true);
-    expect(isRoomEdgeWallTile(2, 20)).toBe(true);
-    expect(isRoomEdgeWallTile(25, 25)).toBe(false);
-    expect(isRoomEdgeWallTile(25, 7)).toBe(false);
+describe("exit-choke wall placement (replaces mid-edge frame)", () => {
+  test("considers depths 2–4, not a fixed y=2 / mid-gate frame", () => {
+    expect([...EDGE_DEPTHS]).toEqual([2, 3, 4]);
   });
 
-  test("leaves mid-edge gates open", () => {
-    expect(isEdgeWallGate(25, WALL_EDGE_COORD)).toBe(true);
-    expect(isEdgeWallGate(24, WALL_EDGE_COORD)).toBe(false);
-    expect(isEdgeWallGate(WALL_EDGE_COORD, 25)).toBe(true);
+  test("does not invent a mid-side gate when choke is off-center", () => {
+    const byDepth: Record<number, EdgeTileInfo[]> = {
+      2: [
+        { x: 2, y: 34, walkable: true, swamp: true },
+        { x: 2, y: 35, walkable: true, swamp: true },
+        { x: 2, y: 36, walkable: true, swamp: true },
+      ],
+      3: [
+        { x: 3, y: 34, walkable: true, swamp: false },
+        { x: 3, y: 35, walkable: true, swamp: false },
+        { x: 3, y: 36, walkable: true, swamp: false },
+      ],
+      4: [],
+    };
+    const depth = pickBestEdgeDepth(byDepth);
+    expect(depth).toBe(3);
+    const plan = planChokeWallTiles(byDepth[3]!, { x: 25, y: 28 });
+    expect(plan.gate?.y).toBe(34);
+    expect(plan.walls).toHaveLength(2);
+    expect(plan.gate?.y).not.toBe(25);
   });
 
   test("hub stamp helper still recognizes extension pockets", () => {
